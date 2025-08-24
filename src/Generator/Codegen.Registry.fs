@@ -6,12 +6,19 @@ open Generator.Config
 
 module Registry =
 
-    let generateRegistryFiles (ir: Ir) (outputPath: string) (config: Config) =
-        let registryHPath = Path.Combine(outputPath, "include", "registry.h")
-        let registryCPath = Path.Combine(outputPath, "src", "registry.c")
+    let generateRegistryFiles (ir: Ir) (outputPath: string) (config: Generator.Config.Config) =
+        let regHName = sprintf "%sregistry.h" config.FilePrefix
+        let regCName = sprintf "%sregistry.c" config.FilePrefix
+        let registryHPath = Path.Combine(outputPath, "include", regHName)
+        let registryCPath = Path.Combine(outputPath, "src", regCName)
 
+        let guard =
+            (config.FilePrefix + "registry_h").ToUpperInvariant()
+            |> Seq.map (fun ch -> if System.Char.IsLetterOrDigit ch then ch else '_')
+            |> Seq.toArray
+            |> fun arr -> new string(arr)
         let registryHContent =
-            "#ifndef REGISTRY_H\n#define REGISTRY_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\nbool decode_message(uint32_t id, const uint8_t data[], uint8_t dlc, void* msg);\n\n#endif // REGISTRY_H"
+            sprintf "#ifndef %s\n#define %s\n\n#include <stdint.h>\n#include <stdbool.h>\n\nbool decode_message(uint32_t id, const uint8_t data[], uint8_t dlc, void* msg);\n\n#endif // %s" guard guard guard
         File.WriteAllText(registryHPath, registryHContent)
 
         let includes =
@@ -39,6 +46,6 @@ module Registry =
                     "bool decode_message(uint32_t id, const uint8_t data[], uint8_t dlc, void* msg) {\n    int low = 0;\n    int high = (int)(sizeof(decoders) / sizeof(decoder_entry_t)) - 1;\n    while (low <= high) {\n        int mid = low + (high - low) / 2;\n        if (decoders[mid].id == id) {\n            return decoders[mid].func(msg, data, dlc);\n        }\n        if (decoders[mid].id < id) low = mid + 1; else high = mid - 1;\n    }\n    return false;\n}\n"
                 table + search
 
-        let finalC = "#include <stdint.h>\n#include <stdbool.h>\n#include \"registry.h\"\n" + includes + "\n\n" + body
+        let finalC = "#include <stdint.h>\n#include <stdbool.h>\n#include \"" + regHName + "\"\n" + includes + "\n\n" + body
         File.WriteAllText(registryCPath, finalC)
         ()

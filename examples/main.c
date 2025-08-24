@@ -1,8 +1,8 @@
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
-#include "registry.h"
-#include "utils.h"
+#include "sc_registry.h"
+#include "sc_utils.h"
 
 // Include stress test
 extern int test_stress_suite(void);

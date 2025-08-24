@@ -1,4 +1,4 @@
-# DBC to C Parser Code Generator (F#)
+# Signal CANdy — DBC to C Code Generator (F#)
 
 Languages: This README is in English. For Korean, see README.ko.md.
 
@@ -300,10 +300,10 @@ void compare_state(int v) {
 
 ### Output layout and naming
 - gen/include/
-  - utils.h, registry.h
+  - sc_utils.h, sc_registry.h (prefix configurable via config: file_prefix)
   - <message>.h per message (snake_case filename)
 - gen/src/
-  - utils.c, registry.c
+  - sc_utils.c, sc_registry.c (prefix configurable)
   - <message>.c per message (snake_case filename)
   - main.c (test runner; exclude in firmware builds)
 
@@ -325,7 +325,7 @@ You have two integration options: direct per-message calls or registry-based dis
   - Call `<Message>_decode(...)` / `<Message>_encode(...)` when you already know the message type.
 
 - Registry-based dispatch
-  - `#include "registry.h"`
+  - `#include "sc_registry.h"` (or your `<prefix>registry.h`)
   - Call `decode_message(can_id, data, dlc, &your_msg_struct)` to route by CAN ID at runtime.
 
 ### Build system examples
@@ -366,6 +366,10 @@ Vendor IDEs
 - Add `gen/include` to include paths.
 - Add all `gen/src/*.c` except `gen/src/main.c` to your project.
 
+Configurable prefix
+- Common files use a prefix (default `sc_`), yielding `sc_utils.{h,c}` and `sc_registry.{h,c}`.
+- Change it via `file_prefix` in your YAML config if needed.
+
 ### Runtime usage examples
 
 Decode known message
@@ -384,7 +388,7 @@ void on_frame(const uint8_t* data, size_t dlc) {
 Decode by ID (registry)
 
 ```c
-#include "registry.h"
+#include "sc_registry.h"
 #include "message_1.h"
 
 void on_can(uint32_t id, const uint8_t* data, size_t dlc) {
@@ -504,7 +508,7 @@ CRC/Counter note
 ## Endianness and bit utilities
 
 - Little-Endian and Motorola Big-Endian (MSB sawtooth) are supported.
-- Generated `utils.{h,c}` provide `get_bits_le/be` and `set_bits_le/be` used by message codecs.
+- Generated `<prefix>utils.{h,c}` (default `sc_utils.{h,c}`) provide `get_bits_le/be` and `set_bits_le/be` used by message codecs.
 
 ## Project Structure
 

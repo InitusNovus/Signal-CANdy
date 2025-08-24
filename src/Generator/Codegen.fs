@@ -9,21 +9,35 @@ open Generator.Registry
 
 module Codegen =
 
-    let generateCode (ir: Ir) (outputPath: string) (config: Config) =
+    let generateCode (ir: Ir) (outputPath: string) (config: Generator.Config.Config) =
         try
             // Create output directories
             Directory.CreateDirectory (Path.Combine(outputPath, "include")) |> ignore
             Directory.CreateDirectory (Path.Combine(outputPath, "src")) |> ignore
 
-            // Generate utils.h and utils.c
-            File.WriteAllText(Path.Combine(outputPath, "include", "utils.h"), Utils.utilsHContent)
-            File.WriteAllText(Path.Combine(outputPath, "src", "utils.c"), Utils.utilsCContent)
+            // Clean up legacy, unprefixed common files to prevent duplicate symbols in C builds
+            let legacyHeaders = [ "utils.h"; "registry.h" ]
+            let legacySources = [ "utils.c"; "registry.c" ]
+            for h in legacyHeaders do
+                let p = Path.Combine(outputPath, "include", h)
+                if File.Exists p then
+                    try File.Delete p with _ -> ()
+            for s in legacySources do
+                let p = Path.Combine(outputPath, "src", s)
+                if File.Exists p then
+                    try File.Delete p with _ -> ()
+
+            // Generate utils.h and utils.c with prefix
+            let uH = Utils.utilsHeaderName config
+            let uC = Utils.utilsSourceName config
+            File.WriteAllText(Path.Combine(outputPath, "include", uH), Utils.utilsHContent config)
+            File.WriteAllText(Path.Combine(outputPath, "src", uC), Utils.utilsCContent config)
 
             // Generate code for each message
             for message in ir.Messages do
                 Message.generateMessageFiles message outputPath config
 
-            // Generate registry files
+            // Generate registry files with prefix
             Registry.generateRegistryFiles ir outputPath config
 
             // Copy example main.c into output to act as test harness

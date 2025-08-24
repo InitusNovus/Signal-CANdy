@@ -11,8 +11,8 @@
 
 // Include all available headers
 #ifdef __has_include
-  #if __has_include("registry.h")
-    #include "registry.h"
+  #if __has_include("sc_registry.h")
+    #include "sc_registry.h"
     #define HAS_REGISTRY 1
   #endif
   

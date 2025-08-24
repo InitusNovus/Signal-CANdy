@@ -9,11 +9,12 @@ open YamlDotNet.Serialization.NamingConventions
 module Config =
     type Config = {
         PhysType: string
-        PhysMode: string // "double" | "float" | "fixed_double" | "fixed_float"
+        PhysMode: string
         RangeCheck: bool
         Dispatch: string
         CrcCounterCheck: bool
-        MotorolaStartBit: string // "msb" | "lsb" for Motorola(big-endian) start-bit convention
+        MotorolaStartBit: string
+        FilePrefix: string
     }
 
     let private tryGetString (map: IDictionary<string, obj>) (keys: string list) : string option =
@@ -60,7 +61,9 @@ module Config =
             let disp = tryGetString map [ "dispatch"; "Dispatch" ] |> Option.defaultValue "binary_search"
             let crc = tryGetBool map [ "crc_counter_check"; "CrcCounterCheck" ] |> Option.defaultValue false
             let moto = tryGetString map [ "motorola_start_bit"; "MotorolaStartBit" ] |> Option.defaultValue "msb"
-            Some { PhysType = phys; PhysMode = physMode; RangeCheck = range; Dispatch = disp; CrcCounterCheck = crc; MotorolaStartBit = moto }
+            // Optional: file prefix for generated common files (utils/registry). Defaults to "sc_".
+            let filePrefix = tryGetString map [ "file_prefix"; "FilePrefix" ] |> Option.defaultValue "sc_"
+            Some { PhysType = phys; PhysMode = physMode; RangeCheck = range; Dispatch = disp; CrcCounterCheck = crc; MotorolaStartBit = moto; FilePrefix = filePrefix }
         with
         | ex ->
             eprintfn "Error loading config file: %s" ex.Message

@@ -1,12 +1,13 @@
 namespace Generator
 
+open System
 open System.IO
 open Generator.Ir
 open Generator.Config
 
 module Utils =
 
-    let internal getCType (signal: Ir.Signal) (config: Config) =
+    let internal getCType (signal: Ir.Signal) (config: Generator.Config.Config) =
         match config.PhysType with
         | "float" -> "float"
         | "fixed" ->
@@ -55,21 +56,34 @@ module Utils =
         byteIdx * 8 + bitIdx
 
     // Choose effective start bit depending on config for Motorola signals; LE stays unchanged.
-    let internal chooseStartBit (signal: Ir.Signal) (config: Config) : int =
+    let internal chooseStartBit (signal: Ir.Signal) (config: Generator.Config.Config) : int =
         let start = int signal.StartBit
         let len = int signal.Length
         match signal.ByteOrder with
         | ByteOrder.Big ->
-            match (config.MotorolaStartBit |> (fun s -> s.ToLowerInvariant())) with
+            match config.MotorolaStartBit.ToLowerInvariant() with
             | "lsb" -> motorolaMsbFromLsb start len
             | _ -> start // default "msb"
         | _ -> start
 
-    let utilsHContent = 
-        "#ifndef UTILS_H\n#define UTILS_H\n\n#include <stdint.h>\n#include <stdbool.h>\n\n// Little-endian bit extraction functions\nuint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);\n\n// Little-endian bit insertion functions\nvoid set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);\n\n// Big-endian (Motorola) bit extraction\nuint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length);\n\n// Big-endian (Motorola) bit insertion\nvoid set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);\n\n#endif // UTILS_H"
+    // Build a macro-safe header guard from prefix + base name
+    let private guard (prefix: string) (baseName: string) =
+        let raw = (prefix + baseName).ToUpperInvariant()
+        raw
+        |> Seq.map (fun ch -> if Char.IsLetterOrDigit ch then ch else '_')
+        |> Seq.toArray
+        |> fun arr -> new string(arr)
 
-    let utilsCContent = 
-        "#include \"utils.h\"\n\n// Little-endian bit extraction\nuint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length) {\n    uint64_t value = 0;\n    uint16_t byte_offset = start_bit / 8;\n    uint16_t bit_offset = start_bit % 8;\n    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {\n        value |= (uint64_t)data[byte_offset + i] << (i * 8);\n    }\n    value >>= bit_offset;\n    value &= (1ULL << length) - 1;\n    return value;\n}\n\n// Little-endian bit insertion\nvoid set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value) {\n    uint16_t byte_offset = start_bit / 8;\n    uint16_t bit_offset = start_bit % 8;\n    uint64_t clear_mask = ((1ULL << length) - 1) << bit_offset;\n    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {\n        data[byte_offset + i] &= ~(uint8_t)(clear_mask >> (i * 8));\n    }\n    uint64_t insert_value = (value & ((1ULL << length) - 1)) << bit_offset;\n    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {\n        data[byte_offset + i] |= (uint8_t)(insert_value >> (i * 8));\n    }\n}\n\n// Big-endian (Motorola) bit extraction (DBC semantics, sawtooth)\nuint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length) {\n    uint64_t value = 0;\n    int byte = start_bit / 8;\n    int bit = start_bit % 8; // 7..0 within byte, 7 is MSB\n    for (uint16_t i = 0; i < length; ++i) {\n        int curByte = byte;\n        int curBit = bit - (int)i;\n        while (curBit < 0) { curBit += 8; ++curByte; } // move to next higher byte\n        uint8_t b = data[curByte];\n        uint8_t bitval = (uint8_t)((b >> curBit) & 1u);\n        value = (value << 1) | bitval; // assemble MSB-first\n    }\n    return value;\n}\n\n// Big-endian (Motorola) bit insertion (DBC semantics, sawtooth)\nvoid set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value) {\n    int byte = start_bit / 8;\n    int bit = start_bit % 8;\n    for (uint16_t i = 0; i < length; ++i) {\n        int curByte = byte;\n        int curBit = bit - (int)i;\n        while (curBit < 0) { curBit += 8; ++curByte; } // move to next higher byte\n        uint8_t bitval = (uint8_t)((value >> (length - 1 - i)) & 1u); // MSB-first\n        data[curByte] = (uint8_t)((data[curByte] & (uint8_t)~(1u << curBit)) | (uint8_t)(bitval << curBit));\n    }\n}"
+    let utilsHeaderName (config: Generator.Config.Config) = sprintf "%sutils.h" config.FilePrefix
+    let utilsSourceName (config: Generator.Config.Config) = sprintf "%sutils.c" config.FilePrefix
+
+    let utilsHContent (config: Generator.Config.Config) =
+        let g = guard config.FilePrefix "utils_h"
+        sprintf "#ifndef %s\n#define %s\n\n#include <stdint.h>\n#include <stdbool.h>\n\n// Little-endian bit extraction functions\nuint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);\n\n// Little-endian bit insertion functions\nvoid set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);\n\n// Big-endian (Motorola) bit extraction\nuint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length);\n\n// Big-endian (Motorola) bit insertion\nvoid set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);\n\n#endif // %s" g g g
+
+    let utilsCContent (config: Generator.Config.Config) =
+        let uH = utilsHeaderName config
+        "#include \"" + uH + "\"\n\n// Little-endian bit extraction\nuint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length) {\n    uint64_t value = 0;\n    uint16_t byte_offset = start_bit / 8;\n    uint16_t bit_offset = start_bit % 8;\n    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {\n        value |= (uint64_t)data[byte_offset + i] << (i * 8);\n    }\n    value >>= bit_offset;\n    value &= (1ULL << length) - 1;\n    return value;\n}\n\n// Little-endian bit insertion\nvoid set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value) {\n    uint16_t byte_offset = start_bit / 8;\n    uint16_t bit_offset = start_bit % 8;\n    uint64_t clear_mask = ((1ULL << length) - 1) << bit_offset;\n    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {\n        data[byte_offset + i] &= ~(uint8_t)(clear_mask >> (i * 8));\n    }\n    uint64_t insert_value = (value & ((1ULL << length) - 1)) << bit_offset;\n    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {\n        data[byte_offset + i] |= (uint8_t)(insert_value >> (i * 8));\n    }\n}\n\n// Big-endian (Motorola) bit extraction (DBC semantics, sawtooth)\nuint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length) {\n    uint64_t value = 0;\n    int byte = start_bit / 8;\n    int bit = start_bit % 8; // 7..0 within byte, 7 is MSB\n    for (uint16_t i = 0; i < length; ++i) {\n        int curByte = byte;\n        int curBit = bit - (int)i;\n        while (curBit < 0) { curBit += 8; ++curByte; } // move to next higher byte\n        uint8_t b = data[curByte];\n        uint8_t bitval = (uint8_t)((b >> curBit) & 1u);\n        value = (value << 1) | bitval; // assemble MSB-first\n    }\n    return value;\n}\n\n// Big-endian (Motorola) bit insertion (DBC semantics, sawtooth)\nvoid set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value) {\n    int byte = start_bit / 8;\n    int bit = start_bit % 8;\n    for (uint16_t i = 0; i < length; ++i) {\n        int curByte = byte;\n        int curBit = bit - (int)i;\n        while (curBit < 0) { curBit += 8; ++curByte; } // move to next higher byte\n        uint8_t bitval = (uint8_t)((value >> (length - 1 - i)) & 1u); // MSB-first\n        data[curByte] = (uint8_t)((data[curByte] & (uint8_t)~(1u << curBit)) | (uint8_t)(bitval << curBit));\n    }\n}"
 
     // Helper to choose C accessor based on byte order
     let accessorNames (byteOrder: ByteOrder) =

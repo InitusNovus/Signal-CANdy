@@ -37,7 +37,7 @@ module Program =
                 printfn "Config Path: %A" parsedArgs.ConfigPath
 
                 // Load config if provided, otherwise fall back to defaults
-                let defaultCfg = { PhysType = "float"; PhysMode = "double"; RangeCheck = false; Dispatch = "binary_search"; CrcCounterCheck = false; MotorolaStartBit = "msb" }
+                let defaultCfg = { PhysType = "float"; PhysMode = "double"; RangeCheck = false; Dispatch = "binary_search"; CrcCounterCheck = false; MotorolaStartBit = "msb"; FilePrefix = "sc_" }
                 let cfg =
                     match parsedArgs.ConfigPath with
                     | Some path -> 

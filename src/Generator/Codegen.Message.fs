@@ -11,7 +11,7 @@ module Message =
     let private fieldDecl (s: Ir.Signal) =
         sprintf "    float %s;" s.Name
 
-    let private genDecodeForSignal (s: Ir.Signal) (doRangeCheck: bool) (config: Config) =
+    let private genDecodeForSignal (s: Ir.Signal) (doRangeCheck: bool) (config: Generator.Config.Config) =
         let len = int s.Length
         let startEff = Utils.chooseStartBit s config
         let (getFn, _) = Utils.accessorNames s.ByteOrder
@@ -58,7 +58,7 @@ module Message =
         |> List.choose (fun x -> if isNull (box x) then None else Some x)
         |> String.concat "\n"
 
-    let private genEncodeForSignal (s: Ir.Signal) (doRangeCheck: bool) (config: Config) =
+    let private genEncodeForSignal (s: Ir.Signal) (doRangeCheck: bool) (config: Generator.Config.Config) =
         let len = int s.Length
         let startEff = Utils.chooseStartBit s config
         let (_, setFn) = Utils.accessorNames s.ByteOrder
@@ -124,7 +124,7 @@ module Message =
         let start = trimmed.[0]
         if Char.IsDigit start then "N_" + trimmed else trimmed
 
-    let generateMessageFiles (message: Ir.Message) (outputPath: string) (config: Config) =
+    let generateMessageFiles (message: Ir.Message) (outputPath: string) (config: Generator.Config.Config) =
         let messageNameLower = message.Name.ToLowerInvariant()
         let messageHPath = Path.Combine(outputPath, "include", sprintf "%s.h" messageNameLower)
         let messageCPath = Path.Combine(outputPath, "src", sprintf "%s.c" messageNameLower)
@@ -285,7 +285,8 @@ module Message =
         let sourceContent =
             let src = System.Collections.Generic.List<string>()
             src.Add (sprintf "#include \"%s.h\"" messageNameLower)
-            src.Add "#include \"utils.h\""
+            let utilsHeader = Utils.utilsHeaderName config
+            src.Add (sprintf "#include \"%s\"" utilsHeader)
             src.Add "#include <string.h>"
             src.Add "#include <math.h>"
             src.Add ""

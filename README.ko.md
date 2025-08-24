@@ -1,8 +1,8 @@
-# DBC to C 파서 코드 생성기 (F#)
+# Signal CANdy — DBC to C 코드 생성기 (F#)
 
 언어: 이 문서는 한국어입니다. 영어판은 README.md를 참고하세요.
 
-이 프로젝트는 F# 기반 코드 생성기를 사용해 `.dbc` 파일로부터 이식성 높은 C99 파서 모듈(헤더/소스)을 생성합니다.
+이 프로젝트는 F# 기반 코드 생성기를 사용해 `.dbc` 파일로부터 이식성 높은 C99 파서 모듈(헤더/소스)을 생성합니다. 프로젝트 이름: Signal CANdy.
 
 ## ⚡ 빠른 시작 (5분)
 
@@ -224,11 +224,10 @@ make -C gen build
 - 공개 DBC 수집 가이드: `scripts/fetch_dbcs.md`
 
 ### 출력 레이아웃 및 이름 규칙
-- gen/include/
-  - utils.h, registry.h
+  - sc_utils.h, sc_registry.h (접두사 설정 가능: file_prefix)
   - 메시지별 헤더 `<message>.h` (snake_case 파일명)
 - gen/src/
-  - utils.c, registry.c
+  - sc_utils.c, sc_registry.c (접두사 설정 가능)
   - 메시지별 소스 `<message>.c`
   - main.c (테스트 러너; 펌웨어 빌드에서 제외)
 
@@ -250,7 +249,7 @@ make -C gen build
   - 메시지 타입을 알고 있을 때 `<Message>_decode(...)` / `<Message>_encode(...)` 호출
 
 - 레지스트리 기반 디스패치
-  - `#include "registry.h"`
+  - `#include "sc_registry.h"` (또는 `<prefix>registry.h`)
   - `decode_message(can_id, data, dlc, &your_msg_struct)`로 런타임에 CAN ID로 라우팅
 
 ### 빌드 시스템 예시
@@ -309,7 +308,7 @@ void on_frame(const uint8_t* data, size_t dlc) {
 ID 기반(레지스트리) 디코드
 
 ```c
-#include "registry.h"
+#include "sc_registry.h"
 #include "message_1.h"
 
 void on_can(uint32_t id, const uint8_t* data, size_t dlc) {
