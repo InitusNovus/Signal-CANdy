@@ -1,0 +1,6 @@
+# Use LSB start-bit convention for Motorola (BE) signals
+phys_type: float
+range_check: false
+dispatch: binary_search
+crc_counter_check: false
+motorola_start_bit: lsb

@@ -1,0 +1,13 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 100 MESSAGE_1: 8 Vector__XXX
+ SG_ Signal_1 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Signal_2 : 8|16@1+ (0.1,0) [0|100] "Unit" Vector__XXX
+
+BO_ 200 FIXED_TEST: 8 Vector__XXX
+ SG_ Sig01_LE_001 : 0|16@1+ (0.01,0) [0|655.35] "" Vector__XXX
+ SG_ Sig02_LE_0001_S : 16|12@1- (0.001,-1) [-2|2] "" Vector__XXX
+ SG_ Sig03_BE_001 : 39|12@0+ (0.01,0) [0|40.95] "" Vector__XXX

@@ -1,0 +1,4 @@
+PhysType: fixed
+RangeCheck: false
+Dispatch: direct_map
+CrcCounterCheck: false

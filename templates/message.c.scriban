@@ -1,0 +1,24 @@
+#include "{{ message_name | string.downcase }}.h"
+#include <string.h> // For memcpy
+
+// Decode function
+bool {{ message_name }}_decode({{ message_name }}_t* msg, const uint8_t data[], uint8_t dlc) {
+    // TODO: Implement actual decoding logic
+    // For now, just a placeholder
+    if (dlc < {{ message_length }}) { // Check DLC
+        return false;
+    }
+{{ signal_decode_c }}
+    return true;
+}
+
+// Encode function
+bool {{ message_name }}_encode(uint8_t data[], uint8_t* out_dlc, const {{ message_name }}_t* msg) {
+    // TODO: Implement actual encoding logic
+    // For now, just a placeholder
+    memset(data, 0, 8); // Clear data buffer
+    *out_dlc = {{ message_length }}; // Set DLC
+
+{{ signal_encode_c }}
+    return true;
+}

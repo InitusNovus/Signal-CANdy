@@ -1,0 +1,8 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 100 MESSAGE_1: 8 Vector__XXX
+ SG_ Signal_1 : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Signal_2 : 8|16@1+ (0.1,0) [0|100] "Unit" Vector__XXX

@@ -1,0 +1,5 @@
+PhysType: fixed
+RangeCheck: true
+Dispatch: binary_search
+CrcCounterCheck: false
+MotorolaStartBit: msb

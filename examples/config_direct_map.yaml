@@ -1,0 +1,4 @@
+phys_type: "float"
+range_check: false
+dispatch: "direct_map"
+crc_counter_check: false

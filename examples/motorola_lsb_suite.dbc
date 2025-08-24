@@ -1,0 +1,7 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 300 LSB_TEST: 8 Vector__XXX
+ SG_ LSB_BE_8 : 0|8@0+ (1,0) [0|255] "" Vector__XXX

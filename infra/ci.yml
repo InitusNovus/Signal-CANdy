@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build-test-format:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v3
+      with:
+        dotnet-version: '8.0.x'
+
+    - name: Restore dependencies
+      run: dotnet restore
+
+    - name: Build
+      run: dotnet build --no-restore
+
+    - name: Test
+      run: dotnet test --no-build
+
+    - name: Install Fantomas
+      run: dotnet tool install fantomas-tool --global
+
+    - name: Format check
+      run: dotnet fantomas --check
+
+    - name: Build generated C code (Placeholder)
+      run: |
+        mkdir -p gen
+        # This step would typically involve running the F# generator to produce C code
+        # For now, we'll just create dummy C files to simulate the output
+        mkdir -p gen/include gen/src
+        echo '#ifndef DUMMY_H\n#define DUMMY_H\nvoid dummy_func();\n#endif' > gen/include/dummy.h
+        echo '#include "dummy.h"\nvoid dummy_func() { }' > gen/src/dummy.c
+        
+        # Build the dummy C code using make
+        make -C gen build
+
+    - name: Run C tests (Placeholder)
+      run: make -C gen test

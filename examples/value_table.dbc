@@ -1,0 +1,14 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 200 VT_MSG: 8 Vector__XXX
+ SG_ Mode M : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Base : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ State m0 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Error m1 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+
+VAL_ 200 Mode 0 "OFF" 1 "ON" 2 "AUTO" ;
+VAL_ 200 State 0 "IDLE" 1 "RUN" 2 "STOP" ;
+VAL_ 200 Error 0 "OK" 1 "WARN" 2 "FAIL" ;

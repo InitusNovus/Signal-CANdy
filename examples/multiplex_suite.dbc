@@ -1,0 +1,10 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 200 MUX_MSG: 8 Vector__XXX
+ SG_ MuxSwitch M : 0|4@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ Base_8       : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Sig_m1    m1 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Sig_m2    m2 : 16|16@1+ (1,0) [0|65535] "" Vector__XXX

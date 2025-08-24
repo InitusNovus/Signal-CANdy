@@ -1,0 +1,37 @@
+#include "utils.h"
+
+// Little-endian bit extraction
+uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length) {
+    uint64_t value = 0;
+    uint16_t byte_offset = start_bit / 8;
+    uint16_t bit_offset = start_bit % 8;
+
+    // Read up to 8 bytes to cover the maximum 64-bit signal
+    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) { // Assuming max 8 bytes for CAN frame
+        value |= (uint64_t)data[byte_offset + i] << (i * 8);
+    }
+
+    // Shift and mask to get the desired bits
+    value >>= bit_offset;
+    value &= (1ULL << length) - 1; // Mask out higher bits
+
+    return value;
+}
+
+// Little-endian bit insertion
+void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value) {
+    uint16_t byte_offset = start_bit / 8;
+    uint16_t bit_offset = start_bit % 8;
+
+    // Clear the bits in the target data
+    uint64_t clear_mask = ((1ULL << length) - 1) << bit_offset;
+    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {
+        data[byte_offset + i] &= ~(uint8_t)(clear_mask >> (i * 8));
+    }
+
+    // Insert the new value
+    uint64_t insert_value = (value & ((1ULL << length) - 1)) << bit_offset;
+    for (uint16_t i = 0; i < 8 && (byte_offset + i) < 8; ++i) {
+        data[byte_offset + i] |= (uint8_t)(insert_value >> (i * 8));
+    }
+}

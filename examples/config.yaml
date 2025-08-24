@@ -1,0 +1,13 @@
+# Sample configuration for DBC code generation
+
+# Physical type options: "float" | "fixed"
+phys_type: "float"
+
+# Range check options: true | false
+range_check: true
+
+# Dispatch method options: "binary_search" | "direct_map"
+dispatch: "binary_search"
+
+# CRC and Counter check options: true | false
+crc_counter_check: false

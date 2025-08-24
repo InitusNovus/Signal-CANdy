@@ -1,0 +1,39 @@
+#include <stdio.h>
+#include <stdint.h>
+#include "message_1.h" // Include the generated header
+
+int main() {
+    printf("Running encode/decode test for MESSAGE_1\n");
+
+    MESSAGE_1_t tx_msg;
+    uint8_t data[8] = {0};
+    uint8_t dlc = 0;
+
+    // Test values
+    tx_msg.Signal_1 = 123; // Example value
+    tx_msg.Signal_2 = 45678; // Example value
+
+    // Encode the message
+    if (MESSAGE_1_encode(data, &dlc, &tx_msg)) {
+        printf("Encoded data: ");
+        for (int i = 0; i < dlc; i++) {
+            printf("%02X ", data[i]);
+        }
+        printf("\n");
+
+        MESSAGE_1_t rx_msg;
+        // Decode the message
+        if (MESSAGE_1_decode(&rx_msg, data, dlc)) {
+            printf("Decoded Signal_1: %d\n", rx_msg.Signal_1);
+            printf("Decoded Signal_2: %d\n", rx_msg.Signal_2);
+        } else {
+            printf("Decoding failed!\n");
+            return 1;
+        }
+    } else {
+        printf("Encoding failed!\n");
+        return 1;
+    }
+
+    return 0;
+}

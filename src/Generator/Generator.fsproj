@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Config.fs" />
+    <Compile Include="Result.fs" />
+    <Compile Include="Ir.fs" />
+    <Compile Include="Dbc.fs" />
+    <Compile Include="Codegen.Utils.fs" />
+    <Compile Include="Codegen.Message.fs" />
+    <Compile Include="Codegen.Registry.fs" />
+    <Compile Include="Codegen.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DbcParserLib" Version="1.7.0" />
+    <PackageReference Include="FSharp.SystemTextJson" Version="1.4.36" />
+    <PackageReference Include="FsToolkit.ErrorHandling" Version="5.0.1" />
+    <PackageReference Include="Scriban" Version="6.2.1" />
+    <PackageReference Include="Argu" Version="6.1.1" />
+    <PackageReference Include="YamlDotNet" Version="16.3.0" />
+  </ItemGroup>
+
+</Project>

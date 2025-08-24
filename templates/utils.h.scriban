@@ -1,0 +1,13 @@
+#ifndef UTILS_H
+#define UTILS_H
+
+#include <stdint.h>
+#include <stdbool.h>
+
+// Little-endian bit extraction functions
+uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);
+
+// Little-endian bit insertion functions
+void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);
+
+#endif // UTILS_H

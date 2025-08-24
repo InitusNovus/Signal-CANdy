@@ -1,0 +1,4 @@
+PhysType: float
+RangeCheck: true
+Dispatch: direct_map
+CrcCounterCheck: false

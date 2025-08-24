@@ -1,0 +1,69 @@
+gen/
+gen_*/
+bin/
+obj/
+tmp/
+.fake
+# External test data: ignore all contents by default; keep folder and docs only
+external_test/*
+!external_test/.gitkeep
+!external_test/README.md
+
+# --- Clean release hygiene (AI/IDE/OS/backup) ---
+
+# AI/LLM instruction and orchestration files (keep local only)
+GEMINI.md
+OUTCOME.md
+SCAFFOLDING_PRESET.md
+README_ANALYSIS.md
+CONTRIBUTING-LLM.md
+INSTRUCTIONS.md
+PROMPT.md
+AGENT.md
+prompts/
+instructions/
+.copilot/
+.claude/
+.cursor/
+.aider*
+.windsurf/
+.openai/
+.anthropic/
+.llm/
+.devcontainer/
+.codespaces/
+.vscode/settings.local.json
+.vscode/*.local.*
+
+# GitHub-specific AI instruction docs (do not publish)
+.github/copilot-instructions.md
+.github/*copilot*
+.github/*llm*
+.github/*prompt*
+.github/*instructions*
+
+# Editor/IDE local state
+.vscode/
+.idea/
+.vs/
+.ionide/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+*.tmp
+
+# Logs and reports
+*.log
+tmp/stress_reports/
+
+# Backups/archives
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+*.bak
+backup/
+*_backup/
