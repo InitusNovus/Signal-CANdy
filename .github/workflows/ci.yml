@@ -24,6 +24,10 @@ jobs:
           dotnet restore
           dotnet build --configuration Release --nologo
 
+      - name: Setup gen directory for tests
+        run: |
+          dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen --config examples/config.yaml
+
       - name: Run Tests (F#)
         run: |
           dotnet test -v minimal --nologo --configuration Release
