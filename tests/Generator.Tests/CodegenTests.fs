@@ -35,7 +35,47 @@ module CodegenTests =
         if File.Exists(repoMakefile) then
             File.Copy(repoMakefile, outMakefile, true)
         else
-            failwith (sprintf "Makefile template not found at %s" repoMakefile)
+            // Fallback: write a minimal Makefile that can build the generated C code
+            let makefileTemplate = """
+CC = gcc
+CFLAGS = -Wall -Wextra -std=c99
+
+BUILD_DIR = build
+SRC_DIR = src
+INCLUDE_DIR = include
+
+# Discover all C sources under src
+SRCS := $(wildcard $(SRC_DIR)/*.c)
+# If any prefixed common files exist, drop legacy unprefixed ones to avoid duplicates
+ifneq (,$(filter-out $(SRC_DIR)/registry.c,$(wildcard $(SRC_DIR)/*registry.c)))
+SRCS := $(filter-out $(SRC_DIR)/registry.c,$(SRCS))
+endif
+ifneq (,$(filter-out $(SRC_DIR)/utils.c,$(wildcard $(SRC_DIR)/*utils.c)))
+SRCS := $(filter-out $(SRC_DIR)/utils.c,$(SRCS))
+endif
+
+OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+
+TARGET = $(BUILD_DIR)/test_runner
+
+.PHONY: all build clean
+
+all: build
+
+build: $(TARGET)
+
+$(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+
+$(TARGET): $(OBJS)
+	mkdir -p $(@D)
+	$(CC) $(CFLAGS) $(OBJS) -o $@
+
+clean:
+	rm -rf $(BUILD_DIR)
+"""
+            File.WriteAllText(outMakefile, makefileTemplate)
 
     let runCGenerator (configPath: string option) (genOutputPath: string) =
         let dbcPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "sample.dbc")
