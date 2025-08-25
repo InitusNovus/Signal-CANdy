@@ -28,15 +28,22 @@ module CodegenTests =
         | Failure errors ->
             failwith (sprintf "Expected success, but got errors: %A" errors)
 
+    // Ensure a Makefile exists in the generated output directory (copy from repo's gen/Makefile)
+    let ensureMakefile (genOutputPath: string) =
+        let repoMakefile = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen", "Makefile")
+        let outMakefile = Path.Combine(genOutputPath, "Makefile")
+        if File.Exists(repoMakefile) then
+            File.Copy(repoMakefile, outMakefile, true)
+        else
+            failwith (sprintf "Makefile template not found at %s" repoMakefile)
+
     let runCGenerator (configPath: string option) (genOutputPath: string) =
         let dbcPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "sample.dbc")
-        let args =
-            let configArg =
-                match configPath with
-                | Some p -> sprintf "--config %s" p
-                | None -> ""
-            sprintf "--dbc %s --out %s %s" dbcPath genOutputPath configArg
-        
+        let configArg =
+            match configPath with
+            | Some p -> sprintf "--config %s" p
+            | None -> ""
+        let args = sprintf "--dbc %s --out %s %s" dbcPath genOutputPath configArg
         let proc = new Process()
         proc.StartInfo.FileName <- "dotnet"
         let generatorPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "src", "Generator", "Generator.fsproj")
@@ -50,20 +57,15 @@ module CodegenTests =
         proc.WaitForExit()
         if proc.ExitCode <> 0 then
             failwith (sprintf "Generator failed with exit code %d.\nStdout:\n%s\nStderr:\n%s" proc.ExitCode stdout stderr)
-
-        // Ensure Makefile exists in the generated output directory (copy from repo's gen/Makefile)
-        let repoMakefile = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen", "Makefile")
-        let outMakefile = Path.Combine(genOutputPath, "Makefile")
-        if File.Exists(repoMakefile) then
-            File.Copy(repoMakefile, outMakefile, true)
+        // Copy Makefile after successful generation
+        ensureMakefile genOutputPath
+        ()
 
     let buildAndRunCTest (genOutputPath: string) (cTestName: string) : string list =
-        // Build
+        // Build using the Makefile in genOutputPath
         let make = new Process()
         make.StartInfo.FileName <- "make"
-        // Use absolute path to the generated directory to avoid CWD confusion
         make.StartInfo.Arguments <- sprintf "-C \"%s\" build" genOutputPath
-        make.StartInfo.WorkingDirectory <- Path.Combine(__SOURCE_DIRECTORY__, "..", "..")
         make.StartInfo.UseShellExecute <- false
         make.StartInfo.RedirectStandardOutput <- true
         make.StartInfo.RedirectStandardError <- true
@@ -74,7 +76,7 @@ module CodegenTests =
         if make.ExitCode <> 0 then
             failwith (sprintf "Make build failed with exit code %d.\nStdout:\n%s\nStderr:\n%s" make.ExitCode makeStdout makeStderr)
 
-        // Run
+        // Run test
         let run = new Process()
         run.StartInfo.FileName <- Path.Combine(genOutputPath, "build", "test_runner")
         run.StartInfo.Arguments <- cTestName

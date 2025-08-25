@@ -24,7 +24,7 @@ jobs:
           dotnet restore
           dotnet build --configuration Release --nologo
 
-      - name: Setup gen directory for tests
+      - name: Setup gen directory for tests (sanity)
         run: |
           dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen --config examples/config.yaml
 
