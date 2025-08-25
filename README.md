@@ -156,6 +156,25 @@ crc_counter_check: false
 file_prefix: sc_
 ```
 
+## CLI flags (overrides)
+
+You can override some config fields from the command line:
+
+- `--prefix <str>`: overrides `file_prefix` for generated common files.
+- `--emit-main <true|false>`: controls copying `examples/main.c` to `gen/src/main.c`.
+
+Examples
+
+```bash
+# Use prefix foo_ and skip copying main.c
+dotnet run --project src/Generator -- \
+  --dbc examples/sample.dbc \
+  --out gen \
+  --config examples/config.yaml \
+  --prefix foo_ \
+  --emit-main false
+```
+
 ### Using a config
 
 ```bash

@@ -152,6 +152,26 @@ crc_counter_check: false
 file_prefix: sc_
 ```
 
+## CLI 플래그 (오버라이드)
+
+일부 설정을 커맨드라인에서 덮어쓸 수 있습니다.
+
+- `--prefix <str>`: 공통 생성 파일의 `file_prefix`를 오버라이드.
+- `--emit-main <true|false>`: `examples/main.c`를 `gen/src/main.c`로 복사할지 제어.
+
+예시
+
+```bash
+# 접두사 foo_ 사용, main.c 복사 생략
+dotnet run --project src/Generator -- \
+  --dbc examples/sample.dbc \
+  --out gen \
+  --config examples/config.yaml \
+  --prefix foo_ \
+  --emit-main false
+```
+```
+
 ### 구성 파일 사용
 
 ```bash
