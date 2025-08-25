@@ -9,7 +9,7 @@ open Generator.Registry
 
 module Codegen =
 
-    let generateCode (ir: Ir) (outputPath: string) (config: Generator.Config.Config) =
+    let generateCode (ir: Ir) (outputPath: string) (config: Generator.Config.Config) (emitMain: bool) =
         try
             // Create output directories
             Directory.CreateDirectory (Path.Combine(outputPath, "include")) |> ignore
@@ -40,11 +40,12 @@ module Codegen =
             // Generate registry files with prefix
             Registry.generateRegistryFiles ir outputPath config
 
-            // Copy example main.c into output to act as test harness
-            let exampleMain = Path.Combine("examples", "main.c")
-            let outMain = Path.Combine(outputPath, "src", "main.c")
-            if File.Exists(exampleMain) then
-                File.Copy(exampleMain, outMain, true)
+            // Copy example main.c into output to act as test harness (optional)
+            if emitMain then
+                let exampleMain = Path.Combine("examples", "main.c")
+                let outMain = Path.Combine(outputPath, "src", "main.c")
+                if File.Exists(exampleMain) then
+                    File.Copy(exampleMain, outMain, true)
 
             true
 
