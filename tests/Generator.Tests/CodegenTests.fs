@@ -41,6 +41,9 @@ CC = gcc
 CFLAGS = -Wall -Wextra -std=c99
 LDLIBS = -lm
 
+# Avoid TAB requirement for recipes (GNU make >= 3.82)
+.RECIPEPREFIX := >
+
 BUILD_DIR = build
 SRC_DIR = src
 INCLUDE_DIR = include
@@ -66,15 +69,15 @@ all: build
 build: $(TARGET)
 
 $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
-	mkdir -p $(@D)
-	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+>mkdir -p $(@D)
+>$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
 
 $(TARGET): $(OBJS)
-	mkdir -p $(@D)
-    $(CC) $(CFLAGS) $(OBJS) $(LDLIBS) -o $@
+>mkdir -p $(@D)
+>$(CC) $(CFLAGS) $(OBJS) $(LDLIBS) -o $@
 
 clean:
-	rm -rf $(BUILD_DIR)
+>rm -rf $(BUILD_DIR)
 """
             File.WriteAllText(outMakefile, makefileTemplate)
 
