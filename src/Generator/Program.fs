@@ -11,6 +11,8 @@ module Program =
         DbcPath: string
         OutputPath: string
         ConfigPath: string option
+        Prefix: string option
+        EmitMain: bool
     }
 
     [<EntryPoint>]
@@ -18,23 +20,33 @@ module Program =
         try
             let args = argv |> List.ofArray
 
-            let rec parseArgs (argsList: string list) (currentDbc: string) (currentOut: string) (currentConfig: string option) =
+            let rec parseArgs (argsList: string list) (currentDbc: string) (currentOut: string) (currentConfig: string option) (currentPrefix: string option) (currentEmitMain: bool) =
                 match argsList with
-                | "--dbc" :: path :: rest -> parseArgs rest path currentOut currentConfig
-                | "--out" :: path :: rest -> parseArgs rest currentDbc path currentConfig
-                | "--config" :: path :: rest -> parseArgs rest currentDbc currentOut (Some path)
-                | _ :: rest -> parseArgs rest currentDbc currentOut currentConfig
-                | [] -> { DbcPath = currentDbc; OutputPath = currentOut; ConfigPath = currentConfig }
+                | "--dbc" :: path :: rest -> parseArgs rest path currentOut currentConfig currentPrefix currentEmitMain
+                | "--out" :: path :: rest -> parseArgs rest currentDbc path currentConfig currentPrefix currentEmitMain
+                | "--config" :: path :: rest -> parseArgs rest currentDbc currentOut (Some path) currentPrefix currentEmitMain
+                | "--prefix" :: pfx :: rest -> parseArgs rest currentDbc currentOut currentConfig (Some pfx) currentEmitMain
+                | "--emit-main" :: flag :: rest ->
+                    let v =
+                        match flag.ToLowerInvariant() with
+                        | "true" | "1" | "yes" | "y" -> true
+                        | "false" | "0" | "no" | "n" -> false
+                        | _ -> true
+                    parseArgs rest currentDbc currentOut currentConfig currentPrefix v
+                | _ :: rest -> parseArgs rest currentDbc currentOut currentConfig currentPrefix currentEmitMain
+                | [] -> { DbcPath = currentDbc; OutputPath = currentOut; ConfigPath = currentConfig; Prefix = currentPrefix; EmitMain = currentEmitMain }
 
-            let parsedArgs = parseArgs args "" "" None
+            let parsedArgs = parseArgs args "" "" None None true
 
             if parsedArgs.DbcPath = "" || parsedArgs.OutputPath = "" then
-                eprintfn "Usage: dotnet run --project src/Generator -- --dbc <dbc_file_path> --out <output_directory> [--config <config_file_path>]"
+                eprintfn "Usage: dotnet run --project src/Generator -- --dbc <dbc_file_path> --out <output_directory> [--config <config_file_path>] [--prefix <file_prefix>] [--emit-main <true|false>]"
                 1
             else
                 printfn "DBC Path: %s" parsedArgs.DbcPath
                 printfn "Output Path: %s" parsedArgs.OutputPath
                 printfn "Config Path: %A" parsedArgs.ConfigPath
+                printfn "Prefix Override: %A" parsedArgs.Prefix
+                printfn "Emit Main: %b" parsedArgs.EmitMain
 
                 // Load config if provided, otherwise fall back to defaults
                 let defaultCfg = { PhysType = "float"; PhysMode = "double"; RangeCheck = false; Dispatch = "binary_search"; CrcCounterCheck = false; MotorolaStartBit = "msb"; FilePrefix = "sc_" }
@@ -48,9 +60,15 @@ module Program =
                             defaultCfg
                     | None -> defaultCfg
 
+                // Apply CLI overrides
+                let cfg =
+                    match parsedArgs.Prefix with
+                    | Some pfx -> { cfg with FilePrefix = pfx }
+                    | None -> cfg
+
                 match Dbc.parseDbcFile parsedArgs.DbcPath with
                 | Ok ir ->
-                    if Codegen.generateCode ir parsedArgs.OutputPath cfg then
+                    if Codegen.generateCode ir parsedArgs.OutputPath cfg parsedArgs.EmitMain then
                         printfn "Code generation successful."
                         0
                     else

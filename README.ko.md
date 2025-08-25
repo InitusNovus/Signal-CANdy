@@ -146,6 +146,32 @@ dispatch: binary_search
 crc_counter_check: false
 ```
 
+```yaml
+# 공통 생성 파일 접두사 설정(이름 충돌 회피)
+# 결과: gen/include/sc_registry.h, gen/src/sc_registry.c 등
+file_prefix: sc_
+```
+
+## CLI 플래그 (오버라이드)
+
+일부 설정을 커맨드라인에서 덮어쓸 수 있습니다.
+
+- `--prefix <str>`: 공통 생성 파일의 `file_prefix`를 오버라이드.
+- `--emit-main <true|false>`: `examples/main.c`를 `gen/src/main.c`로 복사할지 제어.
+
+예시
+
+```bash
+# 접두사 foo_ 사용, main.c 복사 생략
+dotnet run --project src/Generator -- \
+  --dbc examples/sample.dbc \
+  --out gen \
+  --config examples/config.yaml \
+  --prefix foo_ \
+  --emit-main false
+```
+```
+
 ### 구성 파일 사용
 
 ```bash

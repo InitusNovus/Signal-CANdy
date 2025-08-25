@@ -1,0 +1,131 @@
+name: CI
+
+on:
+  push:
+    branches: [ ci-setup, dev-local, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore & Build
+        run: |
+          dotnet --info
+          dotnet restore
+          dotnet build --configuration Release --nologo
+
+      - name: Setup gen directory for tests (sanity)
+        run: |
+          dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen --config examples/config.yaml
+
+      - name: Run Tests (F#)
+        run: |
+          dotnet test -v minimal --nologo --configuration Release
+
+      - name: Codegen C (fixed_suite)
+        run: |
+          dotnet run --project src/Generator -- --dbc examples/fixed_suite.dbc --out gen --config examples/config_directmap_fixed.yaml --prefix sc_ --emit-main true
+
+      - name: Ensure Makefile in gen
+        run: |
+          cat > gen/Makefile <<'MAKEFILE'
+          CC = gcc
+          CFLAGS = -Wall -Wextra -std=c99
+          LDLIBS = -lm
+
+          BUILD_DIR = build
+          SRC_DIR = src
+          INCLUDE_DIR = include
+
+          # Discover all C sources under src and map to objects under build
+          SRCS := $(wildcard $(SRC_DIR)/*.c)
+          # Add stress test source if available
+          ifneq (,$(wildcard ../examples/stress_test.c))
+          SRCS += ../examples/stress_test.c
+          CFLAGS += -DHAVE_STRESS
+          endif
+
+          # If any prefixed common files exist, drop legacy unprefixed ones to avoid duplicates
+          ifneq (,$(filter-out $(SRC_DIR)/registry.c,$(wildcard $(SRC_DIR)/*registry.c)))
+          SRCS := $(filter-out $(SRC_DIR)/registry.c,$(SRCS))
+          endif
+          ifneq (,$(filter-out $(SRC_DIR)/utils.c,$(wildcard $(SRC_DIR)/*utils.c)))
+          SRCS := $(filter-out $(SRC_DIR)/utils.c,$(SRCS))
+          endif
+          OBJS := $(patsubst $(SRC_DIR)/%.c,$(BUILD_DIR)/%.o,$(SRCS))
+          OBJS := $(patsubst ../examples/%.c,$(BUILD_DIR)/%.o,$(OBJS))
+
+          TARGET = $(BUILD_DIR)/test_runner
+
+          .PHONY: all build test clean
+
+          all: build
+
+          build: $(TARGET)
+
+          # Generic build rule for any C file in src/
+          $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
+          	mkdir -p $(@D)
+          	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+
+          # Rule for examples directory
+          $(BUILD_DIR)/%.o: ../examples/%.c
+          	mkdir -p $(@D)
+          	$(CC) $(CFLAGS) -I$(INCLUDE_DIR) -c $< -o $@
+
+          # Link all objects into the test runner
+          $(TARGET): $(OBJS)
+          	mkdir -p $(@D)
+          	$(CC) $(CFLAGS) $(OBJS) $(LDLIBS) -o $@
+
+          # Placeholder test target (adjust as needed)
+          test:
+          	@echo "Running C tests... (Placeholder)"
+          	@echo "No actual tests implemented yet. This is a placeholder."
+          	# For example: ./$(TARGET) test_be_basic
+
+          clean:
+          	rm -rf $(BUILD_DIR)
+          MAKEFILE
+
+      - name: Build generated C with Make
+        run: |
+          make -C gen build
+
+      - name: Smoke test runner
+        run: |
+          ./gen/build/test_runner test_fixed_suite_roundtrip
+
+      - name: Upload build artifacts (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gen-build-logs
+          path: |
+            gen/build
+            gen/include
+            gen/*.txt
+            gen/Makefile
+            gen/src
+            gen/*.log
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify repo hygiene
+        run: |
+          if [ -d external_test ]; then echo "[lint] NOTE: external_test present (ignored by CI)"; fi
+          if [ -f TEST_SUMMARY.md ]; then echo "[lint] NOTE: TEST_SUMMARY.md should be local-only"; fi
