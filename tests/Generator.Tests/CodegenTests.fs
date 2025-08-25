@@ -39,6 +39,7 @@ module CodegenTests =
             let makefileTemplate = """
 CC = gcc
 CFLAGS = -Wall -Wextra -std=c99
+LDLIBS = -lm
 
 BUILD_DIR = build
 SRC_DIR = src
@@ -70,7 +71,7 @@ $(BUILD_DIR)/%.o: $(SRC_DIR)/%.c
 
 $(TARGET): $(OBJS)
 	mkdir -p $(@D)
-	$(CC) $(CFLAGS) $(OBJS) -o $@
+    $(CC) $(CFLAGS) $(OBJS) $(LDLIBS) -o $@
 
 clean:
 	rm -rf $(BUILD_DIR)
