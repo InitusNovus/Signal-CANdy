@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [ ci-setup, dev-local, main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Restore & Build
+        run: |
+          dotnet --info
+          dotnet restore
+          dotnet build --configuration Release --nologo
+
+      - name: Run Tests (F#)
+        run: |
+          dotnet test -v minimal --nologo --configuration Release
+
+      - name: Codegen C (fixed_suite)
+        run: |
+          dotnet run --project src/Generator -- --dbc examples/fixed_suite.dbc --out gen --config examples/config_directmap_fixed.yaml --prefix sc_ --emit-main true
+
+      - name: Build generated C with Make
+        run: |
+          make -C gen build
+
+      - name: Smoke test runner
+        run: |
+          ./gen/build/test_runner test_fixed_suite_roundtrip
+
+      - name: Upload build artifacts (on failure)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gen-build-logs
+          path: |
+            gen/build
+            gen/include
+            gen/*.txt
+            gen/Makefile
+            gen/src
+            gen/*.log
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify repo hygiene
+        run: |
+          if [ -d external_test ]; then echo "[lint] NOTE: external_test present (ignored by CI)"; fi
+          if [ -f TEST_SUMMARY.md ]; then echo "[lint] NOTE: TEST_SUMMARY.md should be local-only"; fi
