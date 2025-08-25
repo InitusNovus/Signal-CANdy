@@ -10,8 +10,8 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 
 ```bash
 dotnet --version   # 8.0+
-make --version     # GNU Make
-gcc --version      # C compiler
+gcc --version      # C compiler (optional: for local validation)
+make --version     # GNU Make (optional: for local validation)
 ```
 
 2) Generate C code from a sample DBC
@@ -29,6 +29,8 @@ make -C gen build
 
 Expected: roundtrip test passes and generated headers appear under `gen/include`.
 
+Note: Step 3 is optional but recommended for validation. The generated C files under `gen/include` and `gen/src` are ready for integration into your firmware project with any compatible C99 toolchain.
+
 ## 📋 Table of Contents
 
 - Getting Started
@@ -42,6 +44,7 @@ Expected: roundtrip test passes and generated headers appear under `gen/include`
 - Output layout and naming
 - Including generated files in firmware
 - Build system examples
+- Platforms, compilers, and test environments
 - Runtime usage examples
 - PhysType details and numeric precision
 - Dispatch modes and registry
@@ -57,8 +60,8 @@ Expected: roundtrip test passes and generated headers appear under `gen/include`
 ### Prerequisites
 
 - .NET SDK 8.0 or later
-- make (for building generated C code)
-- gcc (for compiling generated C code)
+- gcc or clang (optional: for validating generated C code; unrelated to your target firmware toolchain)
+- make (optional: for validating generated C code; unrelated to your target firmware toolchain)
 
 ### Usage
 
@@ -88,7 +91,7 @@ Expected: roundtrip test passes and generated headers appear under `gen/include`
 
 ## Supported features
 
-- Endianness: Little-Endian and Motorola Big-Endian (MSB sawtooth numbering)
+- Endianness: Little-Endian (Intel-style) and Big-Endian (Motorola-style), supporting both Motorola MSB and LSB start-bit conventions
 - Multiplexing: one switch (M) and branch signals (m<k>) with valid bitmask and mux_active enum
 - Value tables: parse VAL_ and generate per-signal enums and to_string helpers
 - Configurable scaling math: phys_type float or fixed with phys_mode selection
@@ -133,13 +136,15 @@ crc_counter_check: false
 ```
 
 ```yaml
-# examples/config_fixed.yaml
-PhysType: fixed
-PhysMode: fixed_double  # default fallback; uses integer fast path when applicable
-RangeCheck: false
-Dispatch: direct_map
-CrcCounterCheck: false
+# examples/config_fixed.yaml (snake_case preferred)
+phys_type: fixed
+phys_mode: fixed_double  # default fallback; uses integer fast path when applicable
+range_check: false
+dispatch: direct_map
+crc_counter_check: false
 ```
+
+Note: Config keys use snake_case by default. For compatibility, PascalCase aliases are accepted for the same keys (e.g., PhysType ↔ phys_type). Matching is alias-based, not fully case-insensitive.
 
 ```yaml
 # Single-precision FPU MCU (minimize double ops in fallback)
@@ -270,6 +275,7 @@ make -C gen build
 Notes
 - Branch selection uses the raw integer value of the switch signal (typical DBC semantics).
 - Base (non-multiplexed) signals are always decoded/encoded.
+ - Valid bitmask width: current implementations use a 32-bit `valid` field. Extremely large messages with >32 branch/base signals may require widening (e.g., to 64-bit) or an array. This is called out in Limitations; auto-widening is on the roadmap.
 
 Using valid and mux_active
 ```c
@@ -335,11 +341,40 @@ void compare_state(int v) {
 Message API naming convention
 - Type: `<MessageName>_t` (e.g., `MESSAGE_1_t`, `C2_MSG0280A1_BMS2VCU_Sts1_t`)
 - Functions:
-  - `bool <MessageName>_decode(<MessageName>_t* out, const uint8_t data[8], size_t dlc);`
-  - `bool <MessageName>_encode(uint8_t data[8], size_t* out_dlc, const <MessageName>_t* in);`
+  - `bool <MessageName>_decode(<MessageName>_t* out, const uint8_t data[8], uint8_t dlc);`
+  - `bool <MessageName>_encode(uint8_t data[8], uint8_t* out_dlc, const <MessageName>_t* in);`
 - Registry (dispatch):
-  - `bool decode_message(uint32_t can_id, const uint8_t data[8], size_t dlc, void* out_msg_struct);`
+  - `bool decode_message(uint32_t can_id, const uint8_t data[8], uint8_t dlc, void* out_msg_struct);`
     - When `can_id` matches a known message, this fills the struct of the corresponding type pointed to by `out_msg_struct` and returns true.
+
+Type-safety note (important)
+- The registry API takes a `void*`. Passing the wrong struct type is undefined behavior. Prefer per-message calls when you know the type, or guard with a switch on ID:
+
+```c
+switch (can_id) {
+  case MESSAGE_1_ID: {
+    MESSAGE_1_t m = {0};
+    if (MESSAGE_1_decode(&m, data, dlc)) { /* use m */ }
+    break;
+  }
+  /* other IDs */
+}
+```
+
+Behavior reference
+
+- DLC semantics
+  - encode: sets `*out_dlc` to the minimal required bytes for that message.
+  - decode: returns false if `dlc` < required; extra bytes are ignored.
+  - Planned: a config knob to select encode DLC policy (e.g., `encode_dlc_mode: minimal | fixed_8`).
+- Range checks and atomicity
+  - When enabled, out-of-range causes `false`. Operations are non-atomic by design: on failure, the output buffer/struct may be partially updated; callers must discard outputs when `false`.
+  - Planned: optional atomic mode (all-or-nothing) if demand is strong.
+- Overflow/truncation policy
+  - Encode raw intermediate uses `int64_t`; decode uses `uint64_t` plus sign-fix for signed.
+  - Without `range_check`, values exceeding bit width are masked/truncated to fit.
+  - With `range_check`, out-of-range returns `false` before committing that signal.
+  - Planned: a saturate-on-overflow option.
 
 ## Including generated files in firmware
 
@@ -394,6 +429,33 @@ Vendor IDEs
 Configurable prefix
 - Common files use a prefix (default `sc_`), yielding `sc_utils.{h,c}` and `sc_registry.{h,c}`.
 - Change it via `file_prefix` in your YAML config if needed.
+
+## Platforms, compilers, and test environments
+
+Tested combos
+- Local: macOS (Apple Silicon) + clang + GNU Make
+- CI: Linux (GitHub Actions Ubuntu) + gcc + GNU Make
+- Windows: not yet tested
+
+Windows notes (early guidance)
+- Prefer CMake to integrate generated C on Windows.
+- Toolchains: MSVC, LLVM clang-cl, or MinGW-w64 gcc should work in principle.
+- Set C standard and include path; exclude the test runner:
+  - CMake: add
+    - `target_compile_features(dbccodegen PUBLIC c_std_99)`
+    - `target_include_directories(dbccodegen PUBLIC ${CMAKE_SOURCE_DIR}/gen/include)`
+    - Remove `gen/src/main.c` from sources.
+- Linking: MSVC doesn’t need `-lm`; math functions (llround/llroundf) are in the CRT when including `<math.h>`.
+- If you hit MSVC-specific C99 quirks, consider LLVM clang-cl or MinGW as a fallback. Please open an issue with compiler/version details so we can add CI coverage.
+
+### Quick checklist (firmware integration)
+
+- [ ] Do NOT compile `gen/src/main.c` (test runner only)
+- [ ] Add `gen/include` to include paths
+- [ ] Compile all `gen/src/*.c` except `main.c`
+- [ ] Include your prefix headers (e.g., `#include "sc_registry.h"`)
+- [ ] Choose dispatch mode per product: `binary_search` (sparse IDs) vs `direct_map` (dense range)
+- [ ] If you need different common-file names, set `file_prefix` (e.g., `file_prefix: fw_`)
 
 ### Runtime usage examples
 
@@ -492,6 +554,25 @@ Measured on Apple Silicon (arm64), gcc -O2, representative scenarios:
 
 Details can be reproduced via the stress suite and bulk runner in `scripts/bulk_stress.ps1`. Aggregated CSV lives under `tmp/stress_reports/summary.csv` when generated. A human-readable overview of tests and results is in `TEST_SUMMARY.md`.
 
+### Methodology
+
+- Harness: the generated C test runner executes tight encode/decode loops per case and measures wall-clock time with a monotonic timer; ops/sec = iterations / elapsed.
+- Environment: Apple Silicon (arm64) with clang/gcc at `-O2` unless noted. CPU scaling/thermals can affect results.
+- Repro:
+  - Build: `make -C gen build`
+  - Quick smoke: `./gen/build/test_runner test_stress_suite`
+  - Corpus run: `pwsh ./scripts/bulk_stress.ps1` → see `tmp/stress_reports/summary.csv`
+- Reporting: multiple trials per case; warm-up is discarded; we typically report the median.
+- Portability: use your target compiler/flags/hardware to get realistic numbers for production.
+
+### ⚙️ Performance tuning cheatsheet
+
+- Compiler: `-O2` or `-O3`, enable LTO if your toolchain supports it
+- Floating point: On single-precision FPU MCUs, prefer `phys_type: fixed` + `phys_mode: fixed_float` when 10^-n scales dominate
+- Dispatch: `direct_map` is O(1) but can cost memory if IDs are sparse; `binary_search` is O(log N) and compact
+- Link-time: Build generated sources as a static library to improve incremental builds
+- Headers: Keep `gen/include` first in include paths to avoid name collisions
+
 ## 🔧 Troubleshooting (common issues)
 
 - fatal error: 'message_1.h' file not found
@@ -521,7 +602,9 @@ The registry provides a convenience router: decode_message(can_id, data, dlc, ou
 - binary_search
   - A sorted table of {id, (optional) extended-flag, function pointer}; looked up with binary search. O(log N). Small memory, good for sparse IDs.
 - direct_map
-  - A direct mapping keyed by ID (implemented as a compact switch or table depending on range). O(1) lookup, but can cost memory if IDs are sparse.
+  - A direct mapping keyed by ID (implemented as a compact switch or table depending on range). O(1) lookup, but can cost memory/code size if IDs are sparse. Rule of thumb: prefer when IDs are dense in a small contiguous range (≈30–50%+ density); otherwise choose binary_search.
+Value tables
+- For signals with VAL_ tables, the generator emits enums and `<Msg>_<Sig>_to_string(int)` helpers by default. On memory-constrained targets, consider forking templates to omit string tables; a toggle may be added in a future release.
 
 Comparison to nanopb
 - Conceptually similar in spirit to nanopb-style runtime dispatch: you call a single entry point and it routes to the specific decoder based on an identifier.
@@ -532,7 +615,17 @@ CRC/Counter note
 
 ## Endianness and bit utilities
 
-- Little-Endian and Motorola Big-Endian (MSB sawtooth) are supported.
+- Little-Endian (Intel) and Big-Endian (Motorola) are supported. For Motorola, both MSB-sawtooth and LSB start-bit conventions are handled (configurable via `motorola_start_bit: msb|lsb`).
+- Motorola BE numbering quick view (MSB sawtooth across 8 bytes):
+  - Byte0: [7][6][5][4][3][2][1][0]
+  - Byte1: [15][14][13][12][11][10][9][8]
+  - Byte2: [23][22][21][20][19][18][17][16]
+  - Byte3: [31][30][29][28][27][26][25][24]
+  - Byte4: [39][38][37][36][35][34][33][32]
+  - Byte5: [47][46][45][44][43][42][41][40]
+  - Byte6: [55][54][53][52][51][50][49][48]
+  - Byte7: [63][62][61][60][59][58][57][56]
+  - LSB start-bit inputs are internally converted to MSB sawtooth for codegen normalization.
 - Generated `<prefix>utils.{h,c}` (default `sc_utils.{h,c}`) provide `get_bits_le/be` and `set_bits_le/be` used by message codecs.
 
 ## Project Structure
