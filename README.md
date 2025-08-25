@@ -1,5 +1,14 @@
 # Signal CANdy — DBC to C Code Generator (F#)
 
+[![CI](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml/badge.svg)](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/InitusNovus/Signal-CANdy.svg)](https://github.com/InitusNovus/Signal-CANdy/blob/main/LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
+[![F#](https://img.shields.io/badge/F%23-language-blue.svg)](https://fsharp.org/)
+[![Version](https://img.shields.io/github/v/release/InitusNovus/Signal-CANdy?include_prereleases)](https://github.com/InitusNovus/Signal-CANdy/releases)
+
+[![C99](https://img.shields.io/badge/C-99-blue.svg)](https://en.wikipedia.org/wiki/C99)
+[![CAN DBC](https://img.shields.io/badge/protocol-CAN%20DBC-green.svg)](https://en.wikipedia.org/wiki/CAN_bus)
+
 Languages: This README is in English. For Korean, see README.ko.md.
 
 This project generates portable C99 parser modules (headers/sources) from a `.dbc` file using an F# code generator.
