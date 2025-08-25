@@ -1,8 +1,8 @@
 # Signal CANdy — DBC to C 코드 생성기 (F#)
 
-언어: 이 문서는 한국어입니다. 영어판은 README.md를 참고하세요.
+언어: 이 문서는 한국어 번역본입니다. 원문(영어)은 `README.md`를 참고하세요.
 
-이 프로젝트는 F# 기반 코드 생성기를 사용해 `.dbc` 파일로부터 이식성 높은 C99 파서 모듈(헤더/소스)을 생성합니다. 프로젝트 이름: Signal CANdy.
+이 프로젝트는 F# 기반 코드 생성기를 사용해 `.dbc` 파일로부터 이식성 높은 C99 파서 모듈(헤더/소스)을 생성합니다.
 
 ## ⚡ 빠른 시작 (5분)
 
@@ -10,8 +10,8 @@
 
 ```bash
 dotnet --version   # 8.0+
-make --version     # GNU Make
-gcc --version      # C 컴파일러
+gcc --version      # C 컴파일러 (선택: 로컬 검증용)
+make --version     # GNU Make (선택: 로컬 검증용)
 ```
 
 2) 샘플 DBC로 코드 생성
@@ -27,38 +27,41 @@ make -C gen build
 ./gen/build/test_runner test_roundtrip
 ```
 
-예상: 테스트 통과 및 `gen/include`에 헤더가 생성됩니다.
+예상: 라운드트립 테스트가 통과하고 `gen/include`에 헤더가 생성됩니다.
+
+참고: 3단계는 검증용 선택 사항입니다. `gen/include`와 `gen/src`에 생성된 C 파일은 C99 호환 툴체인을 사용하는 펌웨어 프로젝트에 바로 통합할 수 있습니다.
 
 ## 📋 목차
 
-- 시작하기 (요구 사항, 사용법)
+- 시작하기
+- 사용법
 - 지원 기능
-- 구성 파일 개요 (config.yaml)
-- DBC → 코드 생성 흐름
+- 구성 (개요)
+- 코드 생성 방식
 - 대규모 테스트와 스트레스 수트
-- 출력 레이아웃 및 이름 규칙
-- 메시지 API 네이밍 규칙
-- 펌웨어에 생성물 포함하기
-- 빌드 시스템 예시 (Make/CMake)
-- 런타임 사용 예시
 - 멀티플렉스 메시지
 - 값 테이블 (VAL_)
+- 출력 레이아웃과 네이밍
+- 펌웨어에 생성물 포함하기
+- 빌드 시스템 예시
+- 플랫폼/컴파일러/테스트 환경
+- 런타임 사용 예시
 - PhysType 세부 및 수치 정밀도
-- 디스패치 모드, 레지스트리, nanopb와의 관계
+- 디스패치 모드와 레지스트리
 - 엔디안 및 비트 유틸리티
 - 프로젝트 구조
 - 성능 벤치마크
-- 문제 해결 (Troubleshooting)
+- 문제 해결
 - 제한사항
-- 라이선스, 서드파티, AI 출처
+- 라이선스/서드파티/AI 출처
 
 ## 시작하기
 
 ### 요구 사항
 
 - .NET SDK 8.0 이상
-- make (생성된 C 코드 빌드용)
-- gcc (생성된 C 코드 컴파일용)
+- gcc 또는 clang (선택사항: 생성된 C 코드 검증용; 타겟 펌웨어 툴체인과 무관)
+- make (선택사항: 생성된 C 코드 검증용; 타겟 펌웨어 툴체인과 무관)
 
 ### 사용법
 
@@ -84,14 +87,14 @@ make -C gen build
 
 ## 지원 기능
 
-- 엔디안: Little-Endian, Motorola Big-Endian(MSB 톱니형 번호 체계)
+- 엔디안: Little-Endian(인텔)과 Big-Endian(모토롤라) 모두 지원, 모토롤라의 MSB/LSB 시작 비트 표기 모두 지원
 - 멀티플렉싱: 스위치(M) 1개 + 분기 신호(m<k>), `valid` 비트마스크 및 `mux_active` enum 제공
 - 값 테이블: `VAL_` 파싱 → 시그널별 enum 및 `to_string` 헬퍼 생성
 - 스케일 수치 연산 설정: `phys_type` float 또는 fixed + `phys_mode` 세부 선택
 - 범위 체크: encode/decode 시 min/max 검증 옵션
 - 디스패치 모드: `binary_search` 또는 `direct_map` 레지스트리
 
-## 구성 파일 (config.yaml)
+## 구성 (config.yaml)
 
 코드 생성 동작을 제어하는 선택적 파일입니다.
 
@@ -129,13 +132,15 @@ crc_counter_check: false
 ```
 
 ```yaml
-# examples/config_fixed.yaml
-PhysType: fixed
-PhysMode: fixed_double  # default fallback; uses integer fast path when applicable
-RangeCheck: false
-Dispatch: direct_map
-CrcCounterCheck: false
+# examples/config_fixed.yaml (snake_case 권장)
+phys_type: fixed
+phys_mode: fixed_double  # 기본 폴백; 가능 시 정수 fast path 사용
+range_check: false
+dispatch: direct_map
+crc_counter_check: false
 ```
+
+참고: 설정 키는 snake_case 사용을 권장합니다. 호환을 위해 동일 의미의 PascalCase 별칭도 허용됩니다(예: PhysType ↔ phys_type). 전면 대소문자 무시가 아닌, 키별 별칭 매칭입니다.
 
 ```yaml
 # Single-precision FPU MCU (minimize double ops in fallback)
@@ -170,7 +175,6 @@ dotnet run --project src/Generator -- \
   --prefix foo_ \
   --emit-main false
 ```
-```
 
 ### 구성 파일 사용
 
@@ -195,7 +199,7 @@ make -C gen build
 ./gen/build/test_runner test_moto_lsb_roundtrip
 ```
 
-## DBC에서 코드가 생성되는 방식
+## 코드 생성 방식 (DBC → C)
 
 1) 기본 생성
 
@@ -249,7 +253,7 @@ make -C gen build
 - 테스트 개요와 결과: `TEST_SUMMARY.md`
 - 공개 DBC 수집 가이드: `scripts/fetch_dbcs.md`
 
-### 출력 레이아웃 및 이름 규칙
+### 출력 레이아웃과 네이밍
   - sc_utils.h, sc_registry.h (접두사 설정 가능: file_prefix)
   - 메시지별 헤더 `<message>.h` (snake_case 파일명)
 - gen/src/
@@ -257,13 +261,13 @@ make -C gen build
   - 메시지별 소스 `<message>.c`
   - main.c (테스트 러너; 펌웨어 빌드에서 제외)
 
-### 메시지 API 네이밍 규칙
+메시지 API 네이밍 규칙
 - 타입: `<MessageName>_t` (예: `MESSAGE_1_t`, `C2_MSG0280A1_BMS2VCU_Sts1_t`)
 - 함수:
-  - `bool <MessageName>_decode(<MessageName>_t* out, const uint8_t data[8], size_t dlc);`
-  - `bool <MessageName>_encode(uint8_t data[8], size_t* out_dlc, const <MessageName>_t* in);`
+  - `bool <MessageName>_decode(<MessageName>_t* out, const uint8_t data[8], uint8_t dlc);`
+  - `bool <MessageName>_encode(uint8_t data[8], uint8_t* out_dlc, const <MessageName>_t* in);`
 - 레지스트리(디스패치):
-  - `bool decode_message(uint32_t can_id, const uint8_t data[8], size_t dlc, void* out_msg_struct);`
+  - `bool decode_message(uint32_t can_id, const uint8_t data[8], uint8_t dlc, void* out_msg_struct);`
     - `can_id`가 알려진 메시지면 해당 타입의 구조체로 디코드하여 true 반환
 
 ## 펌웨어에 생성물 포함하기
@@ -315,6 +319,33 @@ target_link_libraries(app PRIVATE dbccodegen)
 벤더 IDE
 - `gen/include`를 include path에 추가
 - `gen/src/*.c` 중 `gen/src/main.c`를 제외하고 프로젝트에 추가
+
+## 플랫폼/컴파일러/테스트 환경
+
+검증된 조합
+- 로컬: macOS (Apple Silicon) + clang + GNU Make
+- CI: Linux (GitHub Actions Ubuntu) + gcc + GNU Make
+- Windows: 아직 테스트하지 않음
+
+Windows 참고(초기 가이드)
+- Windows에서는 CMake로 생성된 C를 통합하는 방식을 권장합니다.
+- 도구체인: MSVC, LLVM clang-cl, MinGW-w64 gcc가 원칙적으로 동작해야 합니다.
+- C 표준/인클루드 경로 설정 및 테스트 러너 제외:
+  - CMake에 다음을 추가
+    - `target_compile_features(dbccodegen PUBLIC c_std_99)`
+    - `target_include_directories(dbccodegen PUBLIC ${CMAKE_SOURCE_DIR}/gen/include)`
+    - 소스 목록에서 `gen/src/main.c`는 제거
+- 링크: MSVC는 `-lm`이 필요 없습니다. `<math.h>` 포함 시 llround/llroundf 등은 CRT에 있습니다.
+- MSVC의 C99 호환성 이슈가 있다면 LLVM clang-cl 또는 MinGW를 대안으로 고려하세요. 재현 정보(컴파일러/버전)를 이슈로 남겨주시면 CI 커버리지에 반영하겠습니다.
+
+### 빠른 체크리스트 (펌웨어 통합)
+
+- [ ] `gen/src/main.c`는 컴파일하지 않습니다(테스트 러너 전용)
+- [ ] `gen/include`를 include path에 추가합니다
+- [ ] `gen/src/*.c` 전체를 빌드하되 `main.c`는 제외합니다
+- [ ] 접두사 헤더 포함(예: `#include "sc_registry.h"`)
+- [ ] 제품 특성에 따라 디스패치 선택: `binary_search`(희소 ID) vs `direct_map`(조밀 ID)
+- [ ] 공용 파일명 충돌 방지 필요 시 `file_prefix` 사용(예: `file_prefix: fw_`)
 
 ### 런타임 사용 예시
 
@@ -376,6 +407,7 @@ make -C gen build
 참고
 - 분기 선택은 스위치 신호의 원시 정수값 기준입니다(일반 DBC 관례).
 - 멀티플렉스가 아닌 기반 신호는 항상 디코드/인코드됩니다.
+ - 유효성 비트마스크 폭: 현재 구현은 32비트 `valid` 필드를 사용합니다. 신호 수가 매우 많은 경우(>32) 64비트 또는 배열로 확장이 필요할 수 있습니다. 이는 제한사항에 명시되어 있으며, 자동 확장은 로드맵에 있습니다.
 
 valid와 mux_active 사용
 ```c
@@ -483,6 +515,25 @@ void compare_state(int v) {
 - 대규모 외부 DBC(27개 메시지): 코드 생성/빌드 안정 동작 확인
 
 자세한 데이터는 `scripts/bulk_stress.ps1` 일괄 실행 및 `tmp/stress_reports/summary.csv`에서 확인할 수 있습니다.
+
+### 측정 방법
+
+- 하네스: 생성된 C 테스트 러너가 케이스별로 encode/decode 루프를 수행하고 단조(monotonic) 타이머로 경과 시간을 측정합니다. ops/sec = 반복 횟수 / 경과 시간.
+- 환경: Apple Silicon(arm64), 기본적으로 clang/gcc `-O2` 플래그. CPU 스케일링/발열에 따라 수치 변동이 있을 수 있습니다.
+- 재현:
+  - 빌드: `make -C gen build`
+  - 스모크: `./gen/build/test_runner test_stress_suite`
+  - 코퍼스: `pwsh ./scripts/bulk_stress.ps1` → `tmp/stress_reports/summary.csv` 확인
+- 리포팅: 각 케이스는 여러 회 반복 실행하며, 워밍업을 제외하고 중앙값(median)을 주로 기재합니다.
+- 이식성: 실제 제품 수치는 타겟 컴파일러/플래그/하드웨어로 측정하세요.
+
+### ⚙️ 성능 튜닝 치트시트
+
+- 컴파일러: `-O2` 또는 `-O3`, 가능하면 LTO 사용
+- 부동소수점: 단정밀 FPU MCU에서는 10^-n 스케일이 많다면 `phys_type: fixed` + `phys_mode: fixed_float` 권장
+- 디스패치: `direct_map`은 O(1)이나 ID가 희소하면 메모리 비용↑, `binary_search`는 O(log N)으로 메모리 절약
+- 링크: 생성 소스를 정적 라이브러리로 빌드하면 증분 빌드 효율↑
+- 헤더: 이름 충돌 방지를 위해 `gen/include`를 include path 앞쪽에 배치
 요약 문서는 `TEST_SUMMARY.md`에 정리되어 있습니다.
 
 ## 🔧 문제 해결 (자주 만나는 이슈)
@@ -505,12 +556,31 @@ void compare_state(int v) {
 - 기본 대상은 8바이트 클래식 CAN 프레임입니다(확장 페이로드는 템플릿 조정 필요)
 - 32개 초과 신호를 갖는 매우 큰 메시지는 `valid` 비트마스크 확장이 필요할 수 있습니다
 
-## 디스패치 모드, 레지스트리, nanopb와의 관계
+## 디스패치 모드와 레지스트리 (nanopb와의 관련성)
 
 메시지별 함수는 항상 생성됩니다:
 - 각 메시지에 대해 `<Message>_encode(...)`, `<Message>_decode(...)`
 
 레지스트리는 편의 라우터를 제공합니다: `decode_message(can_id, data, dlc, out_struct)`
+- 타입 안전 주의: `void*`를 사용하므로 잘못된 구조체 타입을 전달하면 UB가 발생할 수 있습니다. 메시지 타입을 아는 경우에는 `<Msg>_decode(...)` 직접 호출을 권장합니다. ID 기반 분기 예시:
+
+```c
+switch (can_id) {
+  case MESSAGE_1_ID: {
+    MESSAGE_1_t m = {0};
+    if (MESSAGE_1_decode(&m, data, dlc)) { /* use m */ }
+    break;
+  }
+}
+```
+
+동작 요약
+- DLC: encode는 메시지에 필요한 최소 바이트를 `*out_dlc`에 설정합니다. decode는 `dlc`가 부족하면 false를 반환하며, 초과 바이트는 무시됩니다.
+  - 계획: encode DLC 정책 선택을 위한 구성 옵션(예: `encode_dlc_mode: minimal | fixed_8`).
+- Range/원자성: 실패 시 false를 반환합니다. 연산은 원자적이지 않아 부분 업데이트가 발생할 수 있으므로 false인 경우 출력은 사용하지 마세요.
+  - 계획: 수요가 충분하면 원자적(all-or-nothing) 모드 옵션을 검토합니다.
+- 오버/언더플로: encode 중간값은 `int64_t`, decode는 `uint64_t`(필요 시 부호 확장). range_check=false면 비트폭에 맞춰 마스킹/절단, range_check=true면 해당 신호 쓰기 전에 false를 반환합니다.
+  - 계획: 포화(saturate) 옵션을 추가 검토합니다.
 - binary_search
   - {id, (옵션) 확장 플래그, 함수 포인터} 정렬 테이블을 이진검색. O(log N). 희소 ID에 유리.
 - direct_map
@@ -521,8 +591,18 @@ CRC/Counter 참고
 
 ## 엔디안 및 비트 유틸리티
 
-- Little-Endian과 Motorola Big-Endian(MSB 톱니형)을 지원합니다.
-- 생성된 `utils.{h,c}`는 메시지 코덱에서 사용하는 `get_bits_le/be`, `set_bits_le/be`를 제공합니다.
+- Little-Endian(인텔)과 Big-Endian(모토롤라)을 지원합니다. 모토롤라는 MSB 톱니형과 LSB 시작 비트 표기 모두 지원합니다(`motorola_start_bit: msb|lsb`).
+- 모토롤라 BE 비트 번호(8바이트 기준, MSB 톱니형):
+  - Byte0: [7][6][5][4][3][2][1][0]
+  - Byte1: [15][14][13][12][11][10][9][8]
+  - Byte2: [23][22][21][20][19][18][17][16]
+  - Byte3: [31][30][29][28][27][26][25][24]
+  - Byte4: [39][38][37][36][35][34][33][32]
+  - Byte5: [47][46][45][44][43][42][41][40]
+  - Byte6: [55][54][53][52][51][50][49][48]
+  - Byte7: [63][62][61][60][59][58][57][56]
+  - LSB 시작 비트 표기는 코드 생성 정규화를 위해 내부적으로 MSB 톱니형으로 변환됩니다.
+- 생성된 `<prefix>utils.{h,c}`(기본 `sc_utils.{h,c}`)는 메시지 코덱에서 사용하는 `get_bits_le/be`, `set_bits_le/be`를 제공합니다.
 
 ## 프로젝트 구조
 
@@ -545,68 +625,4 @@ CRC/Counter 참고
 - [ ] LICENSE 및 THIRD_PARTY_NOTICES.md 최신화 확인
 - [ ] README(영/한) 내용 일치 및 최신 상태 확인
 - [ ] 유효성 검사 실행: dotnet build/test, 코드 생성 + make -C gen build, 핵심 테스트 실행
-# DBC to C 파서 코드 생성기 (F#)
-
-이 문서는 한국어 버전입니다. 기능과 사용법은 README.md(영문)와 동일하며, 요약은 아래와 같습니다.
-
-## 지원 기능
-- 엔디안: Little-Endian, Motorola Big-Endian(MSB 톱니형)
-- 멀티플렉서: 스위치(M) 1개, 분기 신호(m<k>) 지원, `valid` 비트마스크와 `mux_active` enum 제공
-- 값 테이블: VAL_ 파싱 → 시그널별 enum 및 to_string 헬퍼 생성
-- 설정 가능 스케일 계산: phys_type float/fixed + phys_mode 선택
-- 범위 체크: encode/decode에서 min/max 검증 옵션
-- 디스패치 모드: binary_search | direct_map
-
-## 빠른 시작
-```bash
-# 코드 생성
-(dotnet 8 필요)
-dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen
-
-# C 빌드
-make -C gen build
-
-# 예제 러너 실행
-./gen/build/test_runner test_roundtrip
-```
-
-## 멀티플렉서 사용
-- decode는 스위치를 먼저 디코드한 뒤 활성 분기만 디코드합니다.
-- 구조체에 `valid` 비트마스크와 `<Msg>_mux_e mux_active`가 포함됩니다.
-
-예시
-```c
-#include "mux_msg.h"
-
-void handle_mux(const uint8_t data[8]) {
-    MUX_MSG_t m = {0};
-    if (MUX_MSG_decode(&m, data, 8)) {
-        if (m.mux_active == MUX_MSG_MUX_1 && (m.valid & MUX_MSG_VALID_SIG_M1)) {
-            // m.Sig_m1 사용
-        }
-    }
-}
-```
-
-## 값 테이블 사용
-- 헤더에 `<Msg>_<Sig>_e` enum이 생성되고, `<Msg>_<Sig>_to_string(int v)` 함수가 제공됩니다.
-
-예시
-```c
-#include "vt_msg.h"
-
-const char* label = VT_MSG_Mode_to_string(1); // "ON"
-if (1 == VT_MSG_MODE_ON) {
-    // enum 값 비교
-}
-```
-
-## PhysType 개요
-- phys_type은 물리값 계산 방식을 결정합니다. 필드 타입은 항상 float로 동일합니다.
-- float/double 경로 또는 10^-n 고정소수 fast path를 선택할 수 있습니다.
-
-요약
-- float + phys_mode=double|float: 부동소수 경로
-- fixed + phys_mode=fixed_double|fixed_float: 10^-n fast path + 폴백 경로
-
-자세한 내용은 README.md의 "PhysType details and numeric precision"을 참고하세요.
+ 
