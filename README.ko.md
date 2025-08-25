@@ -146,6 +146,12 @@ dispatch: binary_search
 crc_counter_check: false
 ```
 
+```yaml
+# 공통 생성 파일 접두사 설정(이름 충돌 회피)
+# 결과: gen/include/sc_registry.h, gen/src/sc_registry.c 등
+file_prefix: sc_
+```
+
 ### 구성 파일 사용
 
 ```bash

@@ -150,6 +150,12 @@ dispatch: binary_search
 crc_counter_check: false
 ```
 
+```yaml
+# Prefix common generated files to avoid name collisions
+# yields: gen/include/sc_registry.h, gen/src/sc_registry.c, etc.
+file_prefix: sc_
+```
+
 ### Using a config
 
 ```bash
