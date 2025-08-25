@@ -4,8 +4,10 @@
 #include "sc_registry.h"
 #include "sc_utils.h"
 
-// Include stress test
+// Include stress test only when available (controlled via -DHAVE_STRESS in Makefile)
+#ifdef HAVE_STRESS
 extern int test_stress_suite(void);
+#endif
 
 #if defined(__has_include)
 #  if __has_include("message_1.h")
@@ -449,9 +451,11 @@ int main(int argc, char *argv[]) {
         return test_dispatch_external_multi();
     }
 #endif
+    #ifdef HAVE_STRESS
     else if (strcmp(argv[1], "test_stress_suite") == 0) {
         return test_stress_suite();
     }
+    #endif
     else {
         printf("Unknown or unavailable test: %s\n", argv[1]);
         return 1;

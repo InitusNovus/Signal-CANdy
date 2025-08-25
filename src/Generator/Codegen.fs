@@ -11,6 +11,22 @@ module Codegen =
 
     let generateCode (ir: Ir) (outputPath: string) (config: Generator.Config.Config) (emitMain: bool) =
         try
+            // Helper: find examples/main.c starting from likely roots (CWD, assembly base) and traversing upwards
+            let tryFindExampleMain () =
+                let candidatesFrom (startDir: string) =
+                    seq {
+                        let mutable d = startDir
+                        for _ in 0 .. 6 do
+                            let p = Path.Combine(d, "examples", "main.c")
+                            if File.Exists p then yield p
+                            let parent = Directory.GetParent(d)
+                            if isNull parent then () else d <- parent.FullName
+                    }
+                let bases = [ Directory.GetCurrentDirectory(); System.AppContext.BaseDirectory ]
+                bases
+                |> Seq.collect candidatesFrom
+                |> Seq.tryHead
+
             // Create output directories
             Directory.CreateDirectory (Path.Combine(outputPath, "include")) |> ignore
             Directory.CreateDirectory (Path.Combine(outputPath, "src")) |> ignore
@@ -42,10 +58,10 @@ module Codegen =
 
             // Copy example main.c into output to act as test harness (optional)
             if emitMain then
-                let exampleMain = Path.Combine("examples", "main.c")
                 let outMain = Path.Combine(outputPath, "src", "main.c")
-                if File.Exists(exampleMain) then
-                    File.Copy(exampleMain, outMain, true)
+                match tryFindExampleMain () with
+                | Some exampleMain -> File.Copy(exampleMain, outMain, true)
+                | None -> eprintfn "Warning: examples/main.c not found from working locations; skipping emit-main."
 
             true
 

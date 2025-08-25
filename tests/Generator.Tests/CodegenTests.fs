@@ -7,6 +7,7 @@ open Generator.Dbc
 open Generator.Result
 open System.IO
 open System.Diagnostics
+open System
 
 module CodegenTests = 
 
@@ -50,11 +51,18 @@ module CodegenTests =
         if proc.ExitCode <> 0 then
             failwith (sprintf "Generator failed with exit code %d.\nStdout:\n%s\nStderr:\n%s" proc.ExitCode stdout stderr)
 
+        // Ensure Makefile exists in the generated output directory (copy from repo's gen/Makefile)
+        let repoMakefile = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen", "Makefile")
+        let outMakefile = Path.Combine(genOutputPath, "Makefile")
+        if File.Exists(repoMakefile) then
+            File.Copy(repoMakefile, outMakefile, true)
+
     let buildAndRunCTest (genOutputPath: string) (cTestName: string) : string list =
         // Build
         let make = new Process()
         make.StartInfo.FileName <- "make"
-        make.StartInfo.Arguments <- "-C gen build"
+        // Use absolute path to the generated directory to avoid CWD confusion
+        make.StartInfo.Arguments <- sprintf "-C \"%s\" build" genOutputPath
         make.StartInfo.WorkingDirectory <- Path.Combine(__SOURCE_DIRECTORY__, "..", "..")
         make.StartInfo.UseShellExecute <- false
         make.StartInfo.RedirectStandardOutput <- true
@@ -82,45 +90,70 @@ module CodegenTests =
 
     [<Fact>]
     let ``Encode/Decode roundtrip for SimpleMessage`` () =
-        let genOutputPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen")
-        // default config (range_check=false)
-        runCGenerator None genOutputPath
-        let output = buildAndRunCTest genOutputPath "test_roundtrip"
-        output |> should contain "Roundtrip successful!"
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+        try
+            // default config (range_check=false)
+            runCGenerator None genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_roundtrip"
+            output |> should contain "Roundtrip successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
 
     [<Fact>]
     let ``Roundtrip with fixed phys_type`` () =
-        let genOutputPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen")
-        let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_fixed.yaml")
-        runCGenerator (Some configPath) genOutputPath
-        let output = buildAndRunCTest genOutputPath "test_roundtrip"
-        output |> should contain "Roundtrip successful!"
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+        try
+            let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_fixed.yaml")
+            runCGenerator (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_roundtrip"
+            output |> should contain "Roundtrip successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
 
     [<Fact>]
     let ``Range check test`` () =
-        let genOutputPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen")
-        let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_range_check.yaml")
-        runCGenerator (Some configPath) genOutputPath
-        let output = buildAndRunCTest genOutputPath "test_range_check"
-        output |> should contain "Range check test successful!"
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+        try
+            let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_range_check.yaml")
+            runCGenerator (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_range_check"
+            output |> should contain "Range check test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
 
     [<Fact>]
     let ``Dispatch direct_map test`` () =
-        let genOutputPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen")
-        let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_direct_map.yaml")
-        runCGenerator (Some configPath) genOutputPath
-        let output = buildAndRunCTest genOutputPath "test_dispatch"
-        output |> should contain "Dispatch successful for message ID 100"
-        output |> should contain "Dispatch correctly failed for unknown message ID 99"
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+        try
+            let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_direct_map.yaml")
+            runCGenerator (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_dispatch"
+            output |> should contain "Dispatch successful for message ID 100"
+            output |> should contain "Dispatch correctly failed for unknown message ID 99"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
 
     [<Fact>]
     let ``CRC and Counter check test`` () =
-        let genOutputPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "gen")
-        let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_crc_counter.yaml")
-        runCGenerator (Some configPath) genOutputPath
-        let output = buildAndRunCTest genOutputPath "test_crc_counter"
-        output |> should not' (be Null)
-        output |> should not' (be Empty)
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+        try
+            let configPath = Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_crc_counter.yaml")
+            runCGenerator (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_crc_counter"
+            output |> should not' (be Null)
+            output |> should not' (be Empty)
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
 
     [<Fact>]
     let ``DBC signal field mapping correctness`` () =
