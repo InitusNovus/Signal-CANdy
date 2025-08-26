@@ -4,10 +4,18 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Little-endian bit extraction functions
 uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);
 
 // Little-endian bit insertion functions
 void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // UTILS_H

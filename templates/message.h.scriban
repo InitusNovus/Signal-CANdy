@@ -4,6 +4,10 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 // Message: {{ message_name }} (ID: {{ message_id }})
 typedef struct {
 {{ signal_declarations_h }}
@@ -14,5 +18,9 @@ bool {{ message_name }}_decode({{ message_name }}_t* msg, const uint8_t data[], 
 
 // Encode function
 bool {{ message_name }}_encode(uint8_t data[], uint8_t* out_dlc, const {{ message_name }}_t* msg);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // {{ message_name | string.upcase }}_H

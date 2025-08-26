@@ -238,6 +238,10 @@ module Message =
             headerLines.Add "#include <stdint.h>"
             headerLines.Add "#include <stdbool.h>"
             headerLines.Add ""
+            headerLines.Add "#ifdef __cplusplus"
+            headerLines.Add "extern \"C\" {"
+            headerLines.Add "#endif"
+            headerLines.Add ""
             // Emit value-table enums and to_string prototypes
             let vtSignals = message.Signals |> List.choose (fun s -> s.ValueTable |> Option.map (fun vt -> s, vt))
             vtSignals |> List.iter (fun (s, vt) ->
@@ -284,6 +288,10 @@ module Message =
             headerLines.Add ""
             headerLines.Add (sprintf "bool %s_decode(%s_t* msg, const uint8_t data[], uint8_t dlc);" message.Name message.Name)
             headerLines.Add (sprintf "bool %s_encode(uint8_t data[], uint8_t* out_dlc, const %s_t* msg);" message.Name message.Name)
+            headerLines.Add ""
+            headerLines.Add "#ifdef __cplusplus"
+            headerLines.Add "}"
+            headerLines.Add "#endif"
             headerLines.Add ""
             headerLines.Add (sprintf "#endif // %s_H" (message.Name.ToUpperInvariant()))
             String.concat "\n" (List.ofSeq headerLines)

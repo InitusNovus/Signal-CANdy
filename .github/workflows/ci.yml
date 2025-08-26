@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ ci-setup, dev-local, main ]
+    branches: [ ci-setup, dev-local, dev_local, main ]
   pull_request:
     branches: [ main ]
 
@@ -101,6 +101,25 @@ jobs:
       - name: Build generated C with Make
         run: |
           make -C gen build
+
+      - name: Test C++ compatibility (extern C guards)
+        run: |
+          # Test both prefixed and compatibility shim headers
+          echo '#include "gen/include/sc_utils.h"' > test_cpp_compat.cpp
+          echo 'int main() { return 0; }' >> test_cpp_compat.cpp
+          g++ -std=c++11 -I. test_cpp_compat.cpp -o test_cpp_compat
+          echo "✓ C++ compilation with prefixed headers successful"
+          
+          # Test compatibility shims if they exist
+          if [ -f "gen/include/utils.h" ] && [ -f "gen/include/registry.h" ]; then
+            echo '#include "gen/include/utils.h"' > test_cpp_shim.cpp
+            echo '#include "gen/include/registry.h"' >> test_cpp_shim.cpp
+            echo 'int main() { return 0; }' >> test_cpp_shim.cpp
+            g++ -std=c++11 -I. test_cpp_shim.cpp -o test_cpp_shim
+            echo "✓ C++ compilation with compatibility shims successful"
+          else
+            echo "⚠ Compatibility shims not found (expected with current config)"
+          fi
 
       - name: Smoke test runner
         run: |

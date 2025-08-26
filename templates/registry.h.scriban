@@ -1,0 +1,15 @@
+// Auto-generated registry header (placeholder)
+#ifndef REGISTRY_H
+#define REGISTRY_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+// ... registry API declarations will be rendered here ...
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif // REGISTRY_H

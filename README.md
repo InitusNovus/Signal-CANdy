@@ -439,6 +439,25 @@ Configurable prefix
 - Common files use a prefix (default `sc_`), yielding `sc_utils.{h,c}` and `sc_registry.{h,c}`.
 - Change it via `file_prefix` in your YAML config if needed.
 
+### C++ compatibility
+
+All generated headers include `extern "C"` guards for seamless C++ integration:
+
+```cpp
+// Your C++ firmware can include generated headers directly
+#include "gen/include/sc_utils.h"      // prefixed header
+#include "gen/include/utils.h"         // compatibility shim
+#include "gen/include/MESSAGE_1.h"     // message-specific header
+
+extern "C" {
+    // C++ code can call generated C functions directly
+    MESSAGE_1_t msg = {0};
+    bool success = MESSAGE_1_decode(&msg, can_data, dlc);
+}
+```
+
+The generated code remains pure C99, ensuring compatibility with both C and C++ projects without requiring changes to build systems or toolchains.
+
 ## Platforms, compilers, and test environments
 
 Tested combos
