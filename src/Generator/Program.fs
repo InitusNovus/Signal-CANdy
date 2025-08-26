@@ -39,8 +39,27 @@ module Program =
             let parsedArgs = parseArgs args "" "" None None true
 
             if parsedArgs.DbcPath = "" || parsedArgs.OutputPath = "" then
-                eprintfn "Usage: dotnet run --project src/Generator -- --dbc <dbc_file_path> --out <output_directory> [--config <config_file_path>] [--prefix <file_prefix>] [--emit-main <true|false>]"
-                1
+                eprintfn "Signal CANdy v0.2.0 - DBC to C Code Generator"
+                eprintfn "Generate C99 parser modules from DBC files with C++ compatibility"
+                eprintfn ""
+                eprintfn "USAGE:"
+                eprintfn "  dotnet run --project src/Generator -- --dbc <dbc_file> --out <output_dir> [OPTIONS]"
+                eprintfn ""
+                eprintfn "REQUIRED:"
+                eprintfn "  --dbc <file>      DBC file to parse"
+                eprintfn "  --out <dir>       Output directory for generated C files"
+                eprintfn ""
+                eprintfn "OPTIONS:"
+                eprintfn "  --config <file>   YAML config file (default: built-in defaults)"
+                eprintfn "  --prefix <str>    File prefix for common files (overrides config)"
+                eprintfn "  --emit-main <bool> Copy examples/main.c to output (default: true)"
+                eprintfn ""
+                eprintfn "EXAMPLES:"
+                eprintfn "  dotnet run --project src/Generator -- --dbc sample.dbc --out gen"
+                eprintfn "  dotnet run --project src/Generator -- --dbc sample.dbc --out gen --config config.yaml"
+                eprintfn "  dotnet run --project src/Generator -- --dbc sample.dbc --out gen --prefix my_"
+                eprintfn ""
+                0
             else
                 printfn "DBC Path: %s" parsedArgs.DbcPath
                 printfn "Output Path: %s" parsedArgs.OutputPath

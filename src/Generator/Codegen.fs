@@ -31,23 +31,44 @@ module Codegen =
             Directory.CreateDirectory (Path.Combine(outputPath, "include")) |> ignore
             Directory.CreateDirectory (Path.Combine(outputPath, "src")) |> ignore
 
-            // Clean up legacy, unprefixed common files to prevent duplicate symbols in C builds
-            let legacyHeaders = [ "utils.h"; "registry.h" ]
-            let legacySources = [ "utils.c"; "registry.c" ]
-            for h in legacyHeaders do
-                let p = Path.Combine(outputPath, "include", h)
-                if File.Exists p then
-                    try File.Delete p with _ -> ()
-            for s in legacySources do
-                let p = Path.Combine(outputPath, "src", s)
-                if File.Exists p then
-                    try File.Delete p with _ -> ()
+            // Clean up stale prefixed common files to prevent duplicate symbols in C builds
+            // Keep only the variants matching the current FilePrefix; remove others.
+            let keepUtilsH = Utils.utilsHeaderName config
+            let keepUtilsC = Utils.utilsSourceName config
+            let keepRegH = sprintf "%sregistry.h" config.FilePrefix
+            let keepRegC = sprintf "%sregistry.c" config.FilePrefix
+
+            let includeDir = Path.Combine(outputPath, "include")
+            let srcDir = Path.Combine(outputPath, "src")
+
+            if Directory.Exists includeDir then
+                Directory.GetFiles(includeDir, "*utils.h")
+                |> Array.iter (fun f -> if Path.GetFileName(f) <> keepUtilsH then try File.Delete f with _ -> ())
+                Directory.GetFiles(includeDir, "*registry.h")
+                |> Array.iter (fun f -> if Path.GetFileName(f) <> keepRegH then try File.Delete f with _ -> ())
+
+            if Directory.Exists srcDir then
+                Directory.GetFiles(srcDir, "*utils.c")
+                |> Array.iter (fun f -> if Path.GetFileName(f) <> keepUtilsC then try File.Delete f with _ -> ())
+                Directory.GetFiles(srcDir, "*registry.c")
+                |> Array.iter (fun f -> if Path.GetFileName(f) <> keepRegC then try File.Delete f with _ -> ())
 
             // Generate utils.h and utils.c with prefix
             let uH = Utils.utilsHeaderName config
             let uC = Utils.utilsSourceName config
             File.WriteAllText(Path.Combine(outputPath, "include", uH), Utils.utilsHContent config)
             File.WriteAllText(Path.Combine(outputPath, "src", uC), Utils.utilsCContent config)
+
+            // Emit compatibility shims for legacy includes (utils.h, registry.h)
+            let shimHeader (name: string) (target: string) =
+                let guard = (name.Replace('.', '_') + "_SHIM").ToUpperInvariant()
+                "#ifndef " + guard + "\n#define " + guard + "\n\n"
+                + "#ifdef __cplusplus\nextern \"C\" {\n#endif\n\n"
+                + "#include \"" + target + "\"\n\n"
+                + "#ifdef __cplusplus\n}\n#endif\n\n"
+                + "#endif // " + guard
+            File.WriteAllText(Path.Combine(outputPath, "include", "utils.h"), shimHeader "utils.h" uH)
+            File.WriteAllText(Path.Combine(outputPath, "include", "registry.h"), shimHeader "registry.h" keepRegH)
 
             // Generate code for each message
             for message in ir.Messages do
