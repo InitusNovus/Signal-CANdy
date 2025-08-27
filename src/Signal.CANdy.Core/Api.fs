@@ -4,13 +4,14 @@ open System.Threading.Tasks
 open Signal.CANdy.Core.Ir
 open Signal.CANdy.Core.Config
 open Signal.CANdy.Core.Errors
+open Signal.CANdy.Core.Dbc
 
 /// Returns the current library snapshot version. Placeholder until full API is moved.
 let version () = "0.2.1-SNAPSHOT"
 
 /// Parse a DBC file into IR. Stub for now.
-let parseDbc (_path: string) : Result<Ir, ParseError> =
-    Error (ParseError.Unknown "NotImplemented: parseDbc")
+let parseDbc (path: string) : Result<Ir, ParseError> =
+    Signal.CANdy.Core.Dbc.parseDbcFile path
 
 /// Validate configuration object. Stub for now.
 let validateConfig (_config: Config) : Result<Config, ValidationError> =
