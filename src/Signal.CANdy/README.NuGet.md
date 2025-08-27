@@ -36,3 +36,35 @@ class Demo
 - Exceptions for validation/parse/codegen errors
 - Simple async path-based API
 - Access to Core IR and fine-grained APIs if needed
+
+## Error handling
+
+```csharp
+using System;
+using System.Threading.Tasks;
+using Signal.CANdy;
+
+class Demo
+{
+    static async Task Main()
+    {
+        var g = new GeneratorFacade();
+        try
+        {
+            await g.GenerateFromPathsAsync("examples/fixed_suite.dbc", "gen", "examples/config.yaml");
+        }
+        catch (SignalCandyValidationException ex)
+        {
+            Console.Error.WriteLine($"Config error: {ex.Message}");
+        }
+        catch (SignalCandyParseException ex)
+        {
+            Console.Error.WriteLine($"DBC parse error: {ex.Message}");
+        }
+        catch (SignalCandyCodeGenException ex)
+        {
+            Console.Error.WriteLine($"Codegen error: {ex.Message}");
+        }
+    }
+}
+```
