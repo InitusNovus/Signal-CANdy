@@ -11,6 +11,7 @@
   <Compile Include="Ir.fs" />
   <Compile Include="Dbc.fs" />
   <Compile Include="Config.fs" />
+  <Compile Include="Codegen.fs" />
   <Compile Include="Api.fs" />
   </ItemGroup>
 
