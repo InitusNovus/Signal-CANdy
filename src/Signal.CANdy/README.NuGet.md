@@ -27,7 +27,7 @@ class Demo
             outputPath: "gen",
             configPath: null
         );
-        System.Console.WriteLine($"Headers: {files.Headers.Count}, Sources: {files.Sources.Count}");
+    System.Console.WriteLine($"Headers: {files.Headers.Count}, Sources: {files.Sources.Count}, Others: {files.Others.Count}");
     }
 }
 ```

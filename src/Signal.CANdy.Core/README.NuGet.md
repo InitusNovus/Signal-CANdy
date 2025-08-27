@@ -22,7 +22,7 @@ let outDir  = "gen"
 match Api.parseDbc dbcPath with
 | Ok ir ->
     match Api.generateCode(ir, outDir, Config.defaults) with
-    | Ok files -> printfn "Generated %d headers, %d sources" files.Headers.Length files.Sources.Length
+    | Ok files -> printfn "Generated: headers=%d sources=%d others=%d" (List.length files.Headers) (List.length files.Sources) (List.length files.Others)
     | Error e  -> printfn "CodeGen error: %A" e
 | Error e -> printfn "Parse error: %A" e
 ```
