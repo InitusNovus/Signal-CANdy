@@ -4,6 +4,7 @@ bin/
 obj/
 tmp/
 .fake
+artifacts/
 # External test data: ignore all contents by default; keep folder and docs only
 external_test/*
 !external_test/.gitkeep

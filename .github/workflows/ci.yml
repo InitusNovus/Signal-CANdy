@@ -125,6 +125,19 @@ jobs:
         run: |
           ./gen/build/test_runner test_fixed_suite_roundtrip
 
+      - name: Pack NuGet (Core/Facade)
+        run: |
+          dotnet pack -c Release src/Signal.CANdy.Core/Signal.CANdy.Core.fsproj -o artifacts
+          dotnet pack -c Release src/Signal.CANdy/Signal.CANdy.fsproj -o artifacts
+
+      - name: Upload NuGet packages
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          path: |
+            artifacts/*.nupkg
+            artifacts/*.snupkg
+
       - name: Upload build artifacts (on failure)
         if: failure()
         uses: actions/upload-artifact@v4

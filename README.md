@@ -6,12 +6,27 @@
 [![F#](https://img.shields.io/badge/F%23-language-blue.svg)](https://fsharp.org/)
 [![Version](https://img.shields.io/github/v/release/InitusNovus/Signal-CANdy?include_prereleases)](https://github.com/InitusNovus/Signal-CANdy/releases)
 
+[![NuGet SignalCandy](https://img.shields.io/nuget/v/SignalCandy.svg)](https://www.nuget.org/packages/SignalCandy/)
+[![NuGet SignalCandy.Core](https://img.shields.io/nuget/v/SignalCandy.Core.svg)](https://www.nuget.org/packages/SignalCandy.Core/)
+
 [![C99](https://img.shields.io/badge/C-99-blue.svg)](https://en.wikipedia.org/wiki/C99)
 [![CAN DBC](https://img.shields.io/badge/protocol-CAN%20DBC-green.svg)](https://en.wikipedia.org/wiki/CAN_bus)
 
 Languages: This README is in English. For Korean, see README.ko.md.
 
 This project generates portable C99 parser modules (headers/sources) from a `.dbc` file using an F# code generator.
+
+## 📦 NuGet Packages
+
+- SignalCandy.Core — Core F# library (parsing, config, codegen)
+- SignalCandy — C#-friendly facade over the Core
+
+Install:
+
+```pwsh
+dotnet add package SignalCandy.Core --version 0.2.1
+dotnet add package SignalCandy --version 0.2.1
+```
 
 ## ⚡ Quick Start (5 minutes)
 
