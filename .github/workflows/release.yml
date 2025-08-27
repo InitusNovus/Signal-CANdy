@@ -16,35 +16,50 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check if tag is on main branch
+        run: |
+          # Check if the tag points to a commit that's reachable from main
+          if ! git merge-base --is-ancestor ${{ github.sha }} origin/main 2>/dev/null; then
+            echo "Tag is not on main branch. Skipping release."
+            echo "SKIP_RELEASE=true" >> $GITHUB_ENV
+          else
+            echo "Tag is on main branch. Proceeding with release."
+            echo "SKIP_RELEASE=false" >> $GITHUB_ENV
+          fi
+
       - name: Setup .NET
+        if: env.SKIP_RELEASE == 'false'
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
       - name: Build & Test (Release)
+        if: env.SKIP_RELEASE == 'false'
         run: |
           dotnet restore
           dotnet build --configuration Release --nologo
           dotnet test --configuration Release -v minimal --nologo
 
       - name: Generate artifacts (optional)
+        if: env.SKIP_RELEASE == 'false'
         run: |
           dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen --config examples/config.yaml
 
       - name: Pack NuGet (Core/Facade)
+        if: env.SKIP_RELEASE == 'false'
         run: |
           dotnet pack -c Release src/Signal.CANdy.Core/Signal.CANdy.Core.fsproj -o artifacts
           dotnet pack -c Release src/Signal.CANdy/Signal.CANdy.fsproj -o artifacts
 
       - name: Publish NuGet packages (stable only)
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ env.SKIP_RELEASE == 'false' && !contains(github.ref_name, '-') }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
           dotnet nuget push artifacts/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
 
       - name: Create GitHub Release (stable)
-        if: ${{ !contains(github.ref_name, '-') }}
+        if: ${{ env.SKIP_RELEASE == 'false' && !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
@@ -52,7 +67,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Prerelease (preview tags)
-        if: ${{ contains(github.ref_name, '-') }}
+        if: ${{ env.SKIP_RELEASE == 'false' && contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
