@@ -12,14 +12,25 @@
   <PackageTags>CAN;DBC;codegen;C;F#;facade</PackageTags>
   <PublishRepositoryUrl>true</PublishRepositoryUrl>
   <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  <Version>0.2.1-preview.0</Version>
+  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  <PackageReadmeFile>README.NuGet.md</PackageReadmeFile>
+  <IncludeSymbols>true</IncludeSymbols>
+  <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
+    <None Include="README.NuGet.md" Pack="true" PackagePath="." />
     <Compile Include="Library.fs" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Signal.CANdy.Core\Signal.CANdy.Core.fsproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>

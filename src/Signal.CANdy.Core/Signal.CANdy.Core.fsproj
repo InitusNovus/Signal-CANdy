@@ -12,9 +12,16 @@
   <PackageTags>CAN;DBC;codegen;C;F#;embedded</PackageTags>
   <PublishRepositoryUrl>true</PublishRepositoryUrl>
   <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+  <Version>0.2.1-preview.0</Version>
+  <PackageLicenseExpression>MIT</PackageLicenseExpression>
+  <PackageReadmeFile>README.NuGet.md</PackageReadmeFile>
+  <IncludeSymbols>true</IncludeSymbols>
+  <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  <ContinuousIntegrationBuild>true</ContinuousIntegrationBuild>
   </PropertyGroup>
 
   <ItemGroup>
+  <None Include="README.NuGet.md" Pack="true" PackagePath="." />
   <Compile Include="Library.fs" />
   <Compile Include="Errors.fs" />
   <Compile Include="Ir.fs" />
@@ -27,6 +34,7 @@
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <PackageReference Include="DbcParserLib" Version="1.7.0" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
 </Project>
