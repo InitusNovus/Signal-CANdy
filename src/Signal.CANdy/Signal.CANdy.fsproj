@@ -12,7 +12,7 @@
   <PackageTags>CAN;DBC;codegen;C;F#;facade</PackageTags>
   <PublishRepositoryUrl>true</PublishRepositoryUrl>
   <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-  <Version>0.2.1-preview.0</Version>
+  <Version>0.2.1</Version>
   <PackageLicenseExpression>MIT</PackageLicenseExpression>
   <PackageReadmeFile>README.NuGet.md</PackageReadmeFile>
   <IncludeSymbols>true</IncludeSymbols>

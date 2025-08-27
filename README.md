@@ -13,7 +13,7 @@ Languages: This README is in English. For Korean, see README.ko.md.
 
 This project generates portable C99 parser modules (headers/sources) from a `.dbc` file using an F# code generator.
 
-## 📦 NuGet Packages (preview)
+## 📦 NuGet Packages
 
 - Signal.CANdy.Core — Core F# library (parsing, config, codegen)
 - Signal.CANdy — C#-friendly facade over the Core
@@ -21,8 +21,8 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 Install:
 
 ```pwsh
-dotnet add package Signal.CANdy.Core --version 0.2.1-preview.0
-dotnet add package Signal.CANdy --version 0.2.1-preview.0
+dotnet add package Signal.CANdy.Core --version 0.2.1
+dotnet add package Signal.CANdy --version 0.2.1
 ```
 
 ## ⚡ Quick Start (5 minutes)

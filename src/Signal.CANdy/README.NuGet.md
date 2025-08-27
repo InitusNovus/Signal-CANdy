@@ -8,7 +8,7 @@ C#-friendly facade over Signal.CANdy Core. Wraps Result-based F# API with except
 ## Install
 
 ```
-dotnet add package Signal.CANdy --version 0.2.1-preview.0
+dotnet add package Signal.CANdy --version 0.2.1
 ```
 
 ## Quick start (C#)

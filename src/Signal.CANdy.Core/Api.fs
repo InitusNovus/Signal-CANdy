@@ -8,7 +8,7 @@ open Signal.CANdy.Core.Dbc
 open Signal.CANdy.Core.Codegen
 
 /// Returns the current library snapshot version. Placeholder until full API is moved.
-let version () = "0.2.1-preview.0"
+let version () = "0.2.1"
 
 /// Parse a DBC file into IR. Stub for now.
 let parseDbc (path: string) : Result<Ir, ParseError> =
