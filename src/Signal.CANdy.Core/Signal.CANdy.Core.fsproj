@@ -5,8 +5,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   <Company>InitusNovus</Company>
   <Authors>InitusNovus</Authors>
-  <PackageId>Signal.CANdy.Core</PackageId>
-  <Description>Core library for Signal.CANdy: DBC parsing, config validation, and C99 code generation utilities.</Description>
+  <PackageId>SignalCandy.Core</PackageId>
+  <Description>Core library for SignalCandy: DBC parsing, config validation, and C99 code generation utilities.</Description>
   <RepositoryUrl>https://github.com/InitusNovus/Signal-CANdy</RepositoryUrl>
   <RepositoryType>git</RepositoryType>
   <PackageTags>CAN;DBC;codegen;C;F#;embedded</PackageTags>

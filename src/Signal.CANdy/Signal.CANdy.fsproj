@@ -5,8 +5,8 @@
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
   <Company>InitusNovus</Company>
   <Authors>InitusNovus</Authors>
-  <PackageId>Signal.CANdy</PackageId>
-  <Description>C#-friendly facade for Signal.CANdy Core, wrapping Result with exceptions.</Description>
+  <PackageId>SignalCandy</PackageId>
+  <Description>C#-friendly facade for SignalCandy Core, wrapping Result with exceptions.</Description>
   <RepositoryUrl>https://github.com/InitusNovus/Signal-CANdy</RepositoryUrl>
   <RepositoryType>git</RepositoryType>
   <PackageTags>CAN;DBC;codegen;C;F#;facade</PackageTags>

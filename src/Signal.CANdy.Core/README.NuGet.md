@@ -1,6 +1,6 @@
-# Signal.CANdy.Core
+# SignalCandy.Core
 
-Core library for Signal.CANdy: parse DBC files, validate config, and generate C99 encode/decode code.
+Core library for SignalCandy: parse DBC files, validate config, and generate C99 encode/decode code.
 
 - Repo: https://github.com/InitusNovus/Signal-CANdy
 - License: MIT
@@ -8,7 +8,7 @@ Core library for Signal.CANdy: parse DBC files, validate config, and generate C9
 ## Install
 
 ```
-dotnet add package Signal.CANdy.Core --version 0.2.1
+dotnet add package SignalCandy.Core --version 0.2.1
 ```
 
 ## Quick start (F#)

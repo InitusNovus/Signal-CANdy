@@ -1,6 +1,6 @@
-# Signal.CANdy
+# SignalCandy
 
-C#-friendly facade over Signal.CANdy Core. Wraps Result-based F# API with exceptions and .NET-friendly types.
+C#-friendly facade over SignalCandy Core. Wraps Result-based F# API with exceptions and .NET-friendly types.
 
 - Repo: https://github.com/InitusNovus/Signal-CANdy
 - License: MIT
@@ -8,14 +8,14 @@ C#-friendly facade over Signal.CANdy Core. Wraps Result-based F# API with except
 ## Install
 
 ```
-dotnet add package Signal.CANdy --version 0.2.1
+dotnet add package SignalCandy --version 0.2.1
 ```
 
 ## Quick start (C#)
 
 ```csharp
 using System.Threading.Tasks;
-using Signal.CANdy;
+using SignalCandy;
 
 class Demo
 {
@@ -42,7 +42,7 @@ class Demo
 ```csharp
 using System;
 using System.Threading.Tasks;
-using Signal.CANdy;
+using SignalCandy;
 
 class Demo
 {

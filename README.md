@@ -15,14 +15,14 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 
 ## 📦 NuGet Packages
 
-- Signal.CANdy.Core — Core F# library (parsing, config, codegen)
-- Signal.CANdy — C#-friendly facade over the Core
+- SignalCandy.Core — Core F# library (parsing, config, codegen)
+- SignalCandy — C#-friendly facade over the Core
 
 Install:
 
 ```pwsh
-dotnet add package Signal.CANdy.Core --version 0.2.1
-dotnet add package Signal.CANdy --version 0.2.1
+dotnet add package SignalCandy.Core --version 0.2.1
+dotnet add package SignalCandy --version 0.2.1
 ```
 
 ## ⚡ Quick Start (5 minutes)
