@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to release (e.g., v0.2.2). If empty, uses event ref.'
+        required: false
+        type: string
 
 jobs:
   create-release:
@@ -11,65 +17,133 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout
+      - name: Checkout (event ref)
+        if: ${{ !inputs.tag }}
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
+      - name: Checkout (specified tag)
+        if: ${{ inputs.tag }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ inputs.tag }}
+
       - name: Check if tag is on main branch
+        id: gate
         run: |
-          # Check if the tag points to a commit that's reachable from main
-          if ! git merge-base --is-ancestor ${{ github.sha }} origin/main 2>/dev/null; then
+          # Determine the commit to validate: either the provided tag or the current SHA
+          TAG_REF="${{ inputs.tag }}"
+          if [ -n "$TAG_REF" ]; then
+            TARGET_SHA=$(git rev-list -n 1 "$TAG_REF")
+          else
+            TARGET_SHA=${GITHUB_SHA}
+          fi
+          echo "Target SHA: $TARGET_SHA"
+          # Check if the target commit is reachable from main
+          if ! git merge-base --is-ancestor "$TARGET_SHA" origin/main 2>/dev/null; then
             echo "Tag is not on main branch. Skipping release."
-            echo "SKIP_RELEASE=true" >> $GITHUB_ENV
+            echo "skip=true" >> $GITHUB_OUTPUT
           else
             echo "Tag is on main branch. Proceeding with release."
-            echo "SKIP_RELEASE=false" >> $GITHUB_ENV
+            echo "skip=false" >> $GITHUB_OUTPUT
           fi
 
+      - name: Extract version from tag
+        if: ${{ steps.gate.outputs.skip == 'false' }}
+        id: ver
+        run: |
+          # Prefer workflow_dispatch input tag; fallback to event ref_name
+          TAG_NAME="${{ inputs.tag }}"
+          if [ -z "$TAG_NAME" ]; then
+            TAG_NAME="${GITHUB_REF_NAME}"
+          fi
+          echo "Tag name: $TAG_NAME"
+          # Strip leading v/V -> e.g., v0.2.2 or V0.2.2 -> 0.2.2
+          case "$TAG_NAME" in
+            v*) VERSION="${TAG_NAME#v}" ;;
+            V*) VERSION="${TAG_NAME#V}" ;;
+            *)  VERSION="$TAG_NAME" ;;
+          esac
+          # Basic semver-like validation: 1.2.3 or 1.2.3-rc.1
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.+]+)?$ ]]; then
+            echo "Invalid version derived from tag: '$VERSION' (tag='$TAG_NAME')" >&2
+            exit 1
+          fi
+          echo "Detected version: $VERSION"
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
       - name: Setup .NET
-        if: env.SKIP_RELEASE == 'false'
+        if: ${{ steps.gate.outputs.skip == 'false' }}
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
 
       - name: Build & Test (Release)
-        if: env.SKIP_RELEASE == 'false'
+        if: ${{ steps.gate.outputs.skip == 'false' }}
         run: |
           dotnet restore
           dotnet build --configuration Release --nologo
           dotnet test --configuration Release -v minimal --nologo
 
       - name: Generate artifacts (optional)
-        if: env.SKIP_RELEASE == 'false'
+        if: ${{ steps.gate.outputs.skip == 'false' }}
         run: |
           dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen --config examples/config.yaml
 
       - name: Pack NuGet (Core/Facade)
-        if: env.SKIP_RELEASE == 'false'
+        if: ${{ steps.gate.outputs.skip == 'false' }}
         run: |
-          dotnet pack -c Release src/Signal.CANdy.Core/Signal.CANdy.Core.fsproj -o artifacts
-          dotnet pack -c Release src/Signal.CANdy/Signal.CANdy.fsproj -o artifacts
+          V="${{ steps.ver.outputs.version }}"
+          echo "Packing with version $V"
+          dotnet pack -c Release -p:Version="$V" -p:PackageVersion="$V" src/Signal.CANdy.Core/Signal.CANdy.Core.fsproj -o artifacts
+          dotnet pack -c Release -p:Version="$V" -p:PackageVersion="$V" src/Signal.CANdy/Signal.CANdy.fsproj -o artifacts
+
+      - name: Verify artifacts exist
+        if: ${{ steps.gate.outputs.skip == 'false' }}
+        run: |
+          V="${{ steps.ver.outputs.version }}"
+          set -e
+          shopt -s nullglob || true
+          files=(artifacts/*."$V".nupkg)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .nupkg produced for version $V in artifacts/. Failing."
+            ls -la artifacts || true
+            exit 1
+          fi
+          echo "Packages to publish:" ${files[@]}
 
       - name: Publish NuGet packages (stable only)
-        if: ${{ env.SKIP_RELEASE == 'false' && !contains(github.ref_name, '-') }}
+        if: ${{ steps.gate.outputs.skip == 'false' && !contains(github.ref_name, '-') }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
-          dotnet nuget push artifacts/*.nupkg --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
+          V="${{ steps.ver.outputs.version }}"
+          if [ -z "$NUGET_API_KEY" ]; then
+            echo "NUGET_API_KEY is not set. Please add it to repository secrets." >&2
+            exit 1
+          fi
+          # Push only current version to avoid stale packages
+          for pkg in artifacts/*."$V".nupkg; do
+            echo "Pushing $pkg"
+            dotnet nuget push "$pkg" --source https://api.nuget.org/v3/index.json --api-key "$NUGET_API_KEY" --skip-duplicate
+          done
 
       - name: Create GitHub Release (stable)
-        if: ${{ env.SKIP_RELEASE == 'false' && !contains(github.ref_name, '-') }}
+        if: ${{ steps.gate.outputs.skip == 'false' && !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Prerelease (preview tags)
-        if: ${{ env.SKIP_RELEASE == 'false' && contains(github.ref_name, '-') }}
+        if: ${{ steps.gate.outputs.skip == 'false' && contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           generate_release_notes: true
           prerelease: true
         env:
