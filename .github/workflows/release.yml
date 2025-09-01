@@ -60,8 +60,17 @@ jobs:
             TAG_NAME="${GITHUB_REF_NAME}"
           fi
           echo "Tag name: $TAG_NAME"
-          # v0.2.2 -> 0.2.2
-          VERSION="${TAG_NAME#v}"
+          # Strip leading v/V -> e.g., v0.2.2 or V0.2.2 -> 0.2.2
+          case "$TAG_NAME" in
+            v*) VERSION="${TAG_NAME#v}" ;;
+            V*) VERSION="${TAG_NAME#V}" ;;
+            *)  VERSION="$TAG_NAME" ;;
+          esac
+          # Basic semver-like validation: 1.2.3 or 1.2.3-rc.1
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z\.+]+)?$ ]]; then
+            echo "Invalid version derived from tag: '$VERSION' (tag='$TAG_NAME')" >&2
+            exit 1
+          fi
           echo "Detected version: $VERSION"
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
@@ -125,6 +134,7 @@ jobs:
         if: ${{ steps.gate.outputs.skip == 'false' && !contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -133,6 +143,7 @@ jobs:
         if: ${{ steps.gate.outputs.skip == 'false' && contains(github.ref_name, '-') }}
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
           generate_release_notes: true
           prerelease: true
         env:
