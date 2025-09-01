@@ -35,17 +35,15 @@ jobs:
     - name: Format check
       run: dotnet fantomas --check
 
-    - name: Build generated C code (Placeholder)
+    - name: Generate and build C code
       run: |
-        mkdir -p gen
-        # This step would typically involve running the F# generator to produce C code
-        # For now, we'll just create dummy C files to simulate the output
-        mkdir -p gen/include gen/src
-        echo '#ifndef DUMMY_H\n#define DUMMY_H\nvoid dummy_func();\n#endif' > gen/include/dummy.h
-        echo '#include "dummy.h"\nvoid dummy_func() { }' > gen/src/dummy.c
+        # Generate C code from sample DBC with harness
+        dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen -t
         
-        # Build the dummy C code using make
+        # Build the generated C code
         make -C gen build
 
-    - name: Run C tests (Placeholder)
-      run: make -C gen test
+    - name: Run C tests
+      run: |
+        # Run basic test suite
+        ./gen/build/test_runner test_roundtrip
