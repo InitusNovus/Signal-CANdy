@@ -44,9 +44,12 @@ make --version     # GNU Make (optional: for local validation)
 dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen
 ```
 
-3) Build and run a basic test
+3) (Optional) Generate a local test harness and build
 
 ```bash
+# Create/upgrade an adaptive Makefile and copy a sample main.c
+dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen -t
+
 make -C gen build
 ./gen/build/test_runner test_roundtrip
 ```
@@ -204,6 +207,28 @@ dotnet run --project src/Generator -- \
   --emit-main false
 ```
 
+### signal-candy CLI (test harness helper)
+
+The CLI provides short flags and an optional harness mode that creates/updates an adaptive Makefile and copies a sample `main.c` for quick local builds.
+
+- `-d, --dbc <path>`: input DBC (required)
+- `-o, --out <dir>`: output directory (required)
+- `-c, --config <path>`: optional YAML config
+- `-t, --harness`: write/upgrade `gen/Makefile` and ensure `gen/src/main.c` exists; idempotent
+- `-v, --version`: print version
+- `-h, --help`: usage
+
+Examples
+
+```bash
+# Minimal codegen only
+dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen
+
+# With harness (writes Makefile + copies main.c), then build
+dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen -t
+make -C gen build
+```
+
 ### Using a config
 
 ```bash
@@ -251,7 +276,7 @@ make -C gen build
 
 Notes
 - Codegen writes files under `gen/include` and `gen/src`.
-- A sample test runner `gen/src/main.c` is emitted by copying `examples/main.c`. Do not ship or compile this in firmware; it exists only for local testing.
+- A sample test runner `gen/src/main.c` is provided when using the CLI with `-t/--harness` (it copies `examples/main.c`). Do not ship or compile this in firmware; it exists only for local testing.
 
 ## Large-scale testing and stress suite
 
@@ -355,10 +380,10 @@ void compare_state(int v) {
 
 ### Output layout and naming
 - gen/include/
-  - sc_utils.h, sc_registry.h (prefix configurable via config: file_prefix)
+  - utils.h or <prefix>utils.h, registry.h or <prefix>registry.h (prefix configurable via config: file_prefix)
   - <message>.h per message (snake_case filename)
 - gen/src/
-  - sc_utils.c, sc_registry.c (prefix configurable)
+  - utils.c or <prefix>utils.c, registry.c or <prefix>registry.c (prefix configurable)
   - <message>.c per message (snake_case filename)
   - main.c (test runner; exclude in firmware builds)
 
@@ -473,6 +498,16 @@ extern "C" {
 
 The generated code remains pure C99, ensuring compatibility with both C and C++ projects without requiring changes to build systems or toolchains.
 
+### Harness Makefile details
+
+When you run the CLI with `-t/--harness`, it creates or upgrades `gen/Makefile`:
+
+- Discovers `src/*.c` dynamically so it adapts to any generated filenames or prefixes.
+- Avoids duplicate common sources (drops legacy unprefixed `utils.c`/`registry.c` when prefixed variants exist).
+- Supports optional `../examples/stress_test.c` with `-DHAVE_STRESS`.
+- Toolchain knobs: `CC ?= gcc`, `CFLAGS ?= -Wall -Wextra -std=c99`, `EXTRA_CFLAGS ?=`, `LDLIBS ?= -lm`.
+- Idempotent and safe: if a non-harness Makefile exists, it is backed up to `Makefile.bak` before upgrading.
+
 ## Platforms, compilers, and test environments
 
 Tested combos
@@ -490,6 +525,13 @@ Windows notes (early guidance)
     - Remove `gen/src/main.c` from sources.
 - Linking: MSVC doesn’t need `-lm`; math functions (llround/llroundf) are in the CRT when including `<math.h>`.
 - If you hit MSVC-specific C99 quirks, consider LLVM clang-cl or MinGW as a fallback. Please open an issue with compiler/version details so we can add CI coverage.
+
+MinGW quick tip
+
+```pwsh
+# Build with MinGW toolchain and extra flags via harness Makefile
+make -C gen build CC=x86_64-w64-mingw32-gcc EXTRA_CFLAGS='-O2 -DNDEBUG'
+```
 
 ### Quick checklist (firmware integration)
 
