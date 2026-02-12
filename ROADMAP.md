@@ -41,11 +41,11 @@
 
 - [x] **H-1a.** `tests/Signal.CANdy.Core.Tests/` 프로젝트 생성 (xUnit + FsUnit, Core 프로젝트 참조)
 - [x] **H-1b.** `Dbc.parseDbcFile` 테스트: 정상 DBC, 중복 ID, 시그널 오버랩, DLC 초과, 멀티플렉서, VAL_ 테이블
-- [ ] **H-1c.** `Config.loadFromYaml` / `Config.validate` 테스트: 유효/무효 설정, snake_case/PascalCase, 기본값 추론
-- [ ] **H-1d.** `Codegen.generate` 테스트: IR → C99 코드 생성 검증 (최소한 파일 생성 여부 + 핵심 패턴 포함 여부)
-- [ ] **H-1e.** `Api.generateFromPaths` 엔드투엔드 테스트: DBC 파일 입력 → 생성 파일 출력
-- [ ] **H-1f.** 에지 케이스: 빈 DBC(메시지 없음), Motorola LSB, 64비트 시그널, 부호 있는 시그널
-- [ ] **H-1g.** CI(`ci.yml`)에 Core 테스트 실행 단계 추가
+- [x] **H-1c.** `Config.loadFromYaml` / `Config.validate` 테스트: 유효/무효 설정, snake_case/PascalCase, 기본값 추론
+- [x] **H-1d.** `Codegen.generate` 테스트: IR → C99 코드 생성 검증 (최소한 파일 생성 여부 + 핵심 패턴 포함 여부)
+- [x] **H-1e.** `Api.generateFromPaths` 엔드투엔드 테스트: DBC 파일 입력 → 생성 파일 출력
+- [x] **H-1f.** 에지 케이스: 빈 DBC(메시지 없음), Motorola LSB, 64비트 시그널, 부호 있는 시그널
+- [x] **H-1g.** CI(`ci.yml`)에 Core 테스트 실행 단계 추가
 
 ### H-2. Generator → Core 통합 (코드 중복 제거)
 
@@ -62,9 +62,9 @@
 
 > **선행 조건**: C-2 (에러 타입 통합 DU) 완료 후 착수
 
-- [ ] **H-3a.** `Library.fs` — `GenerateFromPathsAsync`에서 `GenerateError.Parse` → `SignalCandyParseException`, `GenerateError.Validation` → `SignalCandyValidationException` 매핑
-- [ ] **H-3b.** Exception 메시지에 DU 케이스 정보 포함 (예: `"[InvalidDbc] Duplicate message ID 100"`)
-- [ ] **H-3c.** Facade 단위 테스트 추가: 각 에러 경로별 올바른 Exception 타입 발생 확인
+- [x] **H-3a.** `Library.fs` — `GenerateFromPathsAsync`에서 `GenerateError.Parse` → `SignalCandyParseException`, `GenerateError.Validation` → `SignalCandyValidationException` 매핑
+- [x] **H-3b.** Exception 메시지에 DU 케이스 정보 포함 (예: `"[InvalidDbc] Duplicate message ID 100"`)
+- [x] **H-3c.** Facade 단위 테스트 추가: 각 에러 경로별 올바른 Exception 타입 발생 확인
 
 ---
 
@@ -148,5 +148,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-02-12 (C-1, C-2 완료 / H-1a, H-1b 완료)
+> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-3 완료)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`
