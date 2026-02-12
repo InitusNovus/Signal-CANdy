@@ -8,8 +8,15 @@ open Generator.Result
 open System.IO
 open System.Diagnostics
 open System
+open System.Runtime.InteropServices
 
 module CodegenTests = 
+
+    let private isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
+
+    let private makeCommand =
+        if isWindows then "mingw32-make"
+        else "make"
 
     [<Fact>]
     let ``Sample test stub`` () =
@@ -108,7 +115,7 @@ clean:
     let buildAndRunCTest (genOutputPath: string) (cTestName: string) : string list =
         // Build using the Makefile in genOutputPath
         let make = new Process()
-        make.StartInfo.FileName <- "make"
+        make.StartInfo.FileName <- makeCommand
         make.StartInfo.Arguments <- sprintf "-C \"%s\" build" genOutputPath
         make.StartInfo.UseShellExecute <- false
         make.StartInfo.RedirectStandardOutput <- true
@@ -122,7 +129,8 @@ clean:
 
         // Run test
         let run = new Process()
-        run.StartInfo.FileName <- Path.Combine(genOutputPath, "build", "test_runner")
+        let runnerName = if isWindows then "test_runner.exe" else "test_runner"
+        run.StartInfo.FileName <- Path.Combine(genOutputPath, "build", runnerName)
         run.StartInfo.Arguments <- cTestName
         run.StartInfo.UseShellExecute <- false
         run.StartInfo.RedirectStandardOutput <- true

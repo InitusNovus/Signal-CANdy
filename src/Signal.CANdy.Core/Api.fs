@@ -28,14 +28,14 @@ let generateCodeAsync (ir: Ir) (outputPath: string) (config: Config) : Task<Resu
 }
 
 /// Convenience: parse dbc, load config path (optional), and generate.
-let generateFromPaths (dbcPath: string) (outputPath: string) (configPath: string option) : Task<Result<GeneratedFiles, CodeGenError>> = task {
+let generateFromPaths (dbcPath: string) (outputPath: string) (configPath: string option) : Task<Result<GeneratedFiles, GenerateError>> = task {
     // Load config (optional path -> YAML; otherwise sensible defaults)
-    let configResult : Result<Config, CodeGenError> =
+    let configResult : Result<Config, GenerateError> =
         match configPath with
         | Some p ->
             match Signal.CANdy.Core.Config.loadFromYaml p with
             | Ok cfg -> Ok cfg
-            | Error ve -> Error (CodeGenError.Unknown (sprintf "Config error: %A" ve))
+            | Error ve -> Error (GenerateError.Validation ve)
         | None ->
             Ok {
                 PhysType = "float"
@@ -52,8 +52,10 @@ let generateFromPaths (dbcPath: string) (outputPath: string) (configPath: string
     | Ok cfg ->
         // Parse DBC
         match Signal.CANdy.Core.Dbc.parseDbcFile dbcPath with
-        | Error pe -> return Error (CodeGenError.Unknown (sprintf "Parse error: %A" pe))
+        | Error pe -> return Error (GenerateError.Parse pe)
         | Ok ir ->
-            // Delegate to codegen (currently stubbed)
-            return generateCode ir outputPath cfg
+            // Delegate to codegen
+            match generateCode ir outputPath cfg with
+            | Ok files -> return Ok files
+            | Error ce -> return Error (GenerateError.CodeGen ce)
 }

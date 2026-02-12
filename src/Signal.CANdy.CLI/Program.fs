@@ -1,4 +1,4 @@
-﻿open System
+open System
 open Signal.CANdy.Core
 open Signal.CANdy.Core.Errors
 
@@ -283,9 +283,22 @@ clean:
                 | Error err ->
                     let msg =
                         match err with
-                        | CodeGenError.TemplateError s -> sprintf "Template error: %s" s
-                        | CodeGenError.IoError s -> sprintf "IO error: %s" s
-                        | CodeGenError.Unknown s -> sprintf "Error: %s" s
+                        | GenerateError.Parse pe ->
+                            match pe with
+                            | Errors.ParseError.InvalidDbc s -> sprintf "DBC error: %s" s
+                            | Errors.ParseError.IoError s -> sprintf "IO error: %s" s
+                            | Errors.ParseError.Unknown s -> sprintf "Parse error: %s" s
+                        | GenerateError.Validation ve ->
+                            match ve with
+                            | Errors.ValidationError.InvalidValue s -> sprintf "Config error: %s" s
+                            | Errors.ValidationError.MissingField s -> sprintf "Config error: %s" s
+                            | Errors.ValidationError.IoError s -> sprintf "IO error: %s" s
+                            | Errors.ValidationError.Unknown s -> sprintf "Validation error: %s" s
+                        | GenerateError.CodeGen ce ->
+                            match ce with
+                            | CodeGenError.TemplateError s -> sprintf "Template error: %s" s
+                            | CodeGenError.IoError s -> sprintf "IO error: %s" s
+                            | CodeGenError.Unknown s -> sprintf "Error: %s" s
                     eprintfn "%s" msg
                     1
             with ex ->

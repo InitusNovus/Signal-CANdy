@@ -74,147 +74,137 @@ module Dbc =
         messages |> List.tryPick exceedInMessage
 
     let private validateDuplicateIdsFromText (filePath: string) : string option =
-        try
-            let lines = File.ReadAllLines(filePath)
-            let ids =
-                lines
-                |> Seq.choose (fun line ->
-                    let t = line.Trim()
-                    if t.StartsWith("BO_ ") then
-                        let parts = t.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
-                        if parts.Length >= 3 then
-                            let name = parts.[2]
-                            if isVectorInternalMessageName name then None else
-                            match Int32.TryParse(parts.[1]) with
-                            | true, id -> Some id
-                            | _ -> None
-                        else None
-                    else None)
-                |> Seq.toList
-            ids
-            |> List.groupBy id
-            |> List.tryPick (fun (id, xs) -> if List.length xs > 1 then Some (sprintf "Duplicate message ID %d found." id) else None)
-        with _ -> None
+        let lines = File.ReadAllLines(filePath)
+        let ids =
+            lines
+            |> Seq.choose (fun line ->
+                let t = line.Trim()
+                if t.StartsWith("BO_ ") then
+                    let parts = t.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
+                    if parts.Length >= 3 then
+                        let name = parts.[2]
+                        if isVectorInternalMessageName name then None else
+                        match Int32.TryParse(parts.[1]) with
+                        | true, id -> Some id
+                        | _ -> None
+                    else None
+                else None)
+            |> Seq.toList
+        ids
+        |> List.groupBy id
+        |> List.tryPick (fun (id, xs) -> if List.length xs > 1 then Some (sprintf "Duplicate message ID %d found." id) else None)
 
     let private tryBuildSignalMuxMap (filePath: string) : Map<string * string, string option * int option> =
         let mutable currentMsg : string option = None
         let mutable entries : (string*string*(string option * int option)) list = []
-        try
-            for raw in File.ReadLines(filePath) do
-                let line = raw.Trim()
-                if line.StartsWith("BO_ ") then
-                    let parts = line.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
-                    if parts.Length >= 3 then currentMsg <- Some parts.[2]
-                elif line.StartsWith("SG_") then
-                    match currentMsg with
-                    | None -> ()
-                    | Some msgName ->
-                        let colonIdx = line.IndexOf(':')
-                        if colonIdx > 0 then
-                            let left = line.Substring(0, colonIdx)
-                            let parts = left.Split([|' '|], StringSplitOptions.RemoveEmptyEntries)
-                            if parts.Length >= 2 then
-                                let sigName = parts.[1]
-                                let tokens = parts |> Array.skip 2
-                                let mutable muxInd : string option = None
-                                let mutable muxVal : int option = None
-                                for t in tokens do
-                                    if t = "M" then muxInd <- Some "M"
-                                    elif t.Length >= 1 && t.[0] = 'm' then
-                                        muxInd <- Some "m"
-                                        if t.Length > 1 then
-                                            let vStr = t.Substring(1)
-                                            match Int32.TryParse(vStr) with
-                                            | true, v -> muxVal <- Some v
-                                            | _ -> ()
-                                if muxInd.IsSome || muxVal.IsSome then
-                                    entries <- (msgName, sigName, (muxInd, muxVal)) :: entries
-            entries |> List.fold (fun acc (m,s,meta) -> acc |> Map.add (m,s) meta) Map.empty
-        with _ -> Map.empty
+        for raw in File.ReadLines(filePath) do
+            let line = raw.Trim()
+            if line.StartsWith("BO_ ") then
+                let parts = line.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
+                if parts.Length >= 3 then currentMsg <- Some parts.[2]
+            elif line.StartsWith("SG_") then
+                match currentMsg with
+                | None -> ()
+                | Some msgName ->
+                    let colonIdx = line.IndexOf(':')
+                    if colonIdx > 0 then
+                        let left = line.Substring(0, colonIdx)
+                        let parts = left.Split([|' '|], StringSplitOptions.RemoveEmptyEntries)
+                        if parts.Length >= 2 then
+                            let sigName = parts.[1]
+                            let tokens = parts |> Array.skip 2
+                            let mutable muxInd : string option = None
+                            let mutable muxVal : int option = None
+                            for t in tokens do
+                                if t = "M" then muxInd <- Some "M"
+                                elif t.Length >= 1 && t.[0] = 'm' then
+                                    muxInd <- Some "m"
+                                    if t.Length > 1 then
+                                        let vStr = t.Substring(1)
+                                        match Int32.TryParse(vStr) with
+                                        | true, v -> muxVal <- Some v
+                                        | _ -> ()
+                            if muxInd.IsSome || muxVal.IsSome then
+                                entries <- (msgName, sigName, (muxInd, muxVal)) :: entries
+        entries |> List.fold (fun acc (m,s,meta) -> acc |> Map.add (m,s) meta) Map.empty
 
     let private tryBuildSignalMetaMap (filePath: string) : Map<string * string, bool * ByteOrder> =
         let mutable currentMsg : string option = None
         let mutable entries : (string*string*(bool*ByteOrder)) list = []
-        try
-            for raw in File.ReadLines(filePath) do
-                let line = raw.Trim()
-                if line.StartsWith("BO_ ") then
-                    let parts = line.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
-                    if parts.Length >= 3 then currentMsg <- Some parts.[2]
-                elif line.StartsWith("SG_") then
-                    match currentMsg with
-                    | None -> ()
-                    | Some msgName ->
-                        let parts = line.Split([|' '|], StringSplitOptions.RemoveEmptyEntries)
-                        if parts.Length >= 2 then
-                            let sigName = parts.[1]
-                            let colonIdx = line.IndexOf(':')
-                            if colonIdx > 0 && colonIdx < line.Length - 1 then
-                                let after = line.Substring(colonIdx + 1).Trim()
-                                let atIdx = after.IndexOf('@')
-                                if atIdx >= 0 && atIdx + 2 < after.Length then
-                                    let endianCh = after.[atIdx + 1]
-                                    let signCh = after.[atIdx + 2]
-                                    if (signCh = '+' || signCh = '-') && (endianCh = '0' || endianCh = '1') then
-                                        let isSigned = signCh = '-'
-                                        let order = if endianCh = '0' then ByteOrder.Big else ByteOrder.Little
-                                        entries <- (msgName, sigName, (isSigned, order)) :: entries
-            entries |> List.fold (fun acc (m,s,meta) -> acc |> Map.add (m,s) meta) Map.empty
-        with _ -> Map.empty
+        for raw in File.ReadLines(filePath) do
+            let line = raw.Trim()
+            if line.StartsWith("BO_ ") then
+                let parts = line.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
+                if parts.Length >= 3 then currentMsg <- Some parts.[2]
+            elif line.StartsWith("SG_") then
+                match currentMsg with
+                | None -> ()
+                | Some msgName ->
+                    let parts = line.Split([|' '|], StringSplitOptions.RemoveEmptyEntries)
+                    if parts.Length >= 2 then
+                        let sigName = parts.[1]
+                        let colonIdx = line.IndexOf(':')
+                        if colonIdx > 0 && colonIdx < line.Length - 1 then
+                            let after = line.Substring(colonIdx + 1).Trim()
+                            let atIdx = after.IndexOf('@')
+                            if atIdx >= 0 && atIdx + 2 < after.Length then
+                                let endianCh = after.[atIdx + 1]
+                                let signCh = after.[atIdx + 2]
+                                if (signCh = '+' || signCh = '-') && (endianCh = '0' || endianCh = '1') then
+                                    let isSigned = signCh = '-'
+                                    let order = if endianCh = '0' then ByteOrder.Big else ByteOrder.Little
+                                    entries <- (msgName, sigName, (isSigned, order)) :: entries
+        entries |> List.fold (fun acc (m,s,meta) -> acc |> Map.add (m,s) meta) Map.empty
 
     let private buildIdNameMap (filePath: string) : Map<int, string> =
         let mutable m : Map<int,string> = Map.empty
-        try
-            for raw in File.ReadLines(filePath) do
-                let line = raw.Trim()
-                if line.StartsWith("BO_ ") then
-                    let parts = line.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
-                    if parts.Length >= 3 then
-                        match Int32.TryParse(parts.[1]) with
-                        | true, id ->
-                            let name = parts.[2]
-                            if not (isVectorInternalMessageName name) then
-                                m <- m |> Map.add id name
-                        | _ -> ()
-            m
-        with _ -> Map.empty
+        for raw in File.ReadLines(filePath) do
+            let line = raw.Trim()
+            if line.StartsWith("BO_ ") then
+                let parts = line.Split([|' '; ':'|], StringSplitOptions.RemoveEmptyEntries)
+                if parts.Length >= 3 then
+                    match Int32.TryParse(parts.[1]) with
+                    | true, id ->
+                        let name = parts.[2]
+                        if not (isVectorInternalMessageName name) then
+                            m <- m |> Map.add id name
+                    | _ -> ()
+        m
 
     let private tryBuildValueTableMap (filePath: string) : Map<string * string, (int * string) list> =
-        try
-            let idName = buildIdNameMap filePath
-            let mutable map : Map<string*string,(int*string) list> = Map.empty
-            let rx = Regex(@"^VAL_\s+(\d+)\s+(\S+)\s+(.*);\s*$")
-            let rxPair = Regex(@"([+-]?\d+)\s+""([^""]*)""")
-            for raw in File.ReadLines(filePath) do
-                let line = raw.Trim()
-                let m = rx.Match(line)
-                if m.Success then
-                    let idStr = m.Groups.[1].Value
-                    let sigName = m.Groups.[2].Value
-                    let pairsStr = m.Groups.[3].Value
-                    match Int32.TryParse(idStr) with
-                    | true, id when idName.ContainsKey id ->
-                        let msgName = idName.[id]
-                        let pairs =
-                            rxPair.Matches(pairsStr)
-                            |> Seq.cast<Match>
-                            |> Seq.choose (fun mm ->
-                                match Int32.TryParse(mm.Groups.[1].Value) with
-                                | true, v -> Some (v, mm.Groups.[2].Value)
-                                | _ -> None)
-                            |> Seq.toList
-                        if pairs.Length > 0 then
-                            map <- map |> Map.add (msgName, sigName) pairs
-                    | _ -> ()
-            map
-        with _ -> Map.empty
+        let idName = buildIdNameMap filePath
+        let mutable map : Map<string*string,(int*string) list> = Map.empty
+        let rx = Regex(@"^VAL_\s+(\d+)\s+(\S+)\s+(.*);\s*$")
+        let rxPair = Regex(@"([+-]?\d+)\s+""([^""]*)""")
+        for raw in File.ReadLines(filePath) do
+            let line = raw.Trim()
+            let m = rx.Match(line)
+            if m.Success then
+                let idStr = m.Groups.[1].Value
+                let sigName = m.Groups.[2].Value
+                let pairsStr = m.Groups.[3].Value
+                match Int32.TryParse(idStr) with
+                | true, id when idName.ContainsKey id ->
+                    let msgName = idName.[id]
+                    let pairs =
+                        rxPair.Matches(pairsStr)
+                        |> Seq.cast<Match>
+                        |> Seq.choose (fun mm ->
+                            match Int32.TryParse(mm.Groups.[1].Value) with
+                            | true, v -> Some (v, mm.Groups.[2].Value)
+                            | _ -> None)
+                        |> Seq.toList
+                    if pairs.Length > 0 then
+                        map <- map |> Map.add (msgName, sigName) pairs
+                | _ -> ()
+        map
 
     /// Parse DBC file into Core IR with validation
     let parseDbcFile (filePath: string) : Result<Ir, ParseError> =
-        match validateDuplicateIdsFromText filePath with
-        | Some err -> Error (ParseError.InvalidDbc err)
-        | None ->
-            try
+        try
+            match validateDuplicateIdsFromText filePath with
+            | Some err -> Error (ParseError.InvalidDbc err)
+            | None ->
                 let metaMap = tryBuildSignalMetaMap filePath
                 let muxMap = tryBuildSignalMuxMap filePath
                 let valMap = tryBuildValueTableMap filePath
