@@ -82,21 +82,21 @@
 
 ### M-2. Dead Code 삭제
 
-- [ ] **M-2a.** `Ir.fs` — `SignalType` DU 제거 (Signed | Unsigned | Float — 어디에서도 사용되지 않음)
-- [ ] **M-2b.** `Core/Library.fs` — 플레이스홀더 파일 내용 점검 (3줄, 네임스페이스만 존재)
-- [ ] **M-2c.** `templates/` 디렉토리 점검 — 비어 있거나 미사용이면 제거
-- [ ] **M-2d.** 빌드 및 테스트 통과 확인
+- [x] **M-2a.** `Ir.fs` — `SignalType` DU 제거 (Signed | Unsigned | Float — 어디에서도 사용되지 않음)
+- [x] **M-2b.** `Core/Library.fs` — 플레이스홀더 파일 내용 점검 (실제 112줄 Facade — 유지)
+- [x] **M-2c.** `templates/` 디렉토리 점검 — L-1 Scriban 도입 시 사용 예정, 유지
+- [x] **M-2d.** 빌드 및 테스트 통과 확인 (63/63 pass)
 
 ### M-3. 코드 생성 문자열 가독성 개선
 
-- [ ] **M-3a.** `Codegen.fs` — `utilsHContent`, `utilsCContent`의 매우 긴 단일 문자열을 여러 줄로 분리 (기능 변경 없이 포맷만 개선)
-- [ ] **M-3b.** `Codegen.fs` — `registryHContent`/`registryCContent`의 헤더 가드/extern C/함수 선언을 가독성 있게 재구성
-- [ ] **M-3c.** 생성된 C 코드의 바이트 일치(byte-identical) 또는 기능 동일성 검증
+- [x] **M-3a.** `Codegen.fs` — `utilsHContent`, `utilsCContent`의 매우 긴 단일 문자열을 여러 줄로 분리 (기능 변경 없이 포맷만 개선)
+- [x] **M-3b.** `Codegen.fs` — `registryHContent`/`registryCContent`의 헤더 가드/extern C/함수 선언을 가독성 있게 재구성
+- [x] **M-3c.** 생성된 C 코드의 바이트 일치(byte-identical) 검증 완료
 
 ### M-4. `AGENTS.md` Key Dependencies 테이블 정확도 보정
 
-- [ ] **M-4a.** Scriban, Argu 항목에 "Generator에서 미사용" 주석 추가 (또는 M-1 완료 후 제거)
-- [ ] **M-4b.** Generator 통합(H-2) 후 의존성 테이블을 Core 기준으로 갱신
+- [x] **M-4a.** Scriban, Argu, FsToolkit.ErrorHandling, FSharp.SystemTextJson 항목 제거 (M-1에서 패키지 삭제 완료)
+- [x] **M-4b.** Generator 통합(H-2) 후 의존성 테이블을 Core 기준으로 갱신 완료
 
 ---
 
@@ -148,5 +148,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1 완료)
+> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1, M-2, M-3, M-4 완료 — [Medium] 전체 완료)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`

@@ -6,11 +6,6 @@ module Ir =
         | Little
         | Big
 
-    type SignalType =
-        | Signed
-        | Unsigned
-        | Float
-
     type Signal = {
         Name: string
         StartBit: uint16
