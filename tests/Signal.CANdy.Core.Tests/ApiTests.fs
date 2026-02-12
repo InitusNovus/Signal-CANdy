@@ -86,3 +86,28 @@ BO_ 100 MESSAGE_2: 8 Vector__XXX
         finally
             File.Delete(dbcPath)
             if Directory.Exists(outDir) then Directory.Delete(outDir, true)
+
+    // -------------------------------------------------------
+    // H-1e: E2E happy-path test
+    // -------------------------------------------------------
+
+    [<Fact>]
+    let ``generateFromPaths succeeds for valid DBC and default config`` () =
+        // Use the examples/sample.dbc shipped with the repo
+        let repoRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
+        let dbcPath = Path.Combine(repoRoot, "examples", "sample.dbc")
+        let outDir = Path.Combine(Path.GetTempPath(), System.Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+        try
+            let t = Signal.CANdy.Core.Api.generateFromPaths dbcPath outDir None
+            let result = t.GetAwaiter().GetResult()
+            match result with
+            | Ok files ->
+                files.Sources.Length |> should be (greaterThan 0)
+                files.Headers.Length |> should be (greaterThan 0)
+                // Verify at least one generated file exists on disk
+                files.Sources |> List.iter (fun f -> File.Exists(f) |> should equal true)
+                files.Headers |> List.iter (fun f -> File.Exists(f) |> should equal true)
+            | Error e -> failwithf "Expected Ok for valid DBC E2E, got: %A" e
+        finally
+            if Directory.Exists(outDir) then Directory.Delete(outDir, true)

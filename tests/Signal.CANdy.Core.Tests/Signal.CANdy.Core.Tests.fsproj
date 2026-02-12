@@ -9,7 +9,11 @@
 
   <ItemGroup>
     <Compile Include="DbcTests.fs" />
+    <Compile Include="ConfigTests.fs" />
+    <Compile Include="CodegenTests.fs" />
+    <Compile Include="EdgeCaseTests.fs" />
     <Compile Include="ApiTests.fs" />
+    <Compile Include="FacadeTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
@@ -25,6 +29,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\src\Signal.CANdy.Core\Signal.CANdy.Core.fsproj" />
+    <ProjectReference Include="..\..\src\Signal.CANdy\Signal.CANdy.fsproj" />
   </ItemGroup>
 
 </Project>
