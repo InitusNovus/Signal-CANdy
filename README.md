@@ -123,6 +123,7 @@ Note: Step 3 is optional but recommended for validation. The generated C files u
 - Value tables: parse VAL_ and generate per-signal enums and to_string helpers
 - Configurable scaling math: phys_type float or fixed with phys_mode selection
 - Range checking: optional min/max checks in encode/decode
+- CAN FD: supports payloads up to 64 bytes (classic CAN ≤8 bytes works unchanged)
 - Dispatch modes: binary_search or direct_map registry
 
 ## Configuration (config.yaml)
@@ -675,7 +676,7 @@ Details can be reproduced via the stress suite and bulk runner in `scripts/bulk_
 ## ⚠️ Limitations
 
 - Automatic CRC/Counter validation is not yet implemented (config flag is reserved)
-- Primarily targets 8-byte classic CAN frames; extended payloads require template adjustments
+- Supports both classic CAN (up to 8-byte) and CAN FD (up to 64-byte) payloads
 - Extremely large messages with >32 signals may require widening the `valid` bitmask
 
 ## Dispatch modes, registry, and relation to nanopb

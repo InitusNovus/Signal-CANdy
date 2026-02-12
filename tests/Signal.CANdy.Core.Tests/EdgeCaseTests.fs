@@ -124,6 +124,150 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
         finally
             cleanupDir outDir
 
+    // -------------------------------------------------------
+    // CAN FD edge case tests
+    // -------------------------------------------------------
+
+    [<Fact>]
+    let ``codegen succeeds for CAN FD 64-byte message`` () =
+        let fdIr =
+            { Messages =
+                [ { Name = "FD_TEST"
+                    Id = 900u
+                    IsExtended = false
+                    Length = 64us
+                    Signals =
+                        [ { Name = "FD_Low"
+                            StartBit = 0us
+                            Length = 8us
+                            Factor = 1.0
+                            Offset = 0.0
+                            Minimum = Some 0.0
+                            Maximum = Some 255.0
+                            Unit = ""
+                            IsSigned = false
+                            IsCrc = false
+                            IsCounter = false
+                            ByteOrder = ByteOrder.Little
+                            MultiplexerIndicator = None
+                            MultiplexerSwitchValue = None
+                            ValueTable = None
+                            Receivers = [] }
+                          { Name = "FD_High"
+                            StartBit = 480us
+                            Length = 16us
+                            Factor = 0.1
+                            Offset = 0.0
+                            Minimum = None
+                            Maximum = None
+                            Unit = ""
+                            IsSigned = false
+                            IsCrc = false
+                            IsCounter = false
+                            ByteOrder = ByteOrder.Little
+                            MultiplexerIndicator = None
+                            MultiplexerSwitchValue = None
+                            ValueTable = None
+                            Receivers = [] } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate fdIr outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "fd_test.c")
+                let content = File.ReadAllText(msgC)
+                // DLC check should use 64
+                content |> should haveSubstring "dlc < 64"
+                // memset should use 64 bytes
+                content |> should haveSubstring "memset(data, 0, 64)"
+                // out_dlc should be 64
+                content |> should haveSubstring "*out_dlc = 64"
+                // Signal at byte 60 (start_bit 480) should reference get_bits_le(data, 480, 16)
+                content |> should haveSubstring "get_bits_le(data, 480, 16)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``codegen succeeds for signal at byte position beyond 8`` () =
+        let fdIr =
+            { Messages =
+                [ { Name = "FD_POS"
+                    Id = 901u
+                    IsExtended = false
+                    Length = 32us
+                    Signals =
+                        [ { Name = "HighSig"
+                            StartBit = 200us
+                            Length = 8us
+                            Factor = 1.0
+                            Offset = 0.0
+                            Minimum = None
+                            Maximum = None
+                            Unit = ""
+                            IsSigned = false
+                            IsCrc = false
+                            IsCounter = false
+                            ByteOrder = ByteOrder.Little
+                            MultiplexerIndicator = None
+                            MultiplexerSwitchValue = None
+                            ValueTable = None
+                            Receivers = [] } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate fdIr outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "fd_pos.c")
+                let content = File.ReadAllText(msgC)
+                // Signal at start_bit=200 (byte 25) should work
+                content |> should haveSubstring "get_bits_le(data, 200, 8)"
+                content |> should haveSubstring "memset(data, 0, 32)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``codegen succeeds for 64-bit signal in FD message`` () =
+        let fdIr =
+            { Messages =
+                [ { Name = "FD_WIDE"
+                    Id = 902u
+                    IsExtended = false
+                    Length = 64us
+                    Signals =
+                        [ { Name = "FullPayload"
+                            StartBit = 0us
+                            Length = 64us
+                            Factor = 1.0
+                            Offset = 0.0
+                            Minimum = None
+                            Maximum = None
+                            Unit = ""
+                            IsSigned = false
+                            IsCrc = false
+                            IsCounter = false
+                            ByteOrder = ByteOrder.Little
+                            MultiplexerIndicator = None
+                            MultiplexerSwitchValue = None
+                            ValueTable = None
+                            Receivers = [] } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate fdIr outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "fd_wide.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "get_bits_le(data, 0, 64)"
+                content |> should haveSubstring "memset(data, 0, 64)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
     [<Fact>]
     let ``codegen succeeds for 64-bit signal`` () =
         let ir =

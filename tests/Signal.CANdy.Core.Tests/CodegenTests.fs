@@ -177,6 +177,64 @@ module CodegenTests =
         finally
             cleanupDir outDir
 
+    // -------------------------------------------------------
+    // CAN FD: Utils code generation tests
+    // -------------------------------------------------------
+
+    [<Fact>]
+    let ``generate utils.c contains n_bytes for FD-safe LE accessors`` () =
+        let outDir = createTempOutDir ()
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+                let content = File.ReadAllText(utilsC)
+                // Must NOT have the old hardcoded "< 8" loop bound
+                content.Contains("i < 8 && (byte_offset + i) < 8") |> should equal false
+                // Must have the new n_bytes pattern
+                content |> should haveSubstring "n_bytes"
+                // Must have the UINT64_MAX safe mask for 64-bit signals
+                content |> should haveSubstring "length == 64"
+                content |> should haveSubstring "UINT64_MAX"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate encode uses message length for memset in FD message`` () =
+        let fdIr =
+            { Messages =
+                [ { Name = "FD_MSG"
+                    Id = 800u
+                    IsExtended = false
+                    Length = 64us
+                    Signals = [ mkSignal "FD_Sig" 0us 8us ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate fdIr outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "fd_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "memset(data, 0, 64)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate encode uses 8 for classic CAN memset`` () =
+        let outDir = createTempOutDir ()
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "message_1.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "memset(data, 0, 8)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
     [<Fact>]
     let ``generate with range_check true produces bounds check`` () =
         let outDir = createTempOutDir ()

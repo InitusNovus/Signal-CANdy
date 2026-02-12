@@ -42,6 +42,10 @@ extern int test_stress_suite(void);
 #    include "vt_msg.h"
 #    define HAVE_VT_MSG 1
 #  endif
+#  if __has_include("fd_msg.h")
+#    include "fd_msg.h"
+#    define HAVE_FD_MSG 1
+#  endif
 #endif
 
 void print_bytes(const uint8_t* data, size_t len) {
@@ -395,6 +399,59 @@ static int test_dispatch_external_multi() {
 }
 #endif
 
+#ifdef HAVE_FD_MSG
+static int test_fd_roundtrip() {
+    printf("--- Running test_fd_roundtrip ---\n");
+    FD_MSG_t tx = {0};
+    tx.FD_Sig_Low = 0xAB;
+    tx.FD_Sig_High = 1234.5f;
+    tx.FD_Sig_Mid_BE = 0xCD;
+
+    uint8_t data[64] = {0};
+    uint8_t dlc = 0;
+
+    if (!FD_MSG_encode(data, &dlc, &tx)) {
+        printf("FD_MSG encode failed\n");
+        return 1;
+    }
+
+    if (dlc != 64) {
+        printf("FD DLC mismatch: got %d expected 64\n", dlc);
+        return 1;
+    }
+
+    // Verify low byte is at position 0
+    if (data[0] != 0xAB) {
+        printf("FD_Sig_Low byte mismatch: got 0x%02X expected 0xAB\n", data[0]);
+        return 1;
+    }
+
+    FD_MSG_t rx = {0};
+    if (!FD_MSG_decode(&rx, data, dlc)) {
+        printf("FD_MSG decode failed\n");
+        return 1;
+    }
+
+    if (fabs(rx.FD_Sig_Low - 0xAB) > 1e-6) {
+        printf("FD_Sig_Low mismatch: got %f expected 171\n", rx.FD_Sig_Low);
+        return 1;
+    }
+    // FD_Sig_High factor=0.1 → quantized to nearest 0.1
+    double expected_high = floor(1234.5 * 10.0 + 0.5) / 10.0;
+    if (fabs(rx.FD_Sig_High - expected_high) > 0.05) {
+        printf("FD_Sig_High mismatch: got %f expected %f\n", rx.FD_Sig_High, expected_high);
+        return 1;
+    }
+    if (fabs(rx.FD_Sig_Mid_BE - 0xCD) > 1e-6) {
+        printf("FD_Sig_Mid_BE mismatch: got %f expected 205\n", rx.FD_Sig_Mid_BE);
+        return 1;
+    }
+
+    printf("CAN FD roundtrip successful! (DLC=%d, data[0]=0x%02X)\n", dlc, data[0]);
+    return 0;
+}
+#endif
+
 int main(int argc, char *argv[]) {
     if (argc < 2) {
         printf("Usage: %s <test_name>\n", argv[0]);
@@ -432,6 +489,11 @@ int main(int argc, char *argv[]) {
 #ifdef HAVE_VT_MSG
     else if (strcmp(argv[1], "test_value_table") == 0) {
         return test_value_table();
+    }
+#endif
+#ifdef HAVE_FD_MSG
+    else if (strcmp(argv[1], "test_fd_roundtrip") == 0) {
+        return test_fd_roundtrip();
     }
 #endif
 #ifdef HAVE_MESSAGE_1
