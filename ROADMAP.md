@@ -128,7 +128,7 @@
 
 - [x] **L-4a.** 8바이트 초과 페이로드(최대 64바이트) 지원을 위한 IR 확장 (불필요 — `Message.Length: uint16`이 이미 64 지원)
 - [x] **L-4b.** `get_bits_le/be`, `set_bits_le/be`의 8바이트 제한 제거 및 `memset` 동적 길이 적용
-- [ ] **L-4c.** DLC 매핑 테이블 (CAN FD DLC ↔ 실제 바이트 수) 코드 생성
+- [x] **L-4c.** DLC 매핑 테이블 (CAN FD DLC ↔ 실제 바이트 수) 코드 생성
 
 ---
 
@@ -148,5 +148,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1, M-2, M-3, M-4 완료 — [Medium] 전체 완료, L-4a, L-4b 완료 — CAN FD Phase 1-2)
+> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1, M-2, M-3, M-4 완료 — [Medium] 전체 완료, L-4a, L-4b, L-4c 완료 — CAN FD DLC 매핑 완료, signed signal decode 버그 수정)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`
