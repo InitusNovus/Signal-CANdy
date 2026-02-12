@@ -1,10 +1,9 @@
 namespace Generator
 
 open System.IO
-open Generator.Config
-open Generator.Ir
-open Generator.Dbc
-open Generator.Codegen
+open Signal.CANdy.Core
+open Signal.CANdy.Core.Config
+open Signal.CANdy.Core.Errors
 
 module Program =
     type CliArguments = {
@@ -14,6 +13,22 @@ module Program =
         Prefix: string option
         EmitMain: bool
     }
+
+    /// Find examples/main.c by traversing upwards from CWD and assembly base.
+    let private tryFindExampleMain () =
+        let candidatesFrom (startDir: string) =
+            seq {
+                let mutable d = startDir
+                for _ in 0 .. 6 do
+                    let p = Path.Combine(d, "examples", "main.c")
+                    if File.Exists p then yield p
+                    let parent = Directory.GetParent(d)
+                    if not (isNull parent) then d <- parent.FullName
+            }
+        let bases =
+            [ Directory.GetCurrentDirectory()
+              System.AppContext.BaseDirectory ]
+        bases |> Seq.collect candidatesFrom |> Seq.tryHead
 
     [<EntryPoint>]
     let main argv =
@@ -39,7 +54,7 @@ module Program =
             let parsedArgs = parseArgs args "" "" None None true
 
             if parsedArgs.DbcPath = "" || parsedArgs.OutputPath = "" then
-                eprintfn "Signal CANdy v0.2.0 - DBC to C Code Generator"
+                eprintfn "Signal CANdy v0.2.3 - DBC to C Code Generator"
                 eprintfn "Generate C99 parser modules from DBC files with C++ compatibility"
                 eprintfn ""
                 eprintfn "USAGE:"
@@ -67,15 +82,25 @@ module Program =
                 printfn "Prefix Override: %A" parsedArgs.Prefix
                 printfn "Emit Main: %b" parsedArgs.EmitMain
 
-                // Load config if provided, otherwise fall back to defaults
-                let defaultCfg = { PhysType = "float"; PhysMode = "double"; RangeCheck = false; Dispatch = "binary_search"; CrcCounterCheck = false; MotorolaStartBit = "msb"; FilePrefix = "sc_" }
+                // Load config via Core API
+                let defaultCfg : Config = {
+                    PhysType = "float"; PhysMode = "double"; RangeCheck = false
+                    Dispatch = "binary_search"; CrcCounterCheck = false
+                    MotorolaStartBit = "msb"; FilePrefix = "sc_"
+                }
                 let cfg =
                     match parsedArgs.ConfigPath with
-                    | Some path -> 
-                        match Config.loadConfig path with
-                        | Some c -> c
-                        | None -> 
-                            eprintfn "Warning: Failed to load config, falling back to defaults."
+                    | Some path ->
+                        match Config.loadFromYaml path with
+                        | Ok c -> c
+                        | Error ve ->
+                            let msg =
+                                match ve with
+                                | ValidationError.InvalidValue s -> s
+                                | ValidationError.MissingField s -> s
+                                | ValidationError.IoError s -> s
+                                | ValidationError.Unknown s -> s
+                            eprintfn "Warning: Failed to load config: %s. Falling back to defaults." msg
                             defaultCfg
                     | None -> defaultCfg
 
@@ -85,19 +110,37 @@ module Program =
                     | Some pfx -> { cfg with FilePrefix = pfx }
                     | None -> cfg
 
-                match Dbc.parseDbcFile parsedArgs.DbcPath with
+                // Parse DBC via Core
+                match Signal.CANdy.Core.Dbc.parseDbcFile parsedArgs.DbcPath with
                 | Ok ir ->
-                    if Codegen.generateCode ir parsedArgs.OutputPath cfg parsedArgs.EmitMain then
+                    // Generate via Core
+                    match Signal.CANdy.Core.Codegen.generate ir parsedArgs.OutputPath cfg with
+                    | Ok _ ->
+                        // Emit main.c if requested
+                        if parsedArgs.EmitMain then
+                            let outMain = Path.Combine(parsedArgs.OutputPath, "src", "main.c")
+                            match tryFindExampleMain () with
+                            | Some exampleMain -> File.Copy(exampleMain, outMain, true)
+                            | None -> eprintfn "Warning: examples/main.c not found from working locations; skipping emit-main."
                         printfn "Code generation successful."
                         0
-                    else
-                        eprintfn "Code generation failed."
+                    | Error ce ->
+                        let msg =
+                            match ce with
+                            | CodeGenError.TemplateError s -> s
+                            | CodeGenError.IoError s -> s
+                            | CodeGenError.Unknown s -> s
+                        eprintfn "Code generation failed: %s" msg
                         1
-                | Error errors ->
-                    eprintfn "Failed to process DBC file:"
-                    for e in errors do eprintfn "- %s" e
+                | Error pe ->
+                    let msg =
+                        match pe with
+                        | ParseError.InvalidDbc s -> s
+                        | ParseError.IoError s -> s
+                        | ParseError.Unknown s -> s
+                    eprintfn "Failed to process DBC file: %s" msg
                     1
         with
         | ex ->
             eprintfn "An unexpected error occurred: %s" ex.Message
-            1 // failure
+            1

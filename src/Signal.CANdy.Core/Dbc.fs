@@ -260,10 +260,24 @@ module Dbc =
                     )
                     |> List.ofSeq
 
+                let validateMuxStructure (msgs: Message list) : string option =
+                    let perMessage (m: Message) : string option =
+                        let switches = m.Signals |> List.filter (fun s -> s.MultiplexerIndicator = Some "M")
+                        if switches.Length > 1 then
+                            Some (sprintf "Multiple multiplexer switch signals found in message '%s'." m.Name)
+                        else
+                            let malformed =
+                                m.Signals
+                                |> List.tryFind (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsNone)
+                            match malformed with
+                            | Some s -> Some (sprintf "Multiplexed signal '%s' in message '%s' is missing a switch value (m<k>)." s.Name m.Name)
+                            | None -> None
+                    msgs |> List.tryPick perMessage
+
                 let combineValidators validators =
                     validators |> List.tryPick id
 
-                match combineValidators [ validateDuplicates messages; validateOverlaps messages; validateExceedsDlc messages ] with
+                match combineValidators [ validateDuplicates messages; validateOverlaps messages; validateMuxStructure messages; validateExceedsDlc messages ] with
                 | Some err -> Error (ParseError.InvalidDbc err)
                 | None -> Ok { Messages = messages }
             with ex ->

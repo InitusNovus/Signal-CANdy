@@ -51,12 +51,12 @@
 
 > **선행 조건**: H-1 (Core 테스트 스위트) 완료 후 착수
 
-- [ ] **H-2a.** Generator.fsproj에 Core 프로젝트 참조 추가
-- [ ] **H-2b.** Generator/Program.fs가 Core API(`Api.generateFromPaths`)를 호출하도록 변경
-- [ ] **H-2c.** Generator의 중복 모듈 제거: `Config.fs`, `Ir.fs`, `Dbc.fs`, `Codegen.Utils.fs`, `Codegen.Message.fs`, `Codegen.Registry.fs`, `Codegen.fs`
-- [ ] **H-2d.** Generator/Result.fs 평가 — Core의 `Result` 패턴으로 대체 가능하면 제거
-- [ ] **H-2e.** Generator 기존 테스트(`tests/Generator.Tests/`)가 Core 기반으로도 통과하는지 확인
-- [ ] **H-2f.** CI에서 Generator CLI, Signal.CANdy.CLI 양쪽 진입점 모두 코드 생성 + C 빌드 테스트
+- [x] **H-2a.** Generator.fsproj에 Core 프로젝트 참조 추가
+- [x] **H-2b.** Generator/Program.fs가 Core API를 직접 호출하도록 변경 (Config/Dbc/Codegen/Errors open)
+- [x] **H-2c.** Generator의 중복 모듈 제거: `Config.fs`, `Ir.fs`, `Dbc.fs`, `Codegen.Utils.fs`, `Codegen.Message.fs`, `Codegen.Registry.fs`, `Codegen.fs` — fsproj에서 제거 + 디스크에서 삭제
+- [x] **H-2d.** Generator/Result.fs → `Compat.fs`로 통합 (Result active pattern + Ir/Config/Dbc/Codegen 역호환 브리지)
+- [x] **H-2e.** Generator 기존 테스트(`tests/Generator.Tests/`) 16/16 통과 확인 (Compat.fs 브리지 경유)
+- [x] **H-2f.** E2E 검증: Generator CLI + Signal.CANdy.CLI 양쪽 모두 코드 생성 + gcc 빌드 + roundtrip 테스트 통과
 
 ### H-3. Facade 에러 매핑 정밀화
 
@@ -74,11 +74,11 @@
 
 ### M-1. 미사용 의존성 제거
 
-- [ ] **M-1a.** `Generator.fsproj`에서 `Scriban 6.2.1` 패키지 참조 제거
-- [ ] **M-1b.** `Generator.fsproj`에서 `Argu 6.1.1` 패키지 참조 제거
-- [ ] **M-1c.** `Generator.fsproj`에서 `FSharp.SystemTextJson 1.4.36` 패키지 참조 제거
-- [ ] **M-1d.** `Generator.fsproj`에서 `FsToolkit.ErrorHandling 5.0.1` 패키지 참조 제거
-- [ ] **M-1e.** `dotnet restore && dotnet build && dotnet test` 통과 확인
+- [x] **M-1a.** `Generator.fsproj`에서 `Scriban 6.2.1` 패키지 참조 제거 (H-2c에서 완료)
+- [x] **M-1b.** `Generator.fsproj`에서 `Argu 6.1.1` 패키지 참조 제거 (H-2c에서 완료)
+- [x] **M-1c.** `Generator.fsproj`에서 `FSharp.SystemTextJson 1.4.36` 패키지 참조 제거 (H-2c에서 완료)
+- [x] **M-1d.** `Generator.fsproj`에서 `FsToolkit.ErrorHandling 5.0.1` 패키지 참조 제거 (H-2c에서 완료)
+- [x] **M-1e.** `dotnet restore && dotnet build && dotnet test` 통과 확인 (63/63 pass)
 
 ### M-2. Dead Code 삭제
 
@@ -148,5 +148,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-3 완료)
+> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1 완료)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`
