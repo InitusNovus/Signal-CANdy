@@ -248,3 +248,115 @@ module CodegenTests =
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
+
+    // -------------------------------------------------------
+    // L-4c: CAN FD DLC mapping codegen tests
+    // -------------------------------------------------------
+
+    [<Fact>]
+    let ``generate utils.h contains DLC mapping prototypes`` () =
+        let outDir = createTempOutDir ()
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.h")
+                let content = File.ReadAllText(utilsH)
+                content |> should haveSubstring "uint8_t canfd_dlc_to_len(uint8_t dlc);"
+                content |> should haveSubstring "uint8_t canfd_len_to_dlc(uint8_t len);"
+                content |> should haveSubstring "CAN FD DLC"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate utils.c contains DLC mapping implementation`` () =
+        let outDir = createTempOutDir ()
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+                let content = File.ReadAllText(utilsC)
+                content |> should haveSubstring "CANFD_DLC_TO_LEN[16]"
+                content |> should haveSubstring "canfd_dlc_to_len"
+                content |> should haveSubstring "canfd_len_to_dlc"
+                content |> should haveSubstring "if (dlc > 15)"
+                content |> should haveSubstring "if (len <= 8)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    // -------------------------------------------------------
+    // Comprehensive signal codegen pattern tests
+    // -------------------------------------------------------
+
+    [<Fact>]
+    let ``generate creates get_bits_le call for 32-bit LE signal`` () =
+        let ir =
+            { Messages =
+                [ { Name = "LE32_MSG"
+                    Id = 550u
+                    IsExtended = false
+                    Length = 8us
+                    Signals =
+                        [ { mkSignal "Sig32" 0us 32us with Maximum = None; Minimum = None } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "le32_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "get_bits_le(data, 0, 32)"
+                content |> should haveSubstring "set_bits_le(data, 0, 32"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate creates get_bits_be call for 16-bit BE signal`` () =
+        let ir =
+            { Messages =
+                [ { Name = "BE16_MSG"
+                    Id = 551u
+                    IsExtended = false
+                    Length = 8us
+                    Signals =
+                        [ { mkSignal "SigBE16" 7us 16us with ByteOrder = ByteOrder.Big; Maximum = None; Minimum = None } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "be16_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "get_bits_be(data, 7, 16)"
+                content |> should haveSubstring "set_bits_be(data, 7, 16"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate creates sign extension for signed 16-bit signal`` () =
+        let ir =
+            { Messages =
+                [ { Name = "SIGN16_MSG"
+                    Id = 552u
+                    IsExtended = false
+                    Length = 8us
+                    Signals =
+                        [ { mkSignal "SigS16" 0us 16us with IsSigned = true; Maximum = None; Minimum = None } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+        let outDir = createTempOutDir ()
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sign16_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "1ULL << (16 - 1)"
+                content |> should haveSubstring "~((1ULL << 16) - 1)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
