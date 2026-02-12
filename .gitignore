@@ -21,7 +21,6 @@ CONTRIBUTING-LLM.md
 INSTRUCTIONS.md
 PROMPT.md
 AGENT.md
-AGENTS.md
 prompts/
 instructions/
 .copilot/
@@ -36,6 +35,7 @@ instructions/
 .codespaces/
 .vscode/settings.local.json
 .vscode/*.local.*
+.sisyphus/
 
 # GitHub-specific AI instruction docs (do not publish)
 .github/copilot-instructions.md
@@ -61,8 +61,6 @@ Thumbs.db
 *.log
 tmp/stress_reports/
 analysis/
-Report/
-ROADMAP.md
 
 # Backups/archives
 *.zip
