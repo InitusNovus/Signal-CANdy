@@ -9,6 +9,7 @@ src/Signal.CANdy.Core/   Core F# library (parsing, IR, config, codegen)
 src/Signal.CANdy/        C#-friendly facade (maps Result → exceptions)
 src/Signal.CANdy.CLI/    CLI tool (argument parsing, harness generation)
 src/Generator/           Legacy standalone generator (Exe)
+tests/Signal.CANdy.Core.Tests/  xUnit + FsUnit tests for Core library
 tests/Generator.Tests/   xUnit + FsUnit tests (references Generator project)
 templates/               Scriban templates for C code generation
 examples/                Sample DBC files, YAML configs, and C test runner
@@ -58,6 +59,20 @@ Defined in `.github/workflows/ci.yml`. Key jobs:
 - **lint**: repo hygiene checks
 
 Release workflow (`.github/workflows/release.yml`) triggers on `v*` tags pushed to main.
+
+### Pre-Release Checklist (릴리스 전 필수 확인)
+
+버전 태그를 생성하기 **전에** 아래 항목을 반드시 확인한다. 누락 시 NuGet 패키지에 구버전 문서가 포함되거나 README가 불일치한다.
+
+| # | 확인 항목 | 대상 파일 |
+|---|-----------|-----------|
+| 1 | `<Version>` 태그가 릴리스 버전과 일치 | `*.fsproj` (Core, Signal.CANdy) |
+| 2 | `Api.fs` `version()` 반환값이 릴리스 버전과 일치 | `src/Signal.CANdy.Core/Api.fs` |
+| 3 | NuGet install 예시 버전 번호 일치 | `README.md`, `README.NuGet.md` (Core, Facade) |
+| 4 | README(EN/KO) 프로젝트 구조·기능 목록 최신 반영 | `README.md`, `README.ko.md` |
+| 5 | `dotnet build -c Release` 0 warnings/errors | — |
+| 6 | `dotnet test -c Release` 전부 통과 | — |
+| 7 | `fantomas --check src/ tests/` 통과 | — |
 
 ## Code Style
 
