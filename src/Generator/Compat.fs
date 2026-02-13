@@ -43,6 +43,7 @@ module Dbc =
                 | Errors.ParseError.InvalidDbc s -> s
                 | Errors.ParseError.IoError s -> sprintf "Error parsing DBC file: %s" s
                 | Errors.ParseError.Unknown s -> s
+
             Error [ msg ]
 
 /// Backward-compatible Codegen module.
@@ -50,12 +51,7 @@ module Dbc =
 module Codegen =
 
     /// Legacy adapter: wraps Core's generate, returning bool and handling emit-main.
-    let generateCode
-        (ir: Ir.Ir)
-        (outputPath: string)
-        (config: Config.Config)
-        (emitMain: bool)
-        : bool =
+    let generateCode (ir: Ir.Ir) (outputPath: string) (config: Config.Config) (emitMain: bool) : bool =
         match Signal.CANdy.Core.Codegen.generate ir outputPath config with
         | Ok _ ->
             if emitMain then
@@ -64,19 +60,29 @@ module Codegen =
                     let candidatesFrom (startDir: string) =
                         seq {
                             let mutable d = startDir
-                            for _ in 0 .. 6 do
+
+                            for _ in 0..6 do
                                 let p = System.IO.Path.Combine(d, "examples", "main.c")
-                                if System.IO.File.Exists p then yield p
+
+                                if System.IO.File.Exists p then
+                                    yield p
+
                                 let parent = System.IO.Directory.GetParent(d)
-                                if not (isNull parent) then d <- parent.FullName
+
+                                if not (isNull parent) then
+                                    d <- parent.FullName
                         }
+
                     let bases =
-                        [ System.IO.Directory.GetCurrentDirectory()
-                          System.AppContext.BaseDirectory ]
+                        [ System.IO.Directory.GetCurrentDirectory(); System.AppContext.BaseDirectory ]
+
                     bases |> Seq.collect candidatesFrom |> Seq.tryHead
+
                 let outMain = System.IO.Path.Combine(outputPath, "src", "main.c")
+
                 match tryFindExampleMain () with
                 | Some exampleMain -> System.IO.File.Copy(exampleMain, outMain, true)
                 | None -> eprintfn "Warning: examples/main.c not found from working locations; skipping emit-main."
+
             true
         | Error _ -> false

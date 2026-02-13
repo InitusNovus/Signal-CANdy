@@ -37,7 +37,7 @@ type GeneratorFacade() =
     /// <summary>
     /// Library version string.
     /// </summary>
-    member _.Version : string = Signal.CANdy.Core.Api.version ()
+    member _.Version: string = Signal.CANdy.Core.Api.version ()
 
     /// <summary>
     /// Validates a configuration object; throws <see cref="SignalCandyValidationException"/> on error.
@@ -46,11 +46,13 @@ type GeneratorFacade() =
         match Signal.CANdy.Core.Config.validate cfg with
         | Ok _ -> ()
         | Error e ->
-            let msg = match e with
-                      | Signal.CANdy.Core.Errors.ValidationError.InvalidValue s -> s
-                      | Signal.CANdy.Core.Errors.ValidationError.MissingField s -> s
-                      | Signal.CANdy.Core.Errors.ValidationError.IoError s -> s
-                      | Signal.CANdy.Core.Errors.ValidationError.Unknown s -> s
+            let msg =
+                match e with
+                | Signal.CANdy.Core.Errors.ValidationError.InvalidValue s -> s
+                | Signal.CANdy.Core.Errors.ValidationError.MissingField s -> s
+                | Signal.CANdy.Core.Errors.ValidationError.IoError s -> s
+                | Signal.CANdy.Core.Errors.ValidationError.Unknown s -> s
+
             raise (SignalCandyValidationException(msg))
 
     /// <summary>
@@ -60,52 +62,75 @@ type GeneratorFacade() =
         match Signal.CANdy.Core.Api.parseDbc path with
         | Ok ir -> ir
         | Error e ->
-            let msg = match e with
-                      | Signal.CANdy.Core.Errors.ParseError.InvalidDbc s -> s
-                      | Signal.CANdy.Core.Errors.ParseError.IoError s -> s
-                      | Signal.CANdy.Core.Errors.ParseError.Unknown s -> s
+            let msg =
+                match e with
+                | Signal.CANdy.Core.Errors.ParseError.InvalidDbc s -> s
+                | Signal.CANdy.Core.Errors.ParseError.IoError s -> s
+                | Signal.CANdy.Core.Errors.ParseError.Unknown s -> s
+
             raise (SignalCandyParseException(msg))
 
     /// <summary>
     /// Generates C code from IR and configuration; throws <see cref="SignalCandyCodeGenException"/> on error.
     /// </summary>
-    member _.GenerateCode(ir: Signal.CANdy.Core.Ir.Ir, outputPath: string, cfg: Signal.CANdy.Core.Config.Config) : Signal.CANdy.Core.Errors.GeneratedFiles =
+    member _.GenerateCode
+        (ir: Signal.CANdy.Core.Ir.Ir, outputPath: string, cfg: Signal.CANdy.Core.Config.Config)
+        : Signal.CANdy.Core.Errors.GeneratedFiles =
         match Signal.CANdy.Core.Api.generateCode ir outputPath cfg with
         | Ok files -> files
         | Error e ->
-            let msg = match e with
-                      | Signal.CANdy.Core.Errors.CodeGenError.TemplateError s -> s
-                      | Signal.CANdy.Core.Errors.CodeGenError.IoError s -> s
-                      | Signal.CANdy.Core.Errors.CodeGenError.Unknown s -> s
+            let msg =
+                match e with
+                | Signal.CANdy.Core.Errors.CodeGenError.TemplateError s -> s
+                | Signal.CANdy.Core.Errors.CodeGenError.IoError s -> s
+                | Signal.CANdy.Core.Errors.CodeGenError.Unknown s -> s
+
             raise (SignalCandyCodeGenException(msg))
 
     /// <summary>
     /// High-level convenience: loads optional YAML config, parses DBC, and generates code.
     /// Throws the appropriate <see cref="SignalCandyException"/> subclass on error.
     /// </summary>
-    member _.GenerateFromPathsAsync(dbcPath: string, outputPath: string, configPath: string) : Task<Signal.CANdy.Core.Errors.GeneratedFiles> = task {
-        let! res = Signal.CANdy.Core.Api.generateFromPaths dbcPath outputPath (if String.IsNullOrWhiteSpace configPath then None else Some configPath)
-        match res with
-        | Ok files -> return files
-        | Error e ->
-            match e with
-            | Signal.CANdy.Core.Errors.GenerateError.Parse pe ->
-                let msg = match pe with
-                          | Signal.CANdy.Core.Errors.ParseError.InvalidDbc s -> sprintf "[InvalidDbc] %s" s
-                          | Signal.CANdy.Core.Errors.ParseError.IoError s -> sprintf "[IoError] %s" s
-                          | Signal.CANdy.Core.Errors.ParseError.Unknown s -> sprintf "[Unknown] %s" s
-                return raise (SignalCandyParseException(msg))
-            | Signal.CANdy.Core.Errors.GenerateError.Validation ve ->
-                let msg = match ve with
-                          | Signal.CANdy.Core.Errors.ValidationError.InvalidValue s -> sprintf "[InvalidValue] %s" s
-                          | Signal.CANdy.Core.Errors.ValidationError.MissingField s -> sprintf "[MissingField] %s" s
-                          | Signal.CANdy.Core.Errors.ValidationError.IoError s -> sprintf "[IoError] %s" s
-                          | Signal.CANdy.Core.Errors.ValidationError.Unknown s -> sprintf "[Unknown] %s" s
-                return raise (SignalCandyValidationException(msg))
-            | Signal.CANdy.Core.Errors.GenerateError.CodeGen ce ->
-                let msg = match ce with
-                          | Signal.CANdy.Core.Errors.CodeGenError.TemplateError s -> sprintf "[TemplateError] %s" s
-                          | Signal.CANdy.Core.Errors.CodeGenError.IoError s -> sprintf "[IoError] %s" s
-                          | Signal.CANdy.Core.Errors.CodeGenError.Unknown s -> sprintf "[Unknown] %s" s
-                return raise (SignalCandyCodeGenException(msg))
-    }
+    member _.GenerateFromPathsAsync
+        (dbcPath: string, outputPath: string, configPath: string)
+        : Task<Signal.CANdy.Core.Errors.GeneratedFiles> =
+        task {
+            let! res =
+                Signal.CANdy.Core.Api.generateFromPaths
+                    dbcPath
+                    outputPath
+                    (if String.IsNullOrWhiteSpace configPath then
+                         None
+                     else
+                         Some configPath)
+
+            match res with
+            | Ok files -> return files
+            | Error e ->
+                match e with
+                | Signal.CANdy.Core.Errors.GenerateError.Parse pe ->
+                    let msg =
+                        match pe with
+                        | Signal.CANdy.Core.Errors.ParseError.InvalidDbc s -> sprintf "[InvalidDbc] %s" s
+                        | Signal.CANdy.Core.Errors.ParseError.IoError s -> sprintf "[IoError] %s" s
+                        | Signal.CANdy.Core.Errors.ParseError.Unknown s -> sprintf "[Unknown] %s" s
+
+                    return raise (SignalCandyParseException(msg))
+                | Signal.CANdy.Core.Errors.GenerateError.Validation ve ->
+                    let msg =
+                        match ve with
+                        | Signal.CANdy.Core.Errors.ValidationError.InvalidValue s -> sprintf "[InvalidValue] %s" s
+                        | Signal.CANdy.Core.Errors.ValidationError.MissingField s -> sprintf "[MissingField] %s" s
+                        | Signal.CANdy.Core.Errors.ValidationError.IoError s -> sprintf "[IoError] %s" s
+                        | Signal.CANdy.Core.Errors.ValidationError.Unknown s -> sprintf "[Unknown] %s" s
+
+                    return raise (SignalCandyValidationException(msg))
+                | Signal.CANdy.Core.Errors.GenerateError.CodeGen ce ->
+                    let msg =
+                        match ce with
+                        | Signal.CANdy.Core.Errors.CodeGenError.TemplateError s -> sprintf "[TemplateError] %s" s
+                        | Signal.CANdy.Core.Errors.CodeGenError.IoError s -> sprintf "[IoError] %s" s
+                        | Signal.CANdy.Core.Errors.CodeGenError.Unknown s -> sprintf "[Unknown] %s" s
+
+                    return raise (SignalCandyCodeGenException(msg))
+        }

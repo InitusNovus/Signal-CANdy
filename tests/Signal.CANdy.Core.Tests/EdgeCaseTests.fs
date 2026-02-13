@@ -12,7 +12,7 @@ open Signal.CANdy.Core.Errors
 module EdgeCaseTests =
 
     /// Default config for codegen tests
-    let private defaultConfig : Config =
+    let private defaultConfig: Config =
         { PhysType = "float"
           PhysMode = "double"
           RangeCheck = false
@@ -29,7 +29,8 @@ module EdgeCaseTests =
 
     /// Helper: clean up temp directory
     let private cleanupDir dir =
-        if Directory.Exists(dir) then Directory.Delete(dir, true)
+        if Directory.Exists(dir) then
+            Directory.Delete(dir, true)
 
     /// Helper: write DBC content to a temp file and return its path
     let private createTempDbcFile (content: string) =
@@ -45,6 +46,7 @@ module EdgeCaseTests =
     let ``codegen succeeds for empty DBC (no messages)`` () =
         let emptyIr = { Messages = [] }
         let outDir = createTempOutDir ()
+
         try
             match generate emptyIr outDir defaultConfig with
             | Ok files ->
@@ -61,8 +63,12 @@ module EdgeCaseTests =
 
     [<Fact>]
     let ``codegen succeeds for Motorola LSB DBC`` () =
-        let lsbConfig = { defaultConfig with MotorolaStartBit = "lsb" }
-        let dbcContent = """
+        let lsbConfig =
+            { defaultConfig with
+                MotorolaStartBit = "lsb" }
+
+        let dbcContent =
+            """
 VERSION ""
 NS_ :
 BS_:
@@ -70,8 +76,10 @@ BS_:
 BO_ 500 MOTO_MSG: 8 Vector__XXX
  SG_ MotorSig : 0|8@0+ (1,0) [0|255] "" Vector__XXX
 """
+
         let dbcPath = createTempDbcFile dbcContent
         let outDir = createTempOutDir ()
+
         try
             match parseDbcFile dbcPath with
             | Ok ir ->
@@ -94,29 +102,33 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { Name = "SignedTemp"
-                            StartBit = 0us
-                            Length = 16us
-                            Factor = 0.1
-                            Offset = -40.0
-                            Minimum = Some -40.0
-                            Maximum = Some 80.0
-                            Unit = "C"
-                            IsSigned = true
-                            IsCrc = false
-                            IsCounter = false
-                            ByteOrder = ByteOrder.Little
-                            MultiplexerIndicator = None
-                            MultiplexerSwitchValue = None
-                            ValueTable = None
-                            Receivers = [] } ]
+                      [ { Name = "SignedTemp"
+                          StartBit = 0us
+                          Length = 16us
+                          Factor = 0.1
+                          Offset = -40.0
+                          Minimum = Some -40.0
+                          Maximum = Some 80.0
+                          Unit = "C"
+                          IsSigned = true
+                          IsCrc = false
+                          IsCounter = false
+                          ByteOrder = ByteOrder.Little
+                          MultiplexerIndicator = None
+                          MultiplexerSwitchValue = None
+                          ValueTable = None
+                          Receivers = [] } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 // Signed signal should have sign extension code
                 content |> should haveSubstring "1ULL <<"
@@ -137,41 +149,43 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                     IsExtended = false
                     Length = 64us
                     Signals =
-                        [ { Name = "FD_Low"
-                            StartBit = 0us
-                            Length = 8us
-                            Factor = 1.0
-                            Offset = 0.0
-                            Minimum = Some 0.0
-                            Maximum = Some 255.0
-                            Unit = ""
-                            IsSigned = false
-                            IsCrc = false
-                            IsCounter = false
-                            ByteOrder = ByteOrder.Little
-                            MultiplexerIndicator = None
-                            MultiplexerSwitchValue = None
-                            ValueTable = None
-                            Receivers = [] }
-                          { Name = "FD_High"
-                            StartBit = 480us
-                            Length = 16us
-                            Factor = 0.1
-                            Offset = 0.0
-                            Minimum = None
-                            Maximum = None
-                            Unit = ""
-                            IsSigned = false
-                            IsCrc = false
-                            IsCounter = false
-                            ByteOrder = ByteOrder.Little
-                            MultiplexerIndicator = None
-                            MultiplexerSwitchValue = None
-                            ValueTable = None
-                            Receivers = [] } ]
+                      [ { Name = "FD_Low"
+                          StartBit = 0us
+                          Length = 8us
+                          Factor = 1.0
+                          Offset = 0.0
+                          Minimum = Some 0.0
+                          Maximum = Some 255.0
+                          Unit = ""
+                          IsSigned = false
+                          IsCrc = false
+                          IsCounter = false
+                          ByteOrder = ByteOrder.Little
+                          MultiplexerIndicator = None
+                          MultiplexerSwitchValue = None
+                          ValueTable = None
+                          Receivers = [] }
+                        { Name = "FD_High"
+                          StartBit = 480us
+                          Length = 16us
+                          Factor = 0.1
+                          Offset = 0.0
+                          Minimum = None
+                          Maximum = None
+                          Unit = ""
+                          IsSigned = false
+                          IsCrc = false
+                          IsCounter = false
+                          ByteOrder = ByteOrder.Little
+                          MultiplexerIndicator = None
+                          MultiplexerSwitchValue = None
+                          ValueTable = None
+                          Receivers = [] } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate fdIr outDir defaultConfig with
             | Ok files ->
@@ -198,25 +212,27 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                     IsExtended = false
                     Length = 32us
                     Signals =
-                        [ { Name = "HighSig"
-                            StartBit = 200us
-                            Length = 8us
-                            Factor = 1.0
-                            Offset = 0.0
-                            Minimum = None
-                            Maximum = None
-                            Unit = ""
-                            IsSigned = false
-                            IsCrc = false
-                            IsCounter = false
-                            ByteOrder = ByteOrder.Little
-                            MultiplexerIndicator = None
-                            MultiplexerSwitchValue = None
-                            ValueTable = None
-                            Receivers = [] } ]
+                      [ { Name = "HighSig"
+                          StartBit = 200us
+                          Length = 8us
+                          Factor = 1.0
+                          Offset = 0.0
+                          Minimum = None
+                          Maximum = None
+                          Unit = ""
+                          IsSigned = false
+                          IsCrc = false
+                          IsCounter = false
+                          ByteOrder = ByteOrder.Little
+                          MultiplexerIndicator = None
+                          MultiplexerSwitchValue = None
+                          ValueTable = None
+                          Receivers = [] } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate fdIr outDir defaultConfig with
             | Ok files ->
@@ -238,25 +254,27 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                     IsExtended = false
                     Length = 64us
                     Signals =
-                        [ { Name = "FullPayload"
-                            StartBit = 0us
-                            Length = 64us
-                            Factor = 1.0
-                            Offset = 0.0
-                            Minimum = None
-                            Maximum = None
-                            Unit = ""
-                            IsSigned = false
-                            IsCrc = false
-                            IsCounter = false
-                            ByteOrder = ByteOrder.Little
-                            MultiplexerIndicator = None
-                            MultiplexerSwitchValue = None
-                            ValueTable = None
-                            Receivers = [] } ]
+                      [ { Name = "FullPayload"
+                          StartBit = 0us
+                          Length = 64us
+                          Factor = 1.0
+                          Offset = 0.0
+                          Minimum = None
+                          Maximum = None
+                          Unit = ""
+                          IsSigned = false
+                          IsCrc = false
+                          IsCounter = false
+                          ByteOrder = ByteOrder.Little
+                          MultiplexerIndicator = None
+                          MultiplexerSwitchValue = None
+                          ValueTable = None
+                          Receivers = [] } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate fdIr outDir defaultConfig with
             | Ok files ->
@@ -277,25 +295,27 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { Name = "BigValue"
-                            StartBit = 0us
-                            Length = 64us
-                            Factor = 1.0
-                            Offset = 0.0
-                            Minimum = None
-                            Maximum = None
-                            Unit = ""
-                            IsSigned = false
-                            IsCrc = false
-                            IsCounter = false
-                            ByteOrder = ByteOrder.Little
-                            MultiplexerIndicator = None
-                            MultiplexerSwitchValue = None
-                            ValueTable = None
-                            Receivers = [] } ]
+                      [ { Name = "BigValue"
+                          StartBit = 0us
+                          Length = 64us
+                          Factor = 1.0
+                          Offset = 0.0
+                          Minimum = None
+                          Maximum = None
+                          Unit = ""
+                          IsSigned = false
+                          IsCrc = false
+                          IsCounter = false
+                          ByteOrder = ByteOrder.Little
+                          MultiplexerIndicator = None
+                          MultiplexerSwitchValue = None
+                          ValueTable = None
+                          Receivers = [] } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate ir outDir defaultConfig with
             | Ok files ->

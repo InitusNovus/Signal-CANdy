@@ -6,28 +6,32 @@ open Signal.CANdy.Core.Config
 open Signal.CANdy.Core.Errors
 
 module Program =
-    type CliArguments = {
-        DbcPath: string
-        OutputPath: string
-        ConfigPath: string option
-        Prefix: string option
-        EmitMain: bool
-    }
+    type CliArguments =
+        { DbcPath: string
+          OutputPath: string
+          ConfigPath: string option
+          Prefix: string option
+          EmitMain: bool }
 
     /// Find examples/main.c by traversing upwards from CWD and assembly base.
     let private tryFindExampleMain () =
         let candidatesFrom (startDir: string) =
             seq {
                 let mutable d = startDir
-                for _ in 0 .. 6 do
+
+                for _ in 0..6 do
                     let p = Path.Combine(d, "examples", "main.c")
-                    if File.Exists p then yield p
+
+                    if File.Exists p then
+                        yield p
+
                     let parent = Directory.GetParent(d)
-                    if not (isNull parent) then d <- parent.FullName
+
+                    if not (isNull parent) then
+                        d <- parent.FullName
             }
-        let bases =
-            [ Directory.GetCurrentDirectory()
-              System.AppContext.BaseDirectory ]
+
+        let bases = [ Directory.GetCurrentDirectory(); System.AppContext.BaseDirectory ]
         bases |> Seq.collect candidatesFrom |> Seq.tryHead
 
     [<EntryPoint>]
@@ -35,21 +39,42 @@ module Program =
         try
             let args = argv |> List.ofArray
 
-            let rec parseArgs (argsList: string list) (currentDbc: string) (currentOut: string) (currentConfig: string option) (currentPrefix: string option) (currentEmitMain: bool) =
+            let rec parseArgs
+                (argsList: string list)
+                (currentDbc: string)
+                (currentOut: string)
+                (currentConfig: string option)
+                (currentPrefix: string option)
+                (currentEmitMain: bool)
+                =
                 match argsList with
                 | "--dbc" :: path :: rest -> parseArgs rest path currentOut currentConfig currentPrefix currentEmitMain
                 | "--out" :: path :: rest -> parseArgs rest currentDbc path currentConfig currentPrefix currentEmitMain
-                | "--config" :: path :: rest -> parseArgs rest currentDbc currentOut (Some path) currentPrefix currentEmitMain
-                | "--prefix" :: pfx :: rest -> parseArgs rest currentDbc currentOut currentConfig (Some pfx) currentEmitMain
+                | "--config" :: path :: rest ->
+                    parseArgs rest currentDbc currentOut (Some path) currentPrefix currentEmitMain
+                | "--prefix" :: pfx :: rest ->
+                    parseArgs rest currentDbc currentOut currentConfig (Some pfx) currentEmitMain
                 | "--emit-main" :: flag :: rest ->
                     let v =
                         match flag.ToLowerInvariant() with
-                        | "true" | "1" | "yes" | "y" -> true
-                        | "false" | "0" | "no" | "n" -> false
+                        | "true"
+                        | "1"
+                        | "yes"
+                        | "y" -> true
+                        | "false"
+                        | "0"
+                        | "no"
+                        | "n" -> false
                         | _ -> true
+
                     parseArgs rest currentDbc currentOut currentConfig currentPrefix v
                 | _ :: rest -> parseArgs rest currentDbc currentOut currentConfig currentPrefix currentEmitMain
-                | [] -> { DbcPath = currentDbc; OutputPath = currentOut; ConfigPath = currentConfig; Prefix = currentPrefix; EmitMain = currentEmitMain }
+                | [] ->
+                    { DbcPath = currentDbc
+                      OutputPath = currentOut
+                      ConfigPath = currentConfig
+                      Prefix = currentPrefix
+                      EmitMain = currentEmitMain }
 
             let parsedArgs = parseArgs args "" "" None None true
 
@@ -83,11 +108,15 @@ module Program =
                 printfn "Emit Main: %b" parsedArgs.EmitMain
 
                 // Load config via Core API
-                let defaultCfg : Config = {
-                    PhysType = "float"; PhysMode = "double"; RangeCheck = false
-                    Dispatch = "binary_search"; CrcCounterCheck = false
-                    MotorolaStartBit = "msb"; FilePrefix = "sc_"
-                }
+                let defaultCfg: Config =
+                    { PhysType = "float"
+                      PhysMode = "double"
+                      RangeCheck = false
+                      Dispatch = "binary_search"
+                      CrcCounterCheck = false
+                      MotorolaStartBit = "msb"
+                      FilePrefix = "sc_" }
+
                 let cfg =
                     match parsedArgs.ConfigPath with
                     | Some path ->
@@ -100,6 +129,7 @@ module Program =
                                 | ValidationError.MissingField s -> s
                                 | ValidationError.IoError s -> s
                                 | ValidationError.Unknown s -> s
+
                             eprintfn "Warning: Failed to load config: %s. Falling back to defaults." msg
                             defaultCfg
                     | None -> defaultCfg
@@ -119,9 +149,13 @@ module Program =
                         // Emit main.c if requested
                         if parsedArgs.EmitMain then
                             let outMain = Path.Combine(parsedArgs.OutputPath, "src", "main.c")
+
                             match tryFindExampleMain () with
                             | Some exampleMain -> File.Copy(exampleMain, outMain, true)
-                            | None -> eprintfn "Warning: examples/main.c not found from working locations; skipping emit-main."
+                            | None ->
+                                eprintfn
+                                    "Warning: examples/main.c not found from working locations; skipping emit-main."
+
                         printfn "Code generation successful."
                         0
                     | Error ce ->
@@ -130,6 +164,7 @@ module Program =
                             | CodeGenError.TemplateError s -> s
                             | CodeGenError.IoError s -> s
                             | CodeGenError.Unknown s -> s
+
                         eprintfn "Code generation failed: %s" msg
                         1
                 | Error pe ->
@@ -138,9 +173,9 @@ module Program =
                         | ParseError.InvalidDbc s -> s
                         | ParseError.IoError s -> s
                         | ParseError.Unknown s -> s
+
                     eprintfn "Failed to process DBC file: %s" msg
                     1
-        with
-        | ex ->
+        with ex ->
             eprintfn "An unexpected error occurred: %s" ex.Message
             1

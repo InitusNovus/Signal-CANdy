@@ -11,7 +11,7 @@ open Signal.CANdy.Core.Errors
 module CodegenTests =
 
     /// Default config for codegen tests
-    let private defaultConfig : Config =
+    let private defaultConfig: Config =
         { PhysType = "float"
           PhysMode = "double"
           RangeCheck = false
@@ -46,9 +46,7 @@ module CodegenTests =
                 Id = 100u
                 IsExtended = false
                 Length = 8us
-                Signals =
-                    [ mkSignal "Signal_1" 0us 8us
-                      mkSignal "Signal_2" 8us 16us ]
+                Signals = [ mkSignal "Signal_1" 0us 8us; mkSignal "Signal_2" 8us 16us ]
                 Sender = "ECU"
                 Receivers = [] } ] }
 
@@ -60,7 +58,8 @@ module CodegenTests =
 
     /// Helper: clean up temp directory
     let private cleanupDir dir =
-        if Directory.Exists(dir) then Directory.Delete(dir, true)
+        if Directory.Exists(dir) then
+            Directory.Delete(dir, true)
 
     // -------------------------------------------------------
     // H-1d: Codegen.generate tests
@@ -69,6 +68,7 @@ module CodegenTests =
     [<Fact>]
     let ``generate creates expected files for single message`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
@@ -86,6 +86,7 @@ module CodegenTests =
     [<Fact>]
     let ``generate creates include guard in header`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
@@ -100,6 +101,7 @@ module CodegenTests =
     [<Fact>]
     let ``generate creates extern C guards`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
@@ -113,6 +115,7 @@ module CodegenTests =
     [<Fact>]
     let ``generate creates struct typedef`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
@@ -127,6 +130,7 @@ module CodegenTests =
     [<Fact>]
     let ``generate creates decode and encode functions`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
@@ -141,7 +145,11 @@ module CodegenTests =
     [<Fact>]
     let ``generate with phys_type fixed produces integer fast path`` () =
         let outDir = createTempOutDir ()
-        let fixedConfig = { defaultConfig with PhysType = "fixed"; PhysMode = "fixed_double" }
+
+        let fixedConfig =
+            { defaultConfig with
+                PhysType = "fixed"
+                PhysMode = "fixed_double" }
         // Use factor = 0.01 = 10^-2, offset = 0 (integral) -> should use llround fast path
         let ir =
             { Messages =
@@ -150,9 +158,12 @@ module CodegenTests =
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { mkSignal "Temp" 0us 16us with Factor = 0.01; Offset = 0.0 } ]
+                      [ { mkSignal "Temp" 0us 16us with
+                            Factor = 0.01
+                            Offset = 0.0 } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         try
             match generate ir outDir fixedConfig with
             | Ok files ->
@@ -166,11 +177,17 @@ module CodegenTests =
     [<Fact>]
     let ``generate with dispatch direct_map produces switch`` () =
         let outDir = createTempOutDir ()
-        let directMapConfig = { defaultConfig with Dispatch = "direct_map" }
+
+        let directMapConfig =
+            { defaultConfig with
+                Dispatch = "direct_map" }
+
         try
             match generate singleMessageIr outDir directMapConfig with
             | Ok files ->
-                let regC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.c")
+                let regC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.c")
+
                 let content = File.ReadAllText(regC)
                 content |> should haveSubstring "switch (id)"
             | Error e -> failwithf "Expected Ok, got: %A" e
@@ -184,10 +201,13 @@ module CodegenTests =
     [<Fact>]
     let ``generate utils.c contains n_bytes for FD-safe LE accessors`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
-                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+
                 let content = File.ReadAllText(utilsC)
                 // Must NOT have the old hardcoded "< 8" loop bound
                 content.Contains("i < 8 && (byte_offset + i) < 8") |> should equal false
@@ -211,7 +231,9 @@ module CodegenTests =
                     Signals = [ mkSignal "FD_Sig" 0us 8us ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate fdIr outDir defaultConfig with
             | Ok files ->
@@ -225,6 +247,7 @@ module CodegenTests =
     [<Fact>]
     let ``generate encode uses 8 for classic CAN memset`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
@@ -239,6 +262,7 @@ module CodegenTests =
     let ``generate with range_check true produces bounds check`` () =
         let outDir = createTempOutDir ()
         let rangeConfig = { defaultConfig with RangeCheck = true }
+
         try
             match generate singleMessageIr outDir rangeConfig with
             | Ok files ->
@@ -256,10 +280,13 @@ module CodegenTests =
     [<Fact>]
     let ``generate utils.h contains DLC mapping prototypes`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
-                let utilsH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.h")
+                let utilsH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.h")
+
                 let content = File.ReadAllText(utilsH)
                 content |> should haveSubstring "uint8_t canfd_dlc_to_len(uint8_t dlc);"
                 content |> should haveSubstring "uint8_t canfd_len_to_dlc(uint8_t len);"
@@ -271,10 +298,13 @@ module CodegenTests =
     [<Fact>]
     let ``generate utils.c contains DLC mapping implementation`` () =
         let outDir = createTempOutDir ()
+
         try
             match generate singleMessageIr outDir defaultConfig with
             | Ok files ->
-                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+
                 let content = File.ReadAllText(utilsC)
                 content |> should haveSubstring "CANFD_DLC_TO_LEN[16]"
                 content |> should haveSubstring "canfd_dlc_to_len"
@@ -298,10 +328,14 @@ module CodegenTests =
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { mkSignal "Sig32" 0us 32us with Maximum = None; Minimum = None } ]
+                      [ { mkSignal "Sig32" 0us 32us with
+                            Maximum = None
+                            Minimum = None } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
@@ -322,10 +356,15 @@ module CodegenTests =
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { mkSignal "SigBE16" 7us 16us with ByteOrder = ByteOrder.Big; Maximum = None; Minimum = None } ]
+                      [ { mkSignal "SigBE16" 7us 16us with
+                            ByteOrder = ByteOrder.Big
+                            Maximum = None
+                            Minimum = None } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
@@ -346,14 +385,21 @@ module CodegenTests =
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { mkSignal "SigS16" 0us 16us with IsSigned = true; Maximum = None; Minimum = None } ]
+                      [ { mkSignal "SigS16" 0us 16us with
+                            IsSigned = true
+                            Maximum = None
+                            Minimum = None } ]
                     Sender = "ECU"
                     Receivers = [] } ] }
+
         let outDir = createTempOutDir ()
+
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sign16_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sign16_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "1ULL << (16 - 1)"
                 content |> should haveSubstring "~((1ULL << 16) - 1)"

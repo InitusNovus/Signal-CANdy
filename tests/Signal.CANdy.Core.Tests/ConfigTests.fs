@@ -31,6 +31,7 @@ module ConfigTests =
     [<Fact>]
     let ``validate succeeds for valid config`` () =
         let result = validate validConfig
+
         match result with
         | Ok cfg -> cfg |> should equal validConfig
         | Error e -> failwithf "Expected Ok, got: %A" e
@@ -38,73 +39,91 @@ module ConfigTests =
     [<Fact>]
     let ``validate succeeds for all valid PhysType and PhysMode combos`` () =
         let combos =
-            [ ("float", "double"); ("float", "float"); ("fixed", "fixed_double"); ("fixed", "fixed_float") ]
+            [ ("float", "double")
+              ("float", "float")
+              ("fixed", "fixed_double")
+              ("fixed", "fixed_float") ]
+
         for (pt, pm) in combos do
-            let cfg = { validConfig with PhysType = pt; PhysMode = pm }
+            let cfg =
+                { validConfig with
+                    PhysType = pt
+                    PhysMode = pm }
+
             match validate cfg with
             | Ok _ -> ()
             | Error e -> failwithf "Expected Ok for (%s, %s), got: %A" pt pm e
 
     [<Fact>]
     let ``validate rejects invalid PhysType`` () =
-        let cfg = { validConfig with PhysType = "invalid" }
+        let cfg =
+            { validConfig with
+                PhysType = "invalid" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "phys_type"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "phys_type"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for invalid PhysType"
 
     [<Fact>]
     let ``validate rejects invalid PhysMode`` () =
-        let cfg = { validConfig with PhysMode = "bad_mode" }
+        let cfg =
+            { validConfig with
+                PhysMode = "bad_mode" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "phys_mode"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "phys_mode"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for invalid PhysMode"
 
     [<Fact>]
     let ``validate rejects invalid Dispatch`` () =
-        let cfg = { validConfig with Dispatch = "round_robin" }
+        let cfg =
+            { validConfig with
+                Dispatch = "round_robin" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "dispatch"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "dispatch"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for invalid Dispatch"
 
     [<Fact>]
     let ``validate rejects invalid MotorolaStartBit`` () =
-        let cfg = { validConfig with MotorolaStartBit = "middle" }
+        let cfg =
+            { validConfig with
+                MotorolaStartBit = "middle" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "motorola_start_bit"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "motorola_start_bit"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for invalid MotorolaStartBit"
 
     [<Fact>]
     let ``validate rejects invalid FilePrefix starting with digit`` () =
-        let cfg = { validConfig with FilePrefix = "123bad" }
+        let cfg =
+            { validConfig with
+                FilePrefix = "123bad" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "file_prefix"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "file_prefix"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for invalid FilePrefix"
 
     [<Fact>]
     let ``validate rejects empty FilePrefix`` () =
         let cfg = { validConfig with FilePrefix = "" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "file_prefix"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "file_prefix"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for empty FilePrefix"
 
     [<Fact>]
     let ``validate rejects FilePrefix with spaces`` () =
         let cfg = { validConfig with FilePrefix = "a b" }
+
         match validate cfg with
-        | Error (ValidationError.InvalidValue msg) ->
-            msg |> should haveSubstring "file_prefix"
+        | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "file_prefix"
         | Error e -> failwithf "Expected InvalidValue, got: %A" e
         | Ok _ -> failwith "Expected error for FilePrefix with spaces"
 
@@ -114,7 +133,8 @@ module ConfigTests =
 
     [<Fact>]
     let ``loadFromYaml loads valid YAML with snake_case keys`` () =
-        let yaml = """
+        let yaml =
+            """
 phys_type: fixed
 phys_mode: fixed_float
 range_check: true
@@ -123,7 +143,9 @@ crc_counter_check: false
 motorola_start_bit: lsb
 file_prefix: fw_
 """
+
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -140,7 +162,8 @@ file_prefix: fw_
 
     [<Fact>]
     let ``loadFromYaml loads valid YAML with PascalCase keys`` () =
-        let yaml = """
+        let yaml =
+            """
 PhysType: fixed
 PhysMode: fixed_double
 RangeCheck: true
@@ -149,7 +172,9 @@ CrcCounterCheck: true
 MotorolaStartBit: msb
 FilePrefix: my_
 """
+
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -166,10 +191,13 @@ FilePrefix: my_
 
     [<Fact>]
     let ``loadFromYaml infers PhysMode double for PhysType float`` () =
-        let yaml = """
+        let yaml =
+            """
 phys_type: float
 """
+
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -181,10 +209,13 @@ phys_type: float
 
     [<Fact>]
     let ``loadFromYaml infers PhysMode fixed_double for PhysType fixed`` () =
-        let yaml = """
+        let yaml =
+            """
 phys_type: fixed
 """
+
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -199,6 +230,7 @@ phys_type: fixed
         // Use an explicit empty map "{}" so YamlDotNet returns an empty dictionary (not null)
         let yaml = "{}"
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -216,13 +248,16 @@ phys_type: fixed
     [<Fact>]
     let ``loadFromYaml returns IoError for comment-only YAML`` () =
         // A YAML file with only comments deserializes to null, causing an NRE caught as IoError
-        let yaml = """
+        let yaml =
+            """
 # empty config with only comments
 """
+
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
-            | Error (ValidationError.IoError _) -> () // expected: null dictionary → NRE → IoError
+            | Error(ValidationError.IoError _) -> () // expected: null dictionary → NRE → IoError
             | Error e -> failwithf "Expected IoError for comment-only YAML, got: %A" e
             | Ok _ -> failwith "Expected IoError for comment-only YAML, got Ok"
         finally
@@ -231,20 +266,22 @@ phys_type: fixed
     [<Fact>]
     let ``loadFromYaml returns IoError for non-existent path`` () =
         match loadFromYaml "nonexistent_config_file.yaml" with
-        | Error (ValidationError.IoError _) -> () // expected
+        | Error(ValidationError.IoError _) -> () // expected
         | Error e -> failwithf "Expected IoError, got: %A" e
         | Ok _ -> failwith "Expected IoError for non-existent file"
 
     [<Fact>]
     let ``loadFromYaml returns validation error for invalid value in YAML`` () =
-        let yaml = """
+        let yaml =
+            """
 phys_type: BOGUS
 """
+
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
-            | Error (ValidationError.InvalidValue msg) ->
-                msg |> should haveSubstring "phys_type"
+            | Error(ValidationError.InvalidValue msg) -> msg |> should haveSubstring "phys_type"
             | Error e -> failwithf "Expected InvalidValue, got: %A" e
             | Ok _ -> failwith "Expected validation error for invalid YAML value"
         finally

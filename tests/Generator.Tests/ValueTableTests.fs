@@ -14,7 +14,8 @@ module ValueTableTests =
 
     [<Fact>]
     let ``Value tables are parsed and attached to signals`` () =
-        let dbcContent = """
+        let dbcContent =
+            """
 VERSION ""
 NS_ :
 BS_:
@@ -26,8 +27,10 @@ BO_ 200 VT_MSG: 8 Vector__XXX
 VAL_ 200 Mode 0 "OFF" 1 "ON" 2 "AUTO" ;
 VAL_ 200 State 0 "IDLE" 1 "RUN" 2 "STOP" ;
 """
+
         let dbcPath = createTempDbcFile dbcContent
         let result = parseDbcFile dbcPath
+
         match result with
         | Success ir ->
             let msg = ir.Messages |> List.find (fun m -> m.Name = "VT_MSG")
@@ -38,4 +41,5 @@ VAL_ 200 State 0 "IDLE" 1 "RUN" 2 "STOP" ;
             vtMode |> should equal (set [ (0, "OFF"); (1, "ON"); (2, "AUTO") ])
             vtState |> should equal (set [ (0, "IDLE"); (1, "RUN"); (2, "STOP") ])
         | Failure errors -> failwithf "Expected success, got errors: %A" errors
+
         System.IO.File.Delete(dbcPath)

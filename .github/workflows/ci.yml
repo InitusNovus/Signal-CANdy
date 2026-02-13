@@ -161,3 +161,14 @@ jobs:
         run: |
           if [ -d external_test ]; then echo "[lint] NOTE: external_test present (ignored by CI)"; fi
           if [ -f TEST_SUMMARY.md ]; then echo "[lint] NOTE: TEST_SUMMARY.md should be local-only"; fi
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Fantomas
+        run: dotnet tool install -g fantomas
+
+      - name: Check F# formatting (Fantomas)
+        run: fantomas --check src/ tests/

@@ -25,8 +25,7 @@ module Errors =
         | Validation of ValidationError
         | CodeGen of CodeGenError
 
-    type GeneratedFiles = {
-        Sources: string list
-        Headers: string list
-        Others: string list
-    }
+    type GeneratedFiles =
+        { Sources: string list
+          Headers: string list
+          Others: string list }
