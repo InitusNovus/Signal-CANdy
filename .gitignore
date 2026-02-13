@@ -70,3 +70,5 @@ analysis/
 *.bak
 backup/
 *_backup/
+TestResults/
+coverage_report/
