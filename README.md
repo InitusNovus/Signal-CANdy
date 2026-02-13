@@ -24,8 +24,8 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 Install:
 
 ```pwsh
-dotnet add package SignalCandy.Core --version 0.2.1
-dotnet add package SignalCandy --version 0.2.1
+dotnet add package SignalCandy.Core --version 0.3.0
+dotnet add package SignalCandy --version 0.3.0
 ```
 
 ## ⚡ Quick Start (5 minutes)
@@ -716,12 +716,15 @@ CRC/Counter note
 
 ## Project Structure
 
-- `src/Generator`: F# source code for the code generator.
-- `templates`: Scriban templates for C code generation.
-- `examples`: Sample DBC file, configuration, and a main C file for testing.
-- `tests/Generator.Tests`: F# unit tests for the generator.
-- `infra`: CI/CD configurations (e.g., GitHub Actions).
-- `gen`: Output directory for generated C code (ignored by Git).
+- `src/Signal.CANdy.Core`: Core F# library (DBC parsing, IR, config, validation, codegen)
+- `src/Signal.CANdy`: C#-friendly facade (maps `Result` → exceptions)
+- `src/Signal.CANdy.CLI`: CLI tool (argument parsing, harness generation)
+- `src/Generator`: Legacy standalone generator (Exe)
+- `templates`: Scriban templates for C code generation
+- `examples`: Sample DBC files, YAML configs, and a main C file for testing
+- `tests/Signal.CANdy.Core.Tests`: xUnit + FsUnit tests for Core library
+- `tests/Generator.Tests`: xUnit + FsUnit tests for legacy Generator
+- `gen`: Output directory for generated C code (ignored by Git)
 
 ## License, third-party, and AI provenance
 

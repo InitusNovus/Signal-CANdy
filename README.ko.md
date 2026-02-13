@@ -553,7 +553,7 @@ void compare_state(int v) {
 ## ⚠️ 제한사항
 
 - CRC/Counter 자동 검증은 아직 구현되지 않았습니다(설정 플래그는 예약됨)
-- 기본 대상은 8바이트 클래식 CAN 프레임입니다(확장 페이로드는 템플릿 조정 필요)
+- 클래식 CAN(최대 8바이트)과 CAN FD(최대 64바이트) 페이로드를 모두 지원합니다
 - 32개 초과 신호를 갖는 매우 큰 메시지는 `valid` 비트마스크 확장이 필요할 수 있습니다
 
 ## 디스패치 모드와 레지스트리 (nanopb와의 관련성)
@@ -606,12 +606,15 @@ CRC/Counter 참고
 
 ## 프로젝트 구조
 
-- `src/Generator`: F# 코드 생성기 소스
+- `src/Signal.CANdy.Core`: 핵심 F# 라이브러리 (DBC 파싱, IR, 설정, 검증, 코드 생성)
+- `src/Signal.CANdy`: C# 친화 파사드 (`Result` → 예외 변환)
+- `src/Signal.CANdy.CLI`: CLI 도구 (인자 파싱, 하네스 생성)
+- `src/Generator`: 레거시 독립형 생성기 (Exe)
 - `templates`: C 코드 생성을 위한 Scriban 템플릿
 - `examples`: 샘플 DBC/설정/테스트용 main C 파일
-- `tests/Generator.Tests`: F# 단위 테스트
-- `infra`: CI/CD 설정(예: GitHub Actions)
-- `gen`: 생성된 C 코드 출력 디렉터리(보통 gitignore)
+- `tests/Signal.CANdy.Core.Tests`: Core 라이브러리 xUnit + FsUnit 테스트
+- `tests/Generator.Tests`: 레거시 Generator xUnit + FsUnit 테스트
+- `gen`: 생성된 C 코드 출력 디렉터리 (gitignore)
 
 ## 라이선스, 서드파티, AI 출처
 
