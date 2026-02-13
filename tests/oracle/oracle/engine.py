@@ -162,9 +162,27 @@ def load_dbc_cantools(dbc_path: str) -> Any:
     return cantools.database.load_file(dbc_path)
 
 
+def _find_repo_root() -> Path:
+    """Find repository root by walking up from __file__ until .git is found."""
+    current = Path(__file__).resolve().parent
+    while current != current.parent:
+        if (current / ".git").exists():
+            return current
+        current = current.parent
+    raise RuntimeError("Repository root not found")
+
+
 def run_codegen(dbc_path: str, config_path: str, out_dir: str) -> bool:
-    output_path = Path(out_dir)
-    output_path.mkdir(parents=True, exist_ok=True)
+    # Resolve all paths relative to current working directory (before changing CWD)
+    dbc_abs = str(Path(dbc_path).resolve())
+    config_abs = str(Path(config_path).resolve())
+    out_abs = str(Path(out_dir).resolve())
+
+    # Create output directory
+    out_path = Path(out_abs)
+    out_path.mkdir(parents=True, exist_ok=True)
+
+    repo_root = _find_repo_root()
 
     command = [
         "dotnet",
@@ -173,17 +191,24 @@ def run_codegen(dbc_path: str, config_path: str, out_dir: str) -> bool:
         "src/Generator",
         "--",
         "--dbc",
-        dbc_path,
+        dbc_abs,
         "--out",
-        out_dir,
+        out_abs,
         "--config",
-        config_path,
+        config_abs,
         "--emit-main",
         "false",
     ]
 
     try:
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            cwd=repo_root,
+        )
     except OSError as ex:
         LOGGER.error("Codegen invocation failed: %s", ex)
         return False
