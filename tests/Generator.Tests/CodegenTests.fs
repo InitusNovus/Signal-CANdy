@@ -123,6 +123,36 @@ clean:
         ensureMakefile genOutputPath
         ()
 
+    let runCGeneratorWithDbc (dbcPath: string) (configPath: string option) (genOutputPath: string) =
+        let configArg =
+            match configPath with
+            | Some p -> sprintf "--config %s" p
+            | None -> ""
+
+        let args = sprintf "--dbc %s --out %s %s" dbcPath genOutputPath configArg
+        let proc = new Process()
+
+        let generatorPath =
+            Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "src", "Generator", "Generator.fsproj")
+
+        proc.StartInfo.FileName <- "dotnet"
+        proc.StartInfo.Arguments <- sprintf "run --project %s -- %s" generatorPath args
+        proc.StartInfo.UseShellExecute <- false
+        proc.StartInfo.RedirectStandardOutput <- true
+        proc.StartInfo.RedirectStandardError <- true
+        proc.Start() |> ignore
+        let stdout = proc.StandardOutput.ReadToEnd()
+        let stderr = proc.StandardError.ReadToEnd()
+        proc.WaitForExit()
+
+        if proc.ExitCode <> 0 then
+            failwith (
+                sprintf "Generator failed with exit code %d.\nStdout:\n%s\nStderr:\n%s" proc.ExitCode stdout stderr
+            )
+
+        ensureMakefile genOutputPath
+        ()
+
     let buildAndRunCTest (genOutputPath: string) (cTestName: string) : string list =
         // Build using the Makefile in genOutputPath
         let make = new Process()
@@ -281,3 +311,203 @@ clean:
         match result with
         | Success _ -> failwith "Expected failure, but got success"
         | Failure _ -> true |> should be True
+
+    [<Fact>]
+    let ``Comprehensive LE byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_comprehensive_le"
+            output |> should contain "Comprehensive LE test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Comprehensive BE byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_comprehensive_be"
+            output |> should contain "Comprehensive BE test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Comprehensive signed byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_comprehensive_signed"
+            output |> should contain "Comprehensive signed test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Comprehensive nonalign byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_comprehensive_nonalign"
+            output |> should contain "Comprehensive nonalign test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Comprehensive packed byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_comprehensive_packed"
+            output |> should contain "Comprehensive packed test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Comprehensive scale byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_comprehensive_scale"
+            output |> should contain "Comprehensive scale test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``CAN FD roundtrip test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "canfd_test.dbc")
+
+            runCGeneratorWithDbc dbcPath None genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_fd_roundtrip"
+            output |> should contain "CAN FD roundtrip successful! (DLC=64, data[0]=0xAB)"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Multiplex roundtrip test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "multiplex_suite.dbc")
+
+            runCGeneratorWithDbc dbcPath None genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_multiplex_roundtrip"
+            output |> should contain "Multiplex roundtrip successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Value table test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "value_table.dbc")
+
+            runCGeneratorWithDbc dbcPath None genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_value_table"
+            output |> should contain "Value table test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Motorola LSB roundtrip test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "motorola_lsb_suite.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_motorola_lsb.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_moto_lsb_roundtrip"
+            output |> should contain "Moto LSB roundtrip successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
+
+    [<Fact>]
+    let ``Motorola LSB comprehensive byte-level test`` () =
+        let genOutputPath = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(genOutputPath) |> ignore
+
+        try
+            let dbcPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "motorola_lsb_suite.dbc")
+
+            let configPath =
+                Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "config_motorola_lsb.yaml")
+
+            runCGeneratorWithDbc dbcPath (Some configPath) genOutputPath
+            let output = buildAndRunCTest genOutputPath "test_moto_lsb_comprehensive"
+            output |> should contain "Comprehensive Motorola LSB test successful!"
+        finally
+            if Directory.Exists(genOutputPath) then
+                Directory.Delete(genOutputPath, true)
