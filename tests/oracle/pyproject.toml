@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "signal-candy-oracle"
+version = "0.1.0"
+description = "Cross-validation oracle for Signal-CANdy C code generation"
+requires-python = ">=3.12"
+authors = [
+    {name = "Signal-CANdy Contributors"}
+]
+dependencies = [
+    "cantools>=39.0",
+    "pytest>=8.0",
+    "pyyaml>=6.0"
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = "test_*.py"
+python_classes = "Test*"
+python_functions = "test_*"
