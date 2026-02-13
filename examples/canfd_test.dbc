@@ -1,0 +1,9 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 800 FD_MSG: 64 Vector__XXX
+ SG_ FD_Sig_Low : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ FD_Sig_High : 480|16@1+ (0.1,0) [0|6553.5] "" Vector__XXX
+ SG_ FD_Sig_Mid_BE : 263|8@0+ (1,0) [0|255] "" Vector__XXX

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <IsPackable>false</IsPackable>
+    <GenerateProgramFile>false</GenerateProgramFile>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="DbcTests.fs" />
+    <Compile Include="ConfigTests.fs" />
+    <Compile Include="CodegenTests.fs" />
+    <Compile Include="EdgeCaseTests.fs" />
+    <Compile Include="ApiTests.fs" />
+    <Compile Include="FacadeTests.fs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="coverlet.collector" Version="6.0.0" />
+    <PackageReference Include="FsUnit.xUnit" Version="7.1.1" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.3">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Signal.CANdy.Core\Signal.CANdy.Core.fsproj" />
+    <ProjectReference Include="..\..\src\Signal.CANdy\Signal.CANdy.fsproj" />
+  </ItemGroup>
+
+</Project>

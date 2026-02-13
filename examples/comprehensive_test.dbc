@@ -1,0 +1,33 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 500 MSG_COMP_LE: 8 Vector__XXX
+ SG_ LE_12_CROSS : 4|12@1+ (1,0) [0|4095] "" Vector__XXX
+ SG_ LE_16 : 16|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ LE_32 : 32|32@1+ (1,0) [0|4294967295] "" Vector__XXX
+
+BO_ 501 MSG_COMP_BE: 8 Vector__XXX
+ SG_ BE_16 : 7|16@0+ (1,0) [0|65535] "" Vector__XXX
+ SG_ BE_32 : 39|32@0+ (1,0) [0|4294967295] "" Vector__XXX
+
+BO_ 502 MSG_COMP_SIGNED: 8 Vector__XXX
+ SG_ S_LE_8 : 0|8@1- (1,0) [-128|127] "" Vector__XXX
+ SG_ S_LE_16 : 8|16@1- (1,0) [-32768|32767] "" Vector__XXX
+ SG_ S_BE_16 : 31|16@0- (1,0) [-32768|32767] "" Vector__XXX
+
+BO_ 503 MSG_COMP_NONALIGN: 8 Vector__XXX
+ SG_ NA_10 : 3|10@1+ (1,0) [0|1023] "" Vector__XXX
+ SG_ NA_7 : 13|7@1+ (1,0) [0|127] "" Vector__XXX
+
+BO_ 504 MSG_COMP_PACKED: 4 Vector__XXX
+ SG_ P_A : 0|10@1+ (1,0) [0|1023] "" Vector__XXX
+ SG_ P_B : 10|10@1+ (1,0) [0|1023] "" Vector__XXX
+ SG_ P_C : 20|12@1+ (1,0) [0|4095] "" Vector__XXX
+
+BO_ 505 MSG_COMP_SCALE: 8 Vector__XXX
+ SG_ SC_NEG_OFF : 0|16@1+ (0.1,-100) [0|6453.5] "" Vector__XXX
+ SG_ SC_LARGE : 16|16@1+ (10,0) [0|655350] "" Vector__XXX
+ SG_ SC_SMALL : 32|16@1- (0.001,0) [-32.768|32.767] "" Vector__XXX
+

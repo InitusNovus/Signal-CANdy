@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -12,7 +12,7 @@
   <PackageTags>CAN;DBC;codegen;C;F#;embedded</PackageTags>
   <PublishRepositoryUrl>true</PublishRepositoryUrl>
   <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
-  <Version>0.2.1</Version>
+  <Version>0.3.0</Version>
   <PackageLicenseExpression>MIT</PackageLicenseExpression>
   <PackageReadmeFile>README.NuGet.md</PackageReadmeFile>
   <IncludeSymbols>true</IncludeSymbols>
@@ -22,7 +22,6 @@
 
   <ItemGroup>
   <None Include="README.NuGet.md" Pack="true" PackagePath="." />
-  <Compile Include="Library.fs" />
   <Compile Include="Errors.fs" />
   <Compile Include="Ir.fs" />
   <Compile Include="Dbc.fs" />

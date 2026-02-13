@@ -17,8 +17,15 @@ module Errors =
         | IoError of string
         | Unknown of string
 
-    type GeneratedFiles = {
-        Sources: string list
-        Headers: string list
-        Others: string list
-    }
+    /// Unified error type for the full generate-from-paths pipeline.
+    /// Preserves the original error category so consumers can distinguish
+    /// parse failures from validation failures from codegen failures.
+    type GenerateError =
+        | Parse of ParseError
+        | Validation of ValidationError
+        | CodeGen of CodeGenError
+
+    type GeneratedFiles =
+        { Sources: string list
+          Headers: string list
+          Others: string list }
