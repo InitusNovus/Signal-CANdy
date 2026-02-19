@@ -2,7 +2,9 @@ namespace Signal.CANdy.Core.Tests
 
 open Xunit
 open FsUnit.Xunit
+open System
 open System.IO
+open DbcParserLib
 open Signal.CANdy.Core.Dbc
 open Signal.CANdy.Core.Errors
 open Signal.CANdy.Core.Ir
@@ -200,6 +202,50 @@ BO_ 300 MUX_MSG: 8 Vector__XXX
                 b1.MultiplexerIndicator |> should equal (Some "m")
                 b1.MultiplexerSwitchValue |> should equal (Some 1)
             | Error e -> failwithf "Expected success, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``DbcParserLib ByteOrder and IsSigned property type validation`` () =
+        let dbc =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 500 RAW_TYPE_MSG: 8 Vector__XXX
+ SG_ Signal_LE_Unsigned : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Signal_BE_Signed : 15|16@0- (1,0) [-32768|32767] "" Vector__XXX
+"""
+
+        let path = createTempDbcFile dbc
+
+        try
+            let parsed = Parser.ParseFromPath(path)
+            let msg = parsed.Messages |> Seq.find (fun m -> m.Name = "RAW_TYPE_MSG")
+            let leSignal = msg.Signals |> Seq.find (fun s -> s.Name = "Signal_LE_Unsigned")
+            let beSignal = msg.Signals |> Seq.find (fun s -> s.Name = "Signal_BE_Signed")
+
+            // DbcParserLib.Signal.ByteOrder runtime mapping discovered by this test:
+            // 0 = Big (Motorola, @0), 1 = Little (Intel, @1)
+            let beByteOrderRaw = Convert.ToInt32(beSignal.ByteOrder)
+            let leByteOrderRaw = Convert.ToInt32(leSignal.ByteOrder)
+            beByteOrderRaw |> should equal 0
+            leByteOrderRaw |> should equal 1
+            beSignal.ByteOrder.GetType() |> should equal typeof<byte>
+
+            let isSignedProperty = beSignal.GetType().GetProperty("IsSigned")
+
+            // DbcParserLib.Signal has no IsSigned property in v1.7.0.
+            // Signedness must be inferred from other metadata when needed.
+            if isSignedProperty <> null then
+                let beIsSignedObj = isSignedProperty.GetValue(beSignal)
+                let leIsSignedObj = isSignedProperty.GetValue(leSignal)
+                beIsSignedObj.GetType() |> should equal typeof<bool>
+                unbox<bool> beIsSignedObj |> should equal true
+                unbox<bool> leIsSignedObj |> should equal false
+            else
+                isSignedProperty |> should equal null
         finally
             File.Delete(path)
 
