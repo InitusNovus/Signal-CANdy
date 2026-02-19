@@ -132,6 +132,24 @@
 
 ---
 
+## [Tracking] — Oracle 실패해결 플랜 (2026-02-13 수립본)
+
+> 본 섹션은 `Report/`와 `tests/oracle/ORACLE_RESULTS.md` 기준의 **진행 추적용 상태판**입니다.
+> 기존 C/H/M/L 항목과 별개로, 오라클 검증 파이프라인 플랜(Task 0~9)의 현재 도달 지점을 기록합니다.
+
+- [ ] **O-1. Task 0** 만료 플랜 아카이브 + boulder 갱신 (완료 증빙 리포트 확인 필요)
+- [ ] **O-2. Task 1** DbcParserLib 속성 타입 검증 (완료 증빙 리포트 확인 필요)
+- [x] **O-3. Task 2** C 오라클 하네스 템플릿/유틸 구현 (`Report/20260213_1817_Oracle_하네스_템플릿_구현.md`)
+- [x] **O-4. Task 3** Oracle Core Engine/CLI 구현 (`Report/20260213_1838_Oracle_Core_Engine_구현.md`, `Report/20260213_1850_Oracle_Core_Engine_구현.md`)
+- [x] **O-5. Task 4** tolerance/metadata 비교 로직 구현 (`Report/20260213_1848_Oracle_Tolerance_Metadata_Comparison.md`)
+- [ ] **O-6. Task 5** 벡터 생성 오버플로 가드레일 전용 완료 리포트 미확인
+- [ ] **O-7. Task 6** cantools 파싱 비호환 DBC 분류 전용 완료 리포트 미확인
+- [ ] **O-8. Task 7** Category C 예외 판정 기준 문서화 완료 리포트 미확인
+- [x] **O-9. Task 8** Oracle pytest 스위트 구축 (`Report/20260213_1937_Oracle_pytest_스위트_구축.md`)
+- [x] **O-10. Task 9** 전체 통합 실행 + 결과 문서화 (`Report/20260213_1952_Oracle_Integration_Result_Report.md`, `tests/oracle/ORACLE_RESULTS.md`)
+
+---
+
 ## 작업 순서 의존성 그래프
 
 ```
@@ -148,5 +166,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1, M-2, M-3, M-4 완료 — [Medium] 전체 완료, L-4a, L-4b, L-4c 완료 — CAN FD DLC 매핑 완료, signed signal decode 버그 수정)
+> **최종 갱신**: 2026-02-15 (기존 C-1/C-2/H-1/H-2/H-3/M-1/M-2/M-3/M-4/L-4 완료 상태 유지, Oracle 실패해결 플랜 Task 추적 섹션 O-1~O-10 추가 반영)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`
