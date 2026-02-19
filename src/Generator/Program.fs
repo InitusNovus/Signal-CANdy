@@ -79,7 +79,7 @@ module Program =
             let parsedArgs = parseArgs args "" "" None None true
 
             if parsedArgs.DbcPath = "" || parsedArgs.OutputPath = "" then
-                eprintfn "Signal CANdy v0.2.3 - DBC to C Code Generator"
+                eprintfn "Signal CANdy v0.3.0 - DBC to C Code Generator"
                 eprintfn "Generate C99 parser modules from DBC files with C++ compatibility"
                 eprintfn ""
                 eprintfn "USAGE:"

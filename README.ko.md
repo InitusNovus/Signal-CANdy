@@ -1,8 +1,32 @@
 # Signal CANdy — DBC to C 코드 생성기 (F#)
 
+[![CI](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml/badge.svg)](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml)
+[![License](https://img.shields.io/github/license/InitusNovus/Signal-CANdy.svg)](https://github.com/InitusNovus/Signal-CANdy/blob/main/LICENSE)
+[![.NET](https://img.shields.io/badge/.NET-8.0-blue.svg)](https://dotnet.microsoft.com/)
+[![F#](https://img.shields.io/badge/F%23-language-blue.svg)](https://fsharp.org/)
+[![Version](https://img.shields.io/github/v/release/InitusNovus/Signal-CANdy?include_prereleases)](https://github.com/InitusNovus/Signal-CANdy/releases)
+
+[![NuGet SignalCandy](https://img.shields.io/nuget/v/SignalCandy.svg)](https://www.nuget.org/packages/SignalCandy/)
+[![NuGet SignalCandy.Core](https://img.shields.io/nuget/v/SignalCandy.Core.svg)](https://www.nuget.org/packages/SignalCandy.Core/)
+
+[![C99](https://img.shields.io/badge/C-99-blue.svg)](https://en.wikipedia.org/wiki/C99)
+[![CAN DBC](https://img.shields.io/badge/protocol-CAN%20DBC-green.svg)](https://en.wikipedia.org/wiki/CAN_bus)
+
 언어: 이 문서는 한국어 번역본입니다. 원문(영어)은 `README.md`를 참고하세요.
 
 이 프로젝트는 F# 기반 코드 생성기를 사용해 `.dbc` 파일로부터 이식성 높은 C99 파서 모듈(헤더/소스)을 생성합니다.
+
+## 📦 NuGet 패키지
+
+- SignalCandy.Core — 핵심 F# 라이브러리 (파싱, 설정, 코드 생성)
+- SignalCandy — Core에 대한 C# 친화적 파사드
+
+설치:
+
+```pwsh
+dotnet add package SignalCandy.Core --version 0.3.0
+dotnet add package SignalCandy --version 0.3.0
+```
 
 ## ⚡ 빠른 시작 (5분)
 
@@ -20,16 +44,19 @@ make --version     # GNU Make (선택: 로컬 검증용)
 dotnet run --project src/Generator -- --dbc examples/sample.dbc --out gen
 ```
 
-3) 빌드 및 기본 테스트 실행
+3) (선택) 로컬 테스트 하네스 생성 및 빌드
 
 ```bash
+# 적응형 Makefile 생성/업그레이드 및 샘플 main.c 복사
+dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen -t
+
 make -C gen build
 ./gen/build/test_runner test_roundtrip
 ```
 
 예상: 라운드트립 테스트가 통과하고 `gen/include`에 헤더가 생성됩니다.
 
-참고: 3단계는 검증용 선택 사항입니다. `gen/include`와 `gen/src`에 생성된 C 파일은 C99 호환 툴체인을 사용하는 펌웨어 프로젝트에 바로 통합할 수 있습니다.
+참고: 3단계는 검증용 선택 사항이지만 권장됩니다. `gen/include`와 `gen/src`에 생성된 C 파일은 C99 호환 툴체인을 사용하는 펌웨어 프로젝트에 바로 통합할 수 있습니다.
 
 ## 📋 목차
 
@@ -174,6 +201,28 @@ dotnet run --project src/Generator -- \
   --config examples/config.yaml \
   --prefix foo_ \
   --emit-main false
+```
+
+### signal-candy CLI (테스트 하네스 헬퍼)
+
+CLI는 짧은 플래그와 선택적 하네스 모드를 제공하여 적응형 Makefile을 생성/업데이트하고 빠른 로컬 빌드를 위한 샘플 `main.c`를 복사합니다.
+
+- `-d, --dbc <path>`: 입력 DBC (필수)
+- `-o, --out <dir>`: 출력 디렉터리 (필수)
+- `-c, --config <path>`: 선택적 YAML 설정 파일
+- `-t, --harness`: `gen/Makefile`을 작성/업그레이드하고 `gen/src/main.c`가 존재하는지 확인; 멱등성 보장
+- `-v, --version`: 버전 출력
+- `-h, --help`: 사용법
+
+예시
+
+```bash
+# 최소한의 코드 생성만 수행
+dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen
+
+# 하네스 포함 (Makefile + main.c 작성), 이후 빌드
+dotnet run --project src/Signal.CANdy.CLI -- -d examples/sample.dbc -o gen -t
+make -C gen build
 ```
 
 ### 구성 파일 사용
