@@ -602,6 +602,126 @@ def _unsupported_signal_reason(signal: Any) -> str | None:
     return None
 
 
+def _generate_mux_vectors(
+    db: Any,
+    message_obj: Any,
+    message_info: MessageInfo,
+    vectors_per_signal: int,
+    rng: random.Random,
+    vectors: list[TestVector],
+    skipped: list[TestResult],
+) -> None:
+    _ = db
+    generated_signal_names = {name for name, _ in message_info.signals}
+    all_signals = [
+        signal
+        for signal in getattr(message_obj, "signals", [])
+        if signal.name in generated_signal_names
+    ]
+
+    switch_signal = None
+    base_signals: list[Any] = []
+    branch_signals: dict[int, list[Any]] = {}
+    for signal in all_signals:
+        if bool(getattr(signal, "is_multiplexer", False)):
+            switch_signal = signal
+            continue
+
+        mux_ids = getattr(signal, "multiplexer_ids", None)
+        if not mux_ids:
+            base_signals.append(signal)
+            continue
+
+        if len(mux_ids) == 1:
+            mux_id = _to_int(mux_ids[0], default=0)
+            branch_signals.setdefault(mux_id, []).append(signal)
+            continue
+
+        reason = _unsupported_signal_reason(signal)
+        if reason is not None:
+            skipped.append(
+                TestResult(
+                    message=message_obj.name,
+                    signal=signal.name,
+                    test_type="decode",
+                    passed=False,
+                    error=reason,
+                    skipped=True,
+                )
+            )
+
+    if switch_signal is None:
+        for signal in all_signals:
+            skipped.append(
+                TestResult(
+                    message=message_obj.name,
+                    signal=signal.name,
+                    test_type="decode",
+                    passed=False,
+                    error="multiplexed message has no switch signal",
+                    skipped=True,
+                )
+            )
+        return
+
+    for mux_id in sorted(branch_signals):
+        active_branch_signals = branch_signals[mux_id]
+        defaults: dict[str, float] = {switch_signal.name: float(mux_id)}
+        default_overflows: set[str] = set()
+
+        for signal in [*base_signals, *active_branch_signals]:
+            default_value = _default_signal_value(signal)
+            if default_value is None:
+                default_overflows.add(signal.name)
+                skipped.append(_overflow_guarded_result(message_obj.name, signal.name))
+                continue
+            defaults[signal.name] = default_value
+
+        for other_mux_id, other_branch_signals in branch_signals.items():
+            if other_mux_id == mux_id:
+                continue
+            for signal in other_branch_signals:
+                defaults[signal.name] = 0.0
+
+        target_signals = [*base_signals, *active_branch_signals]
+        for target_signal in target_signals:
+            if target_signal.name in default_overflows:
+                continue
+
+            reason = _unsupported_signal_reason(target_signal)
+            if reason is not None:
+                skipped.append(
+                    TestResult(
+                        message=message_obj.name,
+                        signal=target_signal.name,
+                        test_type="decode",
+                        passed=False,
+                        error=reason,
+                        skipped=True,
+                    )
+                )
+                continue
+
+            values, overflow_guarded = _signal_values(
+                target_signal, vectors_per_signal, rng
+            )
+            if overflow_guarded:
+                skipped.append(
+                    _overflow_guarded_result(message_obj.name, target_signal.name)
+                )
+
+            for value in values:
+                payload = dict(defaults)
+                payload[target_signal.name] = value
+                vectors.append(
+                    TestVector(
+                        message=message_obj.name,
+                        signal=target_signal.name,
+                        signals=payload,
+                    )
+                )
+
+
 def generate_test_vectors(
     db: Any,
     messages: list[MessageInfo],
@@ -627,17 +747,15 @@ def generate_test_vectors(
             continue
 
         if _message_is_multiplexed(message_obj):
-            for signal in getattr(message_obj, "signals", []):
-                skipped.append(
-                    TestResult(
-                        message=message_obj.name,
-                        signal=signal.name,
-                        test_type="decode",
-                        passed=False,
-                        error="multiplexed message is skipped in single-config mode",
-                        skipped=True,
-                    )
-                )
+            _generate_mux_vectors(
+                db,
+                message_obj,
+                message_info,
+                vectors_per_signal,
+                rng,
+                vectors,
+                skipped,
+            )
             continue
 
         generated_signal_names = {name for name, _ in message_info.signals}
