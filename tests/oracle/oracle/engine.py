@@ -20,6 +20,7 @@ from .harness import MessageInfo, compile_harness, generate_harness_c, run_harne
 
 LOGGER = logging.getLogger(__name__)
 DEFAULT_VECTORS_PER_SIGNAL = 10
+_FLOAT32_MAX = 3.4028234663852886e38
 
 _DECODE_FN_PATTERN = re.compile(r"\bbool\s+([A-Za-z_][A-Za-z0-9_]*)_decode\s*\(")
 _FIELD_PATTERN = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s+([A-Za-z_][A-Za-z0-9_]*)$")
@@ -147,6 +148,17 @@ def _pipeline_error(stage: str, error: str) -> TestResult:
         test_type="decode",
         passed=False,
         error=error,
+    )
+
+
+def _overflow_guarded_result(message: str, signal: str) -> TestResult:
+    return TestResult(
+        message=message,
+        signal=signal,
+        test_type="overflow_guarded",
+        passed=False,
+        error="overflow_guarded",
+        skipped=True,
     )
 
 
@@ -437,7 +449,36 @@ def _to_float32(value: float) -> float:
     return struct.unpack("<f", struct.pack("<f", float(value)))[0]
 
 
-def _safe_physical(signal: Any, raw_value: int) -> float:
+def _try_float32(value: float) -> float | None:
+    try:
+        narrowed = float(value)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+    if not math.isfinite(narrowed) or abs(narrowed) > _FLOAT32_MAX:
+        return None
+
+    try:
+        narrowed = _to_float32(narrowed)
+    except (OverflowError, struct.error):
+        return None
+
+    if not math.isfinite(narrowed):
+        return None
+
+    return narrowed
+
+
+def _safe_float32_physical(signal: Any, raw_value: int) -> float | None:
+    try:
+        physical = _raw_to_physical(signal, raw_value)
+    except OverflowError:
+        return None
+
+    return _try_float32(physical)
+
+
+def _safe_physical(signal: Any, raw_value: int) -> float | None:
     min_raw, max_raw = _raw_bounds(signal)
     raw = max(min(raw_value, max_raw), min_raw)
 
@@ -466,7 +507,9 @@ def _safe_physical(signal: Any, raw_value: int) -> float:
     raw = max(min(raw, max_raw), min_raw)
 
     for _ in range(4096):
-        value = _to_float32(_raw_to_physical(signal, raw))
+        value = _safe_float32_physical(signal, raw)
+        if value is None:
+            return None
         if minimum is not None and value < minimum and raw < max_raw:
             raw += 1
             continue
@@ -475,12 +518,33 @@ def _safe_physical(signal: Any, raw_value: int) -> float:
             continue
         return value
 
-    return _to_float32(_raw_to_physical(signal, raw))
+    return _safe_float32_physical(signal, raw)
+
+
+def _default_signal_value(signal: Any) -> float | None:
+    min_raw, max_raw = _raw_bounds(signal)
+    candidate_raws = [0, min_raw, max_raw]
+    if min_raw <= -1 <= max_raw:
+        candidate_raws.append(-1)
+    if min_raw <= 1 <= max_raw:
+        candidate_raws.append(1)
+
+    seen: set[int] = set()
+    for raw_value in candidate_raws:
+        if raw_value in seen:
+            continue
+        seen.add(raw_value)
+
+        value = _safe_physical(signal, raw_value)
+        if value is not None:
+            return value
+
+    return None
 
 
 def _signal_values(
     signal: Any, vectors_per_signal: int, rng: random.Random
-) -> list[float]:
+) -> tuple[list[float], bool]:
     bit_length = max(1, _to_int(getattr(signal, "length", 1), default=1))
     is_signed = bool(getattr(signal, "is_signed", False))
 
@@ -489,14 +553,23 @@ def _signal_values(
         boundary_raw.append(-(1 << (bit_length - 1)))
 
     values: list[float] = []
+    overflow_guarded = False
     for raw_value in boundary_raw:
         normalized = _normalize_boundary_raw(raw_value, bit_length, is_signed)
-        values.append(_safe_physical(signal, normalized))
+        value = _safe_physical(signal, normalized)
+        if value is None:
+            overflow_guarded = True
+            continue
+        values.append(value)
 
     min_raw, max_raw = _raw_bounds(signal)
     for _ in range(max(0, vectors_per_signal)):
         raw_value = rng.randint(min_raw, max_raw)
-        values.append(_safe_physical(signal, raw_value))
+        value = _safe_physical(signal, raw_value)
+        if value is None:
+            overflow_guarded = True
+            continue
+        values.append(value)
 
     unique: list[float] = []
     seen: set[float] = set()
@@ -509,9 +582,13 @@ def _signal_values(
         unique.append(value)
 
     if not unique:
-        unique.append(_safe_physical(signal, 0))
+        fallback = _default_signal_value(signal)
+        if fallback is not None:
+            unique.append(fallback)
+        else:
+            overflow_guarded = True
 
-    return unique
+    return unique, overflow_guarded
 
 
 def _unsupported_signal_reason(signal: Any) -> str | None:
@@ -572,12 +649,20 @@ def generate_test_vectors(
         if not signal_map:
             continue
 
-        defaults = {
-            name: _safe_physical(signal, 0) for name, signal in signal_map.items()
-        }
+        defaults: dict[str, float] = {}
+        default_overflows: set[str] = set()
+        for name, signal in signal_map.items():
+            default_value = _default_signal_value(signal)
+            if default_value is None:
+                default_overflows.add(name)
+                skipped.append(_overflow_guarded_result(message_obj.name, name))
+                continue
+            defaults[name] = default_value
 
         for signal_name in sorted(signal_map):
             signal_obj = signal_map[signal_name]
+            if signal_name in default_overflows:
+                continue
             reason = _unsupported_signal_reason(signal_obj)
             if reason is not None:
                 skipped.append(
@@ -592,7 +677,13 @@ def generate_test_vectors(
                 )
                 continue
 
-            for value in _signal_values(signal_obj, vectors_per_signal, rng):
+            values, overflow_guarded = _signal_values(
+                signal_obj, vectors_per_signal, rng
+            )
+            if overflow_guarded:
+                skipped.append(_overflow_guarded_result(message_obj.name, signal_name))
+
+            for value in values:
                 payload = dict(defaults)
                 payload[signal_name] = value
                 vectors.append(

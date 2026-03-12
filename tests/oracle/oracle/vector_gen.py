@@ -10,8 +10,14 @@ Generates comprehensive test vectors including:
 from __future__ import annotations
 
 from dataclasses import dataclass
+import importlib
 import random
 from typing import Any
+
+
+_MAX_ADVERSARIAL_RAW_SPAN = 1 << 20
+_MAX_ROUNDING_BOUNDARY_VECTORS = 10
+_UNIFORM_RAW_SAMPLES = 16
 
 
 @dataclass(frozen=True)
@@ -50,7 +56,7 @@ def generate_vectors_for_signal(
     """
     # Import cantools dynamically to handle missing dependency gracefully
     try:
-        import cantools
+        importlib.import_module("cantools")
     except ImportError:
         raise ImportError("cantools is required for vector generation")
 
@@ -139,7 +145,7 @@ def generate_adversarial_vectors(signal: Any) -> list[tuple[float, set[str]]]:
         - "adversarial", "float_edge": float32 extreme values
     """
     try:
-        import cantools
+        importlib.import_module("cantools")
     except ImportError:
         raise ImportError("cantools is required for vector generation")
 
@@ -157,11 +163,24 @@ def generate_adversarial_vectors(signal: Any) -> list[tuple[float, set[str]]]:
     def is_valid(phys: float) -> bool:
         return signal.minimum <= phys <= signal.maximum
 
+    def candidate_raw_values() -> list[int] | range:
+        raw_span = max_raw - min_raw + 1
+        if raw_span <= _MAX_ADVERSARIAL_RAW_SPAN:
+            return range(min_raw, max_raw + 1)
+
+        sample_points = {min_raw, max_raw}
+        for index in range(1, _UNIFORM_RAW_SAMPLES + 1):
+            fraction = index / (_UNIFORM_RAW_SAMPLES + 1)
+            sample = min_raw + int(round((raw_span - 1) * fraction))
+            sample_points.add(sample)
+
+        return sorted(sample_points)
+
     # Rounding boundaries: phys = offset + scale * (raw + 0.5)
     # Cap at 10 vectors to avoid explosion (per plan)
     rounding_count = 0
-    for raw in range(min_raw, max_raw + 1):
-        if rounding_count >= 10:
+    for raw in candidate_raw_values():
+        if rounding_count >= _MAX_ROUNDING_BOUNDARY_VECTORS:
             break
 
         phys_boundary = signal.offset + signal.scale * (raw + 0.5)
@@ -203,7 +222,7 @@ def generate_vectors_for_message(
         - "multiplexed", "mux_branch_{N}": for multiplexed message vectors
     """
     try:
-        import cantools
+        importlib.import_module("cantools")
     except ImportError:
         raise ImportError("cantools is required for vector generation")
 
