@@ -377,6 +377,39 @@ module CodegenTests =
             cleanupDir outDir
 
     [<Fact>]
+    let ``motorolaMsbFromLsb crosses byte boundary correctly`` () =
+        let ir =
+            { Messages =
+                [ { Name = "BE_LSB_BOUNDARY_MSG"
+                    Id = 553u
+                    IsExtended = false
+                    Length = 8us
+                    Signals =
+                      [ { mkSignal "SigBEBoundary" 8us 16us with
+                            ByteOrder = ByteOrder.Big
+                            Maximum = None
+                            Minimum = None } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+
+        let lsbConfig =
+            { defaultConfig with
+                MotorolaStartBit = "lsb" }
+
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir lsbConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "be_lsb_boundary_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "get_bits_be(data, 7, 16)"
+                content |> should haveSubstring "set_bits_be(data, 7, 16"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
     let ``generate creates sign extension for signed 16-bit signal`` () =
         let ir =
             { Messages =

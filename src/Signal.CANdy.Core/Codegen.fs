@@ -180,8 +180,8 @@ module Codegen =
                 if bitIdx < 7 then
                     bitIdx <- bitIdx + 1
                 else
-                    (byteIdx <- byteIdx + 1
-                     bitIdx <- 7)
+                    (byteIdx <- byteIdx - 1
+                     bitIdx <- 0)
 
             byteIdx * 8 + bitIdx
 
