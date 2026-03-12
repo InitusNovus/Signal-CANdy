@@ -156,10 +156,10 @@
 
 ### Oracle 후속 backlog (우선순위순)
 
-- [ ] **B-O1. DBC raw-range detection heuristic**
+- [x] **B-O1. DBC raw-range detection heuristic**
   - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #1, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 5
   - 범위: `[min|max]`가 raw-count sentinel로 보이는 경우의 선택적 탐지/정책 결정
-  - 상태: **미완료 backlog** (현재 Category C로 분류되어 있으며, 완료 항목으로 간주하지 않음)
+  - 상태: **완료** (2026-03-12, commit `1017b52` — `isRawRangeSentinel` heuristic in `Codegen.fs`, 1,101 oracle failures eliminated)
 
 - [ ] **B-O2. Oracle multiplex mode**
   - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #2, Exception 1 (`cantools_oracle_limitation`)

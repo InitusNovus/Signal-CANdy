@@ -81,10 +81,12 @@ Confirmed evidence: With `range_check: false`, Chrysler 2898/2898 pass (100%), M
 | :--- | :--- | :--- |
 | Technical Limitation | PASS | DBC `[min\|max]` is encoded as raw counts, but range check uses physical values from the same field. The generator faithfully transcribes the DBC field; the authoring error is in the DBC. |
 | Scoped Impact | PASS | 1,005 failures in Chrysler + 96 failures in Mercedes = 1,101 total affected tests. |
-| No Feasible Alternative | PASS | Heuristically detecting "raw vs physical" range fields would require examining factor/offset and guessing intent, which is error-prone and outside current design scope. |
+| No Feasible Alternative | **RESOLVED** | `isRawRangeSentinel` heuristic added to `Codegen.fs` (commit `1017b52`). Applied at all 3 range-check generation sites. 1,101 oracle failures eliminated. |
 | ROADMAP Entry | PASS | Tracked under "DBC raw-range detection heuristic" for future evaluation. |
 
 **Category**: `dbc_raw_range_sentinel`
+
+> **RESOLVED** (2026-03-12, commit `1017b52`): `Utils.isRawRangeSentinel` heuristic added to `Codegen.fs`. Detects when the declared physical range cannot contain the full raw CAN range, and skips range-check generation for those signals. Chrysler LAT_DIST (1,005 failures) and Mercedes STEER_DIRECTION (96 failures) are now handled automatically without any config change.
 
 ---
 
