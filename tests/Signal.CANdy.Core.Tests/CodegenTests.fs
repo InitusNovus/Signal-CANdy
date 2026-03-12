@@ -499,3 +499,48 @@ module CodegenTests =
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
+
+    [<Fact>]
+    let ``Range check skipped for inverted DBC range sentinel min gt max`` () =
+        // Signal with [1|0] (inverted DBC sentinel): min=1.0, max=0.0 - no range defined
+        let invSig =
+            { Name = "InvSig"
+              StartBit = 0us
+              Length = 8us
+              Factor = 1.0
+              Offset = 0.0
+              Minimum = Some 1.0
+              Maximum = Some 0.0
+              Unit = ""
+              IsSigned = false
+              IsCrc = false
+              IsCounter = false
+              ByteOrder = ByteOrder.Little
+              MultiplexerIndicator = None
+              MultiplexerSwitchValue = None
+              ValueTable = None
+              Receivers = [] }
+
+        let msg =
+            { Name = "INV_MSG"
+              Id = 2u
+              IsExtended = false
+              Length = 8us
+              Signals = [ invSig ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "inv_msg.c")
+                let result = File.ReadAllText(msgC)
+                result |> should not' (haveSubstring "InvSig < 1")
+                result |> should not' (haveSubstring "InvSig > 0")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir

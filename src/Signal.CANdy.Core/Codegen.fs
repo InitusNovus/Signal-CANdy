@@ -287,7 +287,7 @@ module Codegen =
                 if doRangeCheck then
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
-                        if minV = 0.0 && maxV = 0.0 then
+                        if minV >= maxV then
                             None
                         else
                             Some(
@@ -324,7 +324,7 @@ module Codegen =
                 if doRangeCheck then
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
-                        if minV = 0.0 && maxV = 0.0 then
+                        if minV >= maxV then
                             None
                         else
                             Some(
@@ -494,7 +494,7 @@ module Codegen =
                         if config.RangeCheck then
                             match sw.Minimum, sw.Maximum with
                             | Some minV, Some maxV ->
-                                if minV = 0.0 && maxV = 0.0 then
+                                if minV >= maxV then
                                     None
                                 else
                                     Some(
