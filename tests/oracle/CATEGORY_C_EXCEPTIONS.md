@@ -22,8 +22,8 @@ The current oracle pipeline executes tests using a single-signal configuration. 
 | :--- | :--- | :--- |
 | Technical Limitation | PASS | Oracle `run_oracle.py` lacks multi-branch selection logic. |
 | Scoped Impact | PASS | 83 signals marked `skipped` in `ORACLE_RESULTS.md`. |
-| No Feasible Alternative | PASS | Requires extending the oracle engine to handle multiplexer state. |
-| ROADMAP Entry | PASS | Tracked under `L-3` (valid mask / mux coverage). |
+| No Feasible Alternative | **RESOLVED** | Implemented `_generate_mux_vectors()` in `engine.py` (B-O2). |
+| ROADMAP Entry | PASS | Tracked under B-O2 (completed 2026-03-12). |
 
 **Category**: `cantools_oracle_limitation`
 
@@ -87,6 +87,8 @@ Confirmed evidence: With `range_check: false`, Chrysler 2898/2898 pass (100%), M
 **Category**: `dbc_raw_range_sentinel`
 
 > **RESOLVED** (2026-03-12, commit `1017b52`): `Utils.isRawRangeSentinel` heuristic added to `Codegen.fs`. Detects when the declared physical range cannot contain the full raw CAN range, and skips range-check generation for those signals. Chrysler LAT_DIST (1,005 failures) and Mercedes STEER_DIRECTION (96 failures) are now handled automatically without any config change.
+
+> **RESOLVED** (2026-03-12): `_generate_mux_vectors()` function added to `engine.py`. Per-branch oracle testing now active. mux signals no longer skipped (0 skipped in post-B-O2 corpus). hyundai_2015_ccan.dbc improved from 0/0/33 to 10392/0/0.
 
 ---
 

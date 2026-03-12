@@ -161,10 +161,10 @@
   - 범위: `[min|max]`가 raw-count sentinel로 보이는 경우의 선택적 탐지/정책 결정
   - 상태: **완료** (2026-03-12, commit `1017b52` — `isRawRangeSentinel` heuristic in `Codegen.fs`, 1,101 oracle failures eliminated)
 
-- [ ] **B-O2. Oracle multiplex mode**
+- [x] **B-O2. Oracle multiplex mode**
   - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #2, Exception 1 (`cantools_oracle_limitation`)
   - 범위: `run_oracle.py`가 mux branch를 선택해 skip 없이 검증 가능하도록 확장
-  - 상태: **미완료 backlog**
+  - 상태: **완료** (2026-03-12 — `_generate_mux_vectors()` in `engine.py`, all vendor mux signals now tested, 0 skipped)
 
 - [ ] **B-O3. Valid bitmask auto-widening**
   - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #3, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 3
