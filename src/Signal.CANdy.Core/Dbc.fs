@@ -305,7 +305,9 @@ module Dbc =
                                 let inferredSigned, inferredOrder =
                                     match metaMap |> Map.tryFind (msg.Name, s.Name) with
                                     | Some(isS, ord) -> isS, ord
-                                    | None -> (s.Minimum < 0.0), ByteOrder.Little
+                                    | None ->
+                                        let byteOrder = if s.ByteOrder = 0uy then ByteOrder.Big else ByteOrder.Little
+                                        (s.Minimum < 0.0), byteOrder
 
                                 let muxInd, muxVal =
                                     match muxMap |> Map.tryFind (msg.Name, s.Name) with
