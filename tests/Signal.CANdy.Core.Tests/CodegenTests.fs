@@ -199,6 +199,22 @@ module CodegenTests =
     // -------------------------------------------------------
 
     [<Fact>]
+    let ``CAN FD LE signal wider than 8 bytes n_bytes clamp absent from generated utils`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+
+                let content = File.ReadAllText(utilsC)
+                content.Contains("if (n_bytes > 8) n_bytes = 8;") |> should equal false
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
     let ``generate utils.c contains n_bytes for FD-safe LE accessors`` () =
         let outDir = createTempOutDir ()
 
