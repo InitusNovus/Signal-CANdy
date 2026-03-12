@@ -215,6 +215,45 @@ module Codegen =
 
                 loop 0
 
+        /// Detect when DBC [min|max] fields store raw CAN counts instead of physical values.
+        /// Returns true if the declared min/max range cannot contain the full physical range
+        /// computed from factor, offset, and bit width - indicating raw-count sentinel usage.
+        let isRawRangeSentinel
+            (minV: float)
+            (maxV: float)
+            (factor: float)
+            (offset: float)
+            (length: uint16)
+            (isSigned: bool)
+            : bool =
+            let bitLen = int length
+            let unsignedRawMax = Math.Pow(2.0, float bitLen) - 1.0
+            let signedHalf = Math.Pow(2.0, float (bitLen - 1))
+            let signedRawMin = -signedHalf
+            let signedRawMax = signedHalf - 1.0
+
+            let rawMin, rawMax =
+                if isSigned then
+                    (signedRawMin, signedRawMax)
+                else
+                    (0.0, unsignedRawMax)
+
+            let physMin = offset + factor * rawMin
+            let physMax = offset + factor * rawMax
+            let eps = 1e-9
+            let physOutOfDeclaredRange = physMin < minV - eps || physMax > maxV + eps
+
+            let matchesUnsignedRawCountRange = abs minV <= eps && abs (maxV - unsignedRawMax) <= eps
+
+            let matchesSignedRawCountRange =
+                isSigned && abs (minV - signedRawMin) <= eps && abs (maxV - signedRawMax) <= eps
+
+            let matchesSignedUnsignedPhysicalRange =
+                isSigned && abs (minV - offset) <= eps && abs (maxV - (offset + factor * unsignedRawMax)) <= eps
+
+            physOutOfDeclaredRange
+            && (matchesUnsignedRawCountRange || matchesSignedRawCountRange || matchesSignedUnsignedPhysicalRange)
+
     module Message =
         open Utils
 
@@ -289,6 +328,8 @@ module Codegen =
                     | Some minV, Some maxV ->
                         if minV >= maxV then
                             None
+                        elif Utils.isRawRangeSentinel minV maxV s.Factor s.Offset s.Length s.IsSigned then
+                            None
                         else
                             Some(
                                 sprintf
@@ -325,6 +366,8 @@ module Codegen =
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
                         if minV >= maxV then
+                            None
+                        elif Utils.isRawRangeSentinel minV maxV s.Factor s.Offset s.Length s.IsSigned then
                             None
                         else
                             Some(
@@ -495,6 +538,8 @@ module Codegen =
                             match sw.Minimum, sw.Maximum with
                             | Some minV, Some maxV ->
                                 if minV >= maxV then
+                                    None
+                                elif Utils.isRawRangeSentinel minV maxV sw.Factor sw.Offset sw.Length sw.IsSigned then
                                     None
                                 else
                                     Some(
