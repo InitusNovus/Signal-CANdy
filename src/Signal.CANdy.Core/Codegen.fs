@@ -287,14 +287,17 @@ module Codegen =
                 if doRangeCheck then
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
-                        Some(
-                            sprintf
-                                "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
-                                s.Name
-                                minV
-                                s.Name
-                                maxV
-                        )
+                        if minV = 0.0 && maxV = 0.0 then
+                            None
+                        else
+                            Some(
+                                sprintf
+                                    "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
+                                    s.Name
+                                    minV
+                                    s.Name
+                                    maxV
+                            )
                     | Some minV, None -> Some(sprintf "    if (msg->%s < %.17g) { return false; }" s.Name minV)
                     | None, Some maxV -> Some(sprintf "    if (msg->%s > %.17g) { return false; }" s.Name maxV)
                     | _ -> None
@@ -321,14 +324,17 @@ module Codegen =
                 if doRangeCheck then
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
-                        Some(
-                            sprintf
-                                "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
-                                s.Name
-                                minV
-                                s.Name
-                                maxV
-                        )
+                        if minV = 0.0 && maxV = 0.0 then
+                            None
+                        else
+                            Some(
+                                sprintf
+                                    "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
+                                    s.Name
+                                    minV
+                                    s.Name
+                                    maxV
+                            )
                     | Some minV, None -> Some(sprintf "    if (msg->%s < %.17g) { return false; }" s.Name minV)
                     | None, Some maxV -> Some(sprintf "    if (msg->%s > %.17g) { return false; }" s.Name maxV)
                     | _ -> None
@@ -488,14 +494,17 @@ module Codegen =
                         if config.RangeCheck then
                             match sw.Minimum, sw.Maximum with
                             | Some minV, Some maxV ->
-                                Some(
-                                    sprintf
-                                        "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
-                                        sw.Name
-                                        minV
-                                        sw.Name
-                                        maxV
-                                )
+                                if minV = 0.0 && maxV = 0.0 then
+                                    None
+                                else
+                                    Some(
+                                        sprintf
+                                            "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
+                                            sw.Name
+                                            minV
+                                            sw.Name
+                                            maxV
+                                    )
                             | Some minV, None -> Some(sprintf "    if (msg->%s < %.17g) { return false; }" sw.Name minV)
                             | None, Some maxV -> Some(sprintf "    if (msg->%s > %.17g) { return false; }" sw.Name maxV)
                             | _ -> None

@@ -455,3 +455,47 @@ module CodegenTests =
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
+
+    [<Fact>]
+    let ``Range check skipped for DBC no-range sentinel 0 0`` () =
+        let signal =
+            { Name = "TestSig"
+              StartBit = 0us
+              Length = 8us
+              Factor = 1.0
+              Offset = 0.0
+              Minimum = Some 0.0
+              Maximum = Some 0.0
+              Unit = ""
+              IsSigned = false
+              IsCrc = false
+              IsCounter = false
+              ByteOrder = ByteOrder.Little
+              MultiplexerIndicator = None
+              MultiplexerSwitchValue = None
+              ValueTable = None
+              Receivers = [] }
+
+        let msg =
+            { Name = "TEST_MSG"
+              Id = 1u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "test_msg.c")
+                let result = File.ReadAllText(msgC)
+                result |> should not' (haveSubstring "TestSig < 0")
+                result |> should not' (haveSubstring "TestSig > 0")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
