@@ -603,7 +603,6 @@ def _unsupported_signal_reason(signal: Any) -> str | None:
 
 
 def _generate_mux_vectors(
-    db: Any,
     message_obj: Any,
     message_info: MessageInfo,
     vectors_per_signal: int,
@@ -611,7 +610,6 @@ def _generate_mux_vectors(
     vectors: list[TestVector],
     skipped: list[TestResult],
 ) -> None:
-    _ = db
     generated_signal_names = {name for name, _ in message_info.signals}
     all_signals = [
         signal
@@ -632,6 +630,7 @@ def _generate_mux_vectors(
             base_signals.append(signal)
             continue
 
+        # TODO(B-O3): pure extended-mux messages (all signals have len(mux_ids) > 1, no simple branches) have base signals untested. Extremely rare in practice.
         if len(mux_ids) == 1:
             mux_id = _to_int(mux_ids[0], default=0)
             branch_signals.setdefault(mux_id, []).append(signal)
@@ -748,7 +747,6 @@ def generate_test_vectors(
 
         if _message_is_multiplexed(message_obj):
             _generate_mux_vectors(
-                db,
                 message_obj,
                 message_info,
                 vectors_per_signal,
