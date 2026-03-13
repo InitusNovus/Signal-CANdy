@@ -166,10 +166,10 @@
   - 범위: `run_oracle.py`가 mux branch를 선택해 skip 없이 검증 가능하도록 확장
   - 상태: **완료** (2026-03-12 — `_generate_mux_vectors()` in `engine.py`, all vendor mux signals now tested, 0 skipped)
 
-- [ ] **B-O3. Valid bitmask auto-widening**
+- [x] **B-O3. Valid bitmask auto-widening**
   - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #3, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 3
-  - 범위: >32 signal 메시지에서 `uint64_t` 또는 배열 기반 valid 필드 자동 선택
-  - 상태: **미완료 backlog** (기존 `L-3`와 연결되는 구조 개선 과제)
+  - 범위: ≤32 signals → `uint32_t valid`, 33–64 signals → `uint64_t valid` + `1ULL`, >64 signals → `CodeGenError.UnsupportedFeature`. 배열 기반 valid는 backlog로 이연.
+  - 상태: **완료** (0.3.2, 2026-03-13 — commits `6bbe11d`, `da4f018`)
 
 ---
 
@@ -189,5 +189,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-03-13 (기존 완료 항목 상태 유지, Oracle 실패해결 플랜 O-1~O-10 완료 반영, Oracle 후속 backlog B-O1~B-O3 추가, `Reports/` 기준으로 정렬)
+> **최종 갱신**: 2026-03-13 (B-O3 valid bitmask auto-widening 완료 반영, v0.3.2 — 기존 완료 항목 유지, Oracle 실패해결 플랜 O-1~O-10 반영, `Reports/` 기준으로 정렬)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`

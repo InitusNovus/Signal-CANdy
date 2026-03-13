@@ -40,16 +40,18 @@ Float32 rounding during the encode→decode cycle can introduce a ±1 LSB diverg
 **Category**: `float32_rounding`
 
 ### Exception 3 — 32-bit valid bitmask limit for messages with >32 signals
-The generated `valid` bitmask is currently a `uint32_t`. Messages with more than 32 signals (common in multiplex-heavy industrial DBCs) cannot have every signal individually tracked by the bitmask.
+The generated `valid` bitmask was a fixed `uint32_t`. Auto-widening (B-O3, v0.3.2) now selects `uint32_t` for ≤32 signals or `uint64_t` for 33–64 signals. Messages with >64 signals emit `CodeGenError.UnsupportedFeature` at generation time.
 
 | Criterion | Status | Justification |
 | :--- | :--- | :--- |
 | Technical Limitation | PASS | Architectural choice of `uint32_t` for the `valid` field. |
 | Scoped Impact | PASS | Impact limited to complex industrial/heavy-duty DBCs. |
-| No Feasible Alternative | PASS | Requires widening to `uint64_t` or an array-based mask. |
-| ROADMAP Entry | PASS | Tracked under `L-3` (valid bitmask automatic expansion). |
+| No Feasible Alternative | **RESOLVED** | Implemented auto-widening to `uint64_t` in `Codegen.fs` (B-O3, v0.3.2). |
+| ROADMAP Entry | PASS | Tracked under B-O3 (completed 0.3.2). |
 
 **Category**: `valid_mask_width`
+
+> **RESOLVED** (2026-03-13, commits `6bbe11d`, `da4f018`): Auto-widening implemented in `Codegen.fs` (B-O3). Messages with ≤32 signals use `uint32_t valid`; 33–64 signals use `uint64_t valid` + `1ULL` shift; >64 signals emit `CodeGenError.UnsupportedFeature`. Backward-compatible.
 
 ### Exception 4 — cantools parsing incompatibility (hyundai, toyota, vw)
 Specific vendor DBCs contain syntax anomalies or 29-bit extended IDs that `cantools` (v41.2.1) rejects, while Signal-CANdy successfully parses and generates code for them. These files cannot be verified against `cantools`.

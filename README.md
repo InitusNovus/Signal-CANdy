@@ -24,8 +24,8 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 Install:
 
 ```pwsh
-dotnet add package SignalCandy.Core --version 0.3.1
-dotnet add package SignalCandy --version 0.3.1
+dotnet add package SignalCandy.Core --version 0.3.2
+dotnet add package SignalCandy --version 0.3.2
 ```
 
 ## ⚡ Quick Start (5 minutes)
@@ -325,7 +325,7 @@ make -C gen build
 Notes
 - Branch selection uses the raw integer value of the switch signal (typical DBC semantics).
 - Base (non-multiplexed) signals are always decoded/encoded.
- - Valid bitmask width: current implementations use a 32-bit `valid` field. Extremely large messages with >32 branch/base signals may require widening (e.g., to 64-bit) or an array. This is called out in Limitations; auto-widening is on the roadmap.
+ - Valid bitmask width: messages with ≤32 signals use a 32-bit `valid` field (`uint32_t`); messages with 33–64 signals automatically use a 64-bit field (`uint64_t` + `1ULL` shift). Messages with >64 signals cannot be generated — codegen reports `CodeGenError.UnsupportedFeature`.
 
 Using valid and mux_active
 ```c
@@ -677,7 +677,7 @@ Details can be reproduced via the stress suite and bulk runner in `scripts/bulk_
 
 - Automatic CRC/Counter validation is not yet implemented (config flag is reserved)
 - Supports both classic CAN (up to 8-byte) and CAN FD (up to 64-byte) payloads
-- Extremely large messages with >32 signals may require widening the `valid` bitmask
+- Messages with >32 multiplexed signals automatically use a 64-bit `valid` bitmask (`uint64_t`). Messages with >64 multiplexed signals are not supported (code generation reports `CodeGenError.UnsupportedFeature`).
 
 ## Dispatch modes, registry, and relation to nanopb
 
