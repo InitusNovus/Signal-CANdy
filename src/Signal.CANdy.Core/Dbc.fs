@@ -4,6 +4,7 @@ open System
 open System.IO
 open System.Text.RegularExpressions
 
+open Signal.CANdy.Core.Config
 open Signal.CANdy.Core.Ir
 open Signal.CANdy.Core.Errors
 
@@ -390,3 +391,89 @@ module Dbc =
                 | None -> Ok { Messages = messages }
         with ex ->
             Error(ParseError.IoError ex.Message)
+
+    let applyConfigMetadata (configOpt: Config.Config option) (ir: Ir) : Ir =
+        let mapMode (mode: string) =
+            match mode with
+            | "validate" -> Some CrcCounterMode.Validate
+            | "passthrough" -> Some CrcCounterMode.Passthrough
+            | "fail_fast" -> Some CrcCounterMode.FailFast
+            | _ -> None
+
+        let tryResolveCrcParams (crcCfg: Config.CrcCounterConfig) (algorithm: string) =
+            match algorithm with
+            | "CRC8_SAE_J1850" ->
+                Some
+                    { Width = 8
+                      Poly = 0x1DUL
+                      Init = 0xFFUL
+                      XorOut = 0xFFUL
+                      ReflectIn = false
+                      ReflectOut = false }
+            | "CRC8_8H2F" ->
+                Some
+                    { Width = 8
+                      Poly = 0x2FUL
+                      Init = 0xFFUL
+                      XorOut = 0xFFUL
+                      ReflectIn = false
+                      ReflectOut = false }
+            | _ ->
+                crcCfg.CustomAlgorithms
+                |> Option.bind (Map.tryFind algorithm)
+                |> Option.map (fun custom ->
+                    { Width = custom.Width
+                      Poly = custom.Poly
+                      Init = custom.Init
+                      XorOut = custom.XorOut
+                      ReflectIn = custom.ReflectIn
+                      ReflectOut = custom.ReflectOut })
+
+        let mapAlgorithmId (algorithm: string) =
+            match algorithm with
+            | "CRC8_SAE_J1850" -> CrcAlgorithmId.CRC8_SAE_J1850
+            | "CRC8_8H2F" -> CrcAlgorithmId.CRC8_8H2F
+            | "CRC16_CCITT" -> CrcAlgorithmId.CRC16_CCITT
+            | "CRC32P4" -> CrcAlgorithmId.CRC32P4
+            | _ -> CrcAlgorithmId.Custom algorithm
+
+        let enrichSignal (crcCfg: Config.CrcCounterConfig) (msgCfg: Config.CrcCounterMessageConfig) (signal: Signal) =
+            let signalWithCrc =
+                match msgCfg.Crc with
+                | Some crcSig when signal.Name = crcSig.Signal ->
+                    match tryResolveCrcParams crcCfg crcSig.Algorithm with
+                    | Some parameters ->
+                        { signal with
+                            CrcMeta =
+                                Some
+                                    { Algorithm = mapAlgorithmId crcSig.Algorithm
+                                      Params = parameters
+                                      ByteRange =
+                                        {| Start = fst crcSig.ByteRange
+                                           End = snd crcSig.ByteRange |}
+                                      DataId = crcSig.DataId } }
+                    | None -> signal
+                | _ -> signal
+
+            match msgCfg.Counter with
+            | Some counterSig when signal.Name = counterSig.Signal ->
+                { signalWithCrc with
+                    CounterMeta =
+                        Some
+                            { Modulus = counterSig.Modulus
+                              Increment = counterSig.Increment } }
+            | _ -> signalWithCrc
+
+        match configOpt |> Option.bind (fun config -> config.CrcCounter) with
+        | None -> ir
+        | Some crcCfg ->
+            { ir with
+                Messages =
+                    ir.Messages
+                    |> List.map (fun msg ->
+                        match crcCfg.Messages |> Map.tryFind msg.Name with
+                        | None -> msg
+                        | Some msgCfg ->
+                            { msg with
+                                Signals = msg.Signals |> List.map (enrichSignal crcCfg msgCfg)
+                                CrcCounterMode = mapMode crcCfg.Mode }) }

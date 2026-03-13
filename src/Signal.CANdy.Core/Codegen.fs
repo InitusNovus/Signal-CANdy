@@ -929,6 +929,7 @@ module Codegen =
                     )
                 )
             | None ->
+                let ir = Signal.CANdy.Core.Dbc.applyConfigMetadata (Some config) ir
 
                 let crcCounterGuard =
                     if config.CrcCounterCheck then
