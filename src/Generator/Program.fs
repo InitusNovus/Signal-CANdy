@@ -130,6 +130,20 @@ module Program =
                                 | ValidationError.MissingField s -> s
                                 | ValidationError.IoError s -> s
                                 | ValidationError.Unknown s -> s
+                                | ValidationError.ByteRangeExceedsDlc(msg, rangeEnd, dlc) ->
+                                    sprintf "byte_range end %d exceeds DLC %d in message '%s'." rangeEnd dlc msg
+                                | ValidationError.UnknownAlgorithm name ->
+                                    sprintf "unknown CRC/algorithm '%s' referenced in config." name
+                                | ValidationError.SignalNotFound(messageName, signalName) ->
+                                    sprintf "signal '%s' not found in message '%s'." signalName messageName
+                                | ValidationError.InvalidModulus(messageName, modulus) ->
+                                    sprintf "invalid counter modulus %d in message '%s' (must be >= 2)." modulus messageName
+                                | ValidationError.ConfigConflict reason ->
+                                    sprintf "configuration conflict: %s" reason
+                                | ValidationError.CrcWidthMismatch(messageName, crcWidth, signalBits) ->
+                                    sprintf "CRC width mismatch for message '%s': crc width %d vs signal bits %d." messageName crcWidth signalBits
+                                | ValidationError.MessageNotFound name ->
+                                    sprintf "message '%s' not found in configuration." name
 
                             eprintfn "Warning: Failed to load config: %s. Falling back to defaults." msg
                             defaultCfg
