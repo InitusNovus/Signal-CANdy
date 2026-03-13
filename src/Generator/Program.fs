@@ -115,7 +115,8 @@ module Program =
                       Dispatch = "binary_search"
                       CrcCounterCheck = false
                       MotorolaStartBit = "msb"
-                      FilePrefix = "sc_" }
+                      FilePrefix = "sc_"
+                      CrcCounter = None }
 
                 let cfg =
                     match parsedArgs.ConfigPath with

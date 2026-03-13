@@ -80,7 +80,8 @@ module FacadeTests =
           Dispatch = "binary_search"
           CrcCounterCheck = false
           MotorolaStartBit = "msb"
-          FilePrefix = "sc_" }
+          FilePrefix = "sc_"
+          CrcCounter = None }
 
     // -------------------------------------------------------
     // H-3c: Facade unit tests — exception type verification
@@ -162,7 +163,8 @@ phys_type: INVALID_TYPE
               Dispatch = "binary_search"
               CrcCounterCheck = false
               MotorolaStartBit = "msb"
-              FilePrefix = "sc_" }
+              FilePrefix = "sc_"
+              CrcCounter = None }
 
         let ex =
             Assert.Throws<SignalCandyValidationException>(fun () -> facade.ValidateConfig(badConfig))

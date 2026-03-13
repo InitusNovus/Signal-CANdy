@@ -47,7 +47,8 @@ let generateFromPaths
                       Dispatch = "binary_search"
                       CrcCounterCheck = false
                       MotorolaStartBit = "msb"
-                      FilePrefix = "sc_" }
+                      FilePrefix = "sc_"
+                      CrcCounter = None }
 
         match configResult with
         | Error e -> return Error e

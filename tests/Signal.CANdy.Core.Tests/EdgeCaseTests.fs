@@ -19,7 +19,8 @@ module EdgeCaseTests =
           Dispatch = "binary_search"
           CrcCounterCheck = false
           MotorolaStartBit = "msb"
-          FilePrefix = "sc_" }
+          FilePrefix = "sc_"
+          CrcCounter = None }
 
     /// Helper: create temp output directory
     let private createTempOutDir () =

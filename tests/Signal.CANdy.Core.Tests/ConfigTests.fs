@@ -22,7 +22,8 @@ module ConfigTests =
           Dispatch = "binary_search"
           CrcCounterCheck = false
           MotorolaStartBit = "msb"
-          FilePrefix = "sc_" }
+          FilePrefix = "sc_"
+          CrcCounter = None }
 
     // -------------------------------------------------------
     // Config.validate tests

@@ -19,7 +19,8 @@ module CodegenTests =
           Dispatch = "binary_search"
           CrcCounterCheck = false
           MotorolaStartBit = "msb"
-          FilePrefix = "sc_" }
+          FilePrefix = "sc_"
+          CrcCounter = None }
 
     /// A minimal single-signal for building test IR
     let private mkSignal name startBit length =
