@@ -24,8 +24,8 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 Install:
 
 ```pwsh
-dotnet add package SignalCandy.Core --version 0.3.0
-dotnet add package SignalCandy --version 0.3.0
+dotnet add package SignalCandy.Core --version 0.3.1
+dotnet add package SignalCandy --version 0.3.1
 ```
 
 ## ⚡ Quick Start (5 minutes)
