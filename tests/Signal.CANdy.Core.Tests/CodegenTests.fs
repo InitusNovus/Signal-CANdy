@@ -189,6 +189,33 @@ module CodegenTests =
                 Receivers = []
                 CrcCounterMode = None } ] }
 
+    let private mkCrcCounterConfig mode messageName crcCfg counterCfg : CrcCounterConfig =
+        { Mode = mode
+          Messages = Map.ofList [ messageName, { Crc = crcCfg; Counter = counterCfg } ]
+          CustomAlgorithms = None }
+
+    let private mkCrc8SaeJ1850Params : CrcAlgorithmParams =
+        { Width = 8
+          Poly = 0x1DUL
+          Init = 0xFFUL
+          XorOut = 0xFFUL
+          ReflectIn = false
+          ReflectOut = false }
+
+    let private mkCrc88h2fParams : CrcAlgorithmParams =
+        { Width = 8
+          Poly = 0x2FUL
+          Init = 0xFFUL
+          XorOut = 0xFFUL
+          ReflectIn = false
+          ReflectOut = false }
+
+    let private mkCrcSignalMeta algorithm parameters byteStart byteEnd : CrcSignalMeta =
+        { Algorithm = algorithm
+          Params = parameters
+          ByteRange = {| Start = byteStart; End = byteEnd |}
+          DataId = None }
+
     // -------------------------------------------------------
     // H-1d: Codegen.generate tests
     // -------------------------------------------------------
@@ -573,6 +600,374 @@ module CodegenTests =
             | Ok files ->
                 files.Sources |> List.map Path.GetFileName |> should contain "message_1.c"
                 files.Headers |> List.map Path.GetFileName |> should contain "sc_registry.h"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate treats passthrough mode CRC signal as regular signal`` () =
+        let outDir = createTempOutDir ()
+
+        let passthroughCfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter = Some(mkCrcCounterConfig "passthrough" "TEST_MSG" None None) }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 200u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; mkSignal "CHECKSUM" 8us 8us ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = Some CrcCounterMode.Passthrough } ] }
+
+        try
+            match generate ir outDir passthroughCfg with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "test_msg.c")
+                let content = File.ReadAllText(msgC)
+                content.Contains("sc_crc8_sae_j1850") |> should equal false
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate returns UnsupportedFeature for fail_fast mode with crc_counter block`` () =
+        let outDir = createTempOutDir ()
+
+        let failFastCfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter =
+                    Some(
+                        mkCrcCounterConfig
+                            "fail_fast"
+                            "TEST_MSG"
+                            (Some
+                                { Signal = "CHECKSUM"
+                                  Algorithm = "CRC8_SAE_J1850"
+                                  ByteRange = (0, 0)
+                                  DataId = None })
+                            None
+                    ) }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 201u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; mkSignal "CHECKSUM" 8us 8us ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = None } ] }
+
+        try
+            match generate ir outDir failFastCfg with
+            | Error(CodeGenError.UnsupportedFeature msg) ->
+                msg |> should haveSubstring "TEST_MSG"
+                msg |> should haveSubstring "crc_counter.mode=validate"
+            | Error e -> failwithf "Expected UnsupportedFeature, got: %A" e
+            | Ok _ -> failwith "Expected UnsupportedFeature for fail_fast mode"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate validate mode emits CRC-8 SAE J1850 decode and encode checks`` () =
+        let outDir = createTempOutDir ()
+
+        let crcMeta =
+            mkCrcSignalMeta CrcAlgorithmId.CRC8_SAE_J1850 mkCrc8SaeJ1850Params 0 0
+
+        let crcSignal =
+            { (mkSignal "CHECKSUM" 8us 8us) with
+                CrcMeta = Some crcMeta
+                IsCrc = true }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 202u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; crcSignal ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = Some CrcCounterMode.Validate } ] }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter =
+                    Some(
+                        mkCrcCounterConfig
+                            "validate"
+                            "TEST_MSG"
+                            (Some
+                                { Signal = "CHECKSUM"
+                                  Algorithm = "CRC8_SAE_J1850"
+                                  ByteRange = (0, 0)
+                                  DataId = None })
+                            None
+                    ) }
+
+        try
+            match generate ir outDir cfg with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "test_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "sc_crc8_sae_j1850"
+                content |> should haveSubstring "!= (uint8_t)msg->CHECKSUM) { return false; }"
+                content |> should haveSubstring "msg->CHECKSUM = sc_crc8_sae_j1850"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate validate mode emits CRC-8 8H2F verification call`` () =
+        let outDir = createTempOutDir ()
+
+        let crcMeta =
+            mkCrcSignalMeta CrcAlgorithmId.CRC8_8H2F mkCrc88h2fParams 0 0
+
+        let crcSignal =
+            { (mkSignal "CHECKSUM" 8us 8us) with
+                CrcMeta = Some crcMeta
+                IsCrc = true }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 203u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; crcSignal ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = Some CrcCounterMode.Validate } ] }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter =
+                    Some(
+                        mkCrcCounterConfig
+                            "validate"
+                            "TEST_MSG"
+                            (Some
+                                { Signal = "CHECKSUM"
+                                  Algorithm = "CRC8_8H2F"
+                                  ByteRange = (0, 0)
+                                  DataId = None })
+                            None
+                    ) }
+
+        try
+            match generate ir outDir cfg with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "test_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "sc_crc8_8h2f"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate emits counter state type and declaration when counter metadata exists`` () =
+        let outDir = createTempOutDir ()
+
+        let counterSignal =
+            { (mkSignal "COUNTER" 16us 4us) with
+                CounterMeta = Some { Modulus = 15; Increment = 1 }
+                IsCounter = true }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 204u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; counterSignal ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = Some CrcCounterMode.Validate } ] }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter =
+                    Some(
+                        mkCrcCounterConfig
+                            "validate"
+                            "TEST_MSG"
+                            None
+                            (Some
+                                { Signal = "COUNTER"
+                                  Modulus = 15
+                                  Increment = 1 })
+                    ) }
+
+        try
+            match generate ir outDir cfg with
+            | Ok files ->
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "test_msg.h")
+                let content = File.ReadAllText(msgH)
+                content |> should haveSubstring "counter_state_t"
+                content |> should haveSubstring "check_counter"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate emits check_counter function body with rollover modulus`` () =
+        let outDir = createTempOutDir ()
+
+        let counterSignal =
+            { (mkSignal "COUNTER" 16us 4us) with
+                CounterMeta = Some { Modulus = 15; Increment = 1 }
+                IsCounter = true }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 205u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; counterSignal ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = Some CrcCounterMode.Validate } ] }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter =
+                    Some(
+                        mkCrcCounterConfig
+                            "validate"
+                            "TEST_MSG"
+                            None
+                            (Some
+                                { Signal = "COUNTER"
+                                  Modulus = 15
+                                  Increment = 1 })
+                    ) }
+
+        try
+            match generate ir outDir cfg with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "test_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "check_counter"
+                content |> should haveSubstring "% 15"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate without CRC config keeps message output free from CRC and counter artifacts`` () =
+        let outDir = createTempOutDir ()
+
+        let ir =
+            { Messages =
+                [ { Name = "PARITY_MSG"
+                    Id = 206u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; mkSignal "STATUS" 8us 8us ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = None } ] }
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "parity_msg.c")
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "parity_msg.h")
+                let sourceContent = File.ReadAllText(msgC)
+                let headerContent = File.ReadAllText(msgH)
+                sourceContent.Contains("sc_crc8_") |> should equal false
+                headerContent.Contains("counter_state_t") |> should equal false
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate emits CRC helper declarations and definitions in utils for validate config`` () =
+        let outDir = createTempOutDir ()
+
+        let crcMeta =
+            mkCrcSignalMeta CrcAlgorithmId.CRC8_SAE_J1850 mkCrc8SaeJ1850Params 0 0
+
+        let crcSignal =
+            { (mkSignal "CHECKSUM" 8us 8us) with
+                CrcMeta = Some crcMeta
+                IsCrc = true }
+
+        let ir =
+            { Messages =
+                [ { Name = "TEST_MSG"
+                    Id = 207u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; crcSignal ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = Some CrcCounterMode.Validate } ] }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true
+                CrcCounter =
+                    Some(
+                        mkCrcCounterConfig
+                            "validate"
+                            "TEST_MSG"
+                            (Some
+                                { Signal = "CHECKSUM"
+                                  Algorithm = "CRC8_SAE_J1850"
+                                  ByteRange = (0, 0)
+                                  DataId = None })
+                            None
+                    ) }
+
+        try
+            match generate ir outDir cfg with
+            | Ok files ->
+                let utilsH = files.Headers |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.h"))
+                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.c"))
+                let utilsHContent = File.ReadAllText(utilsH)
+                let utilsCContent = File.ReadAllText(utilsC)
+                utilsHContent |> should haveSubstring "sc_crc8_sae_j1850"
+                utilsCContent |> should haveSubstring "sc_crc8_sae_j1850"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate without CRC config keeps utils free from CRC helpers`` () =
+        let outDir = createTempOutDir ()
+
+        let ir =
+            { Messages =
+                [ { Name = "PARITY_MSG"
+                    Id = 208u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = [ mkSignal "PAYLOAD" 0us 8us; mkSignal "STATUS" 8us 8us ]
+                    Sender = "ECU"
+                    Receivers = []
+                    CrcCounterMode = None } ] }
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.c"))
+                let content = File.ReadAllText(utilsC)
+                content.Contains("sc_crc8_") |> should equal false
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
