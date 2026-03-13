@@ -1,4 +1,4 @@
-namespace Signal.CANdy.Core.Tests
+﻿namespace Signal.CANdy.Core.Tests
 
 open Xunit
 open FsUnit.Xunit
@@ -32,7 +32,7 @@ module DbcTests =
 
     [<Fact>]
     let ``parseDbcFile returns IoError for unreadable path`` () =
-        // A directory path is not a valid DBC file — reading it should fail
+        // A directory path is not a valid DBC file ??reading it should fail
         let dirPath = Path.GetTempPath()
         let result = parseDbcFile dirPath
 
@@ -325,22 +325,23 @@ BS_:
     [<InlineData("MsgChecksum")>]
     let ``IsCrc heuristic detects CRC signals by name substring`` (signalName: string) =
         let dbc =
-            sprintf """
+            $"""
 VERSION ""
 NS_ :
 BS_:
 
 BO_ 100 MSG: 8 Vector__XXX
- SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
-""" signalName
+ SG_ {signalName} : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
         let path = createTempDbcFile dbc
 
         try
             match parseDbcFile path with
             | Ok ir ->
                 let msg = ir.Messages |> List.exactlyOne
-                let sig = msg.Signals |> List.exactlyOne
-                sig.IsCrc |> should equal true
+                let signal = msg.Signals |> List.exactlyOne
+                signal.IsCrc |> should equal true
             | Error e -> failwithf "Expected success, got: %A" e
         finally
             File.Delete(path)
@@ -352,22 +353,23 @@ BO_ 100 MSG: 8 Vector__XXX
     [<InlineData("ALIVE_CNT")>]
     let ``IsCounter heuristic detects counter signals by name substring`` (signalName: string) =
         let dbc =
-            sprintf """
+            $"""
 VERSION ""
 NS_ :
 BS_:
 
 BO_ 200 MSG2: 8 Vector__XXX
- SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
-""" signalName
+ SG_ {signalName} : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
         let path = createTempDbcFile dbc
 
         try
             match parseDbcFile path with
             | Ok ir ->
                 let msg = ir.Messages |> List.exactlyOne
-                let sig = msg.Signals |> List.exactlyOne
-                sig.IsCounter |> should equal true
+                let signal = msg.Signals |> List.exactlyOne
+                signal.IsCounter |> should equal true
             | Error e -> failwithf "Expected success, got: %A" e
         finally
             File.Delete(path)
@@ -378,23 +380,24 @@ BO_ 200 MSG2: 8 Vector__XXX
     [<InlineData("Temperature")>]
     let ``Non-CRC/non-Counter names are not detected`` (signalName: string) =
         let dbc =
-            sprintf """
+            $"""
 VERSION ""
 NS_ :
 BS_:
 
 BO_ 300 MSG3: 8 Vector__XXX
- SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
-""" signalName
+ SG_ {signalName} : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
         let path = createTempDbcFile dbc
 
         try
             match parseDbcFile path with
             | Ok ir ->
                 let msg = ir.Messages |> List.exactlyOne
-                let sig = msg.Signals |> List.exactlyOne
-                sig.IsCrc |> should equal false
-                sig.IsCounter |> should equal false
+                let signal = msg.Signals |> List.exactlyOne
+                signal.IsCrc |> should equal false
+                signal.IsCounter |> should equal false
             | Error e -> failwithf "Expected success, got: %A" e
         finally
             File.Delete(path)
@@ -411,13 +414,15 @@ BS_:
  BO_ 400 MSG4: 8 Vector__XXX
  SG_ CRC_OFF : 0|8@1+ (1,0) [0|255] "" Vector__XXX
 """
+
         let path = createTempDbcFile dbc
 
         try
             match parseDbcFile path with
             | Ok ir ->
-                let sig = ir.Messages |> List.exactlyOne |> fun m -> m.Signals |> List.exactlyOne
-                sig.IsCrc |> should equal true
+                let signal = ir.Messages |> List.exactlyOne |> fun m -> m.Signals |> List.exactlyOne
+                signal.IsCrc |> should equal true
             | Error e -> failwithf "Expected success, got: %A" e
         finally
             File.Delete(path)
+

@@ -175,6 +175,13 @@ module Config =
     let private tryAsMap (value: obj) : IDictionary<string, obj> option =
         match value with
         | :? IDictionary<string, obj> as dict -> Some dict
+        | :? IDictionary<obj, obj> as d ->
+            let result = System.Collections.Generic.Dictionary<string, obj>()
+            for kv in d do
+                match kv.Key with
+                | :? string as k -> result.[k] <- kv.Value
+                | _ -> ()
+            if result.Count > 0 then Some(result :> IDictionary<string, obj>) else None
         | _ -> None
 
     let private tryParseInt64FromString (s: string) : int64 option =
@@ -346,6 +353,25 @@ module Config =
 
                                                                     let ending =
                                                                         tryGetInt64 rangeMap [ "end" ]
+                                                                        |> Option.map int
+                                                                        |> Option.defaultValue 0
+
+                                                                    (start, ending)
+                                                                | :? IDictionary<obj, obj> as rangeObj ->
+                                                                    // YamlDotNet may deserialize nested maps as IDictionary<obj,obj>
+                                                                    let tmp = System.Collections.Generic.Dictionary<string, obj>()
+                                                                    for kv in rangeObj do
+                                                                        match kv.Key with
+                                                                        | :? string as k -> tmp.[k] <- kv.Value
+                                                                        | _ -> ()
+
+                                                                    let start =
+                                                                        tryGetInt64 (tmp :> IDictionary<string, obj>) [ "start" ]
+                                                                        |> Option.map int
+                                                                        |> Option.defaultValue 0
+
+                                                                    let ending =
+                                                                        tryGetInt64 (tmp :> IDictionary<string, obj>) [ "end" ]
                                                                         |> Option.map int
                                                                         |> Option.defaultValue 0
 
