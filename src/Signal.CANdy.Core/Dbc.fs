@@ -306,7 +306,12 @@ module Dbc =
                                     match metaMap |> Map.tryFind (msg.Name, s.Name) with
                                     | Some(isS, ord) -> isS, ord
                                     | None ->
-                                        let byteOrder = if s.ByteOrder = 0uy then ByteOrder.Big else ByteOrder.Little
+                                        let byteOrder =
+                                            if s.ByteOrder = 0uy then
+                                                ByteOrder.Big
+                                            else
+                                                ByteOrder.Little
+
                                         (s.Minimum < 0.0), byteOrder
 
                                 let muxInd, muxVal =

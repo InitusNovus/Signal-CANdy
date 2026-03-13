@@ -243,16 +243,21 @@ module Codegen =
             let eps = 1e-9
             let physOutOfDeclaredRange = physMin < minV - eps || physMax > maxV + eps
 
-            let matchesUnsignedRawCountRange = abs minV <= eps && abs (maxV - unsignedRawMax) <= eps
+            let matchesUnsignedRawCountRange =
+                abs minV <= eps && abs (maxV - unsignedRawMax) <= eps
 
             let matchesSignedRawCountRange =
                 isSigned && abs (minV - signedRawMin) <= eps && abs (maxV - signedRawMax) <= eps
 
             let matchesSignedUnsignedPhysicalRange =
-                isSigned && abs (minV - offset) <= eps && abs (maxV - (offset + factor * unsignedRawMax)) <= eps
+                isSigned
+                && abs (minV - offset) <= eps
+                && abs (maxV - (offset + factor * unsignedRawMax)) <= eps
 
             physOutOfDeclaredRange
-            && (matchesUnsignedRawCountRange || matchesSignedRawCountRange || matchesSignedUnsignedPhysicalRange)
+            && (matchesUnsignedRawCountRange
+                || matchesSignedRawCountRange
+                || matchesSignedUnsignedPhysicalRange)
 
     module Message =
         open Utils

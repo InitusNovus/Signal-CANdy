@@ -417,7 +417,10 @@ module CodegenTests =
         try
             match generate ir outDir lsbConfig with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "be_lsb_boundary_msg.c")
+                let msgC =
+                    files.Sources
+                    |> List.find (fun f -> Path.GetFileName(f) = "be_lsb_boundary_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "get_bits_be(data, 7, 16)"
                 content |> should haveSubstring "set_bits_be(data, 7, 16"
@@ -577,7 +580,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "chrysler_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "chrysler_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should not' (haveSubstring "LAT_DIST < ")
                 content |> should not' (haveSubstring "LAT_DIST > ")
@@ -605,7 +610,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mercedes_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mercedes_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should not' (haveSubstring "STEER_DIR < ")
                 content |> should not' (haveSubstring "STEER_DIR > ")
@@ -633,7 +640,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "normal_c_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "normal_c_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "return false"
             | Error e -> failwithf "Expected Ok, got: %A" e
@@ -660,7 +669,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "identity_d_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "identity_d_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "return false"
             | Error e -> failwithf "Expected Ok, got: %A" e
@@ -687,7 +698,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "narrow_e_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "narrow_e_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "return false"
             | Error e -> failwithf "Expected Ok, got: %A" e
@@ -714,7 +727,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "ford_f_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "ford_f_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "return false"
             | Error e -> failwithf "Expected Ok, got: %A" e
@@ -741,7 +756,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_g_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_g_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should not' (haveSubstring "SIGNED_G < ")
                 content |> should not' (haveSubstring "SIGNED_G > ")
@@ -769,7 +786,9 @@ module CodegenTests =
         try
             match generate ir outDir config with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_h_msg.c")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_h_msg.c")
+
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "return false"
             | Error e -> failwithf "Expected Ok, got: %A" e

@@ -231,7 +231,9 @@ SG_ BE_16: 7|16@0+ (1,0) [0|65535] "" Vector__XXX
 
     [<Fact>]
     let ``DbcParserLib ByteOrder and IsSigned mapping from comprehensive_test`` () =
-        let comprehensiveDbcPath = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc"))
+        let comprehensiveDbcPath =
+            Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc"))
+
         let parsed = Parser.ParseFromPath(comprehensiveDbcPath)
 
         let beMsg = parsed.Messages |> Seq.find (fun m -> m.Name = "MSG_COMP_BE")
