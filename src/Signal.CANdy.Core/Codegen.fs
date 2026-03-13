@@ -86,7 +86,25 @@ module Codegen =
                 config.Dispatch
                 config.MotorolaStartBit
 
-        let utilsHContent (config: Signal.CANdy.Core.Config.Config) =
+        let utilsHContent (config: Signal.CANdy.Core.Config.Config) (ir: Ir) =
+            let hasCrcJ1850 =
+                ir.Messages
+                |> List.exists (fun msg ->
+                    msg.Signals
+                    |> List.exists (fun s ->
+                        match s.CrcMeta with
+                        | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_SAE_J1850
+                        | None -> false))
+
+            let hasCrc8h2f =
+                ir.Messages
+                |> List.exists (fun msg ->
+                    msg.Signals
+                    |> List.exists (fun s ->
+                        match s.CrcMeta with
+                        | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_8H2F
+                        | None -> false))
+
             let model : (string * obj) list =
                 [ "banner", box (banner config)
                   "header_guard", box (guard config.FilePrefix "utils_h")
@@ -96,17 +114,35 @@ module Codegen =
                   "set_bits_be_decl", box "void set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
                   "canfd_dlc_to_len_decl", box "uint8_t canfd_dlc_to_len(uint8_t dlc);"
                   "canfd_len_to_dlc_decl", box "uint8_t canfd_len_to_dlc(uint8_t len);"
-                  "has_crc_j1850", box false
-                  "has_crc_8h2f", box false ]
+                  "has_crc_j1850", box hasCrcJ1850
+                  "has_crc_8h2f", box hasCrc8h2f ]
 
             Templates.renderOrRaise "utils.h.scriban" model
 
-        let utilsCContent (config: Signal.CANdy.Core.Config.Config) =
+        let utilsCContent (config: Signal.CANdy.Core.Config.Config) (ir: Ir) =
+            let hasCrcJ1850 =
+                ir.Messages
+                |> List.exists (fun msg ->
+                    msg.Signals
+                    |> List.exists (fun s ->
+                        match s.CrcMeta with
+                        | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_SAE_J1850
+                        | None -> false))
+
+            let hasCrc8h2f =
+                ir.Messages
+                |> List.exists (fun msg ->
+                    msg.Signals
+                    |> List.exists (fun s ->
+                        match s.CrcMeta with
+                        | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_8H2F
+                        | None -> false))
+
             let model : (string * obj) list =
                 [ "banner", box (banner config)
                   "utils_header_name", box (utilsHeaderName config)
-                  "has_crc_j1850", box false
-                  "has_crc_8h2f", box false ]
+                  "has_crc_j1850", box hasCrcJ1850
+                  "has_crc_8h2f", box hasCrc8h2f ]
 
             Templates.renderOrRaise "utils.c.scriban" model
 
@@ -730,6 +766,94 @@ module Codegen =
 
                 String.concat "\n" (List.ofSeq lines)
 
+            let crcSignalOpt = message.Signals |> List.tryFind (fun s -> s.CrcMeta.IsSome)
+            let counterSignalOpt = message.Signals |> List.tryFind (fun s -> s.CounterMeta.IsSome)
+            let hasCounter = counterSignalOpt.IsSome
+
+            let counterStateTypeDecl =
+                if hasCounter then
+                    sprintf "typedef struct { uint8_t last_counter; bool initialized; } %s_counter_state_t;" message.Name
+                else
+                    ""
+
+            let counterCheckFuncDecl =
+                if hasCounter then
+                    sprintf "bool %s_check_counter(%s_counter_state_t* state, const %s_t* msg);" message.Name message.Name message.Name
+                else
+                    ""
+
+            let crcDecodeCheck =
+                match crcSignalOpt with
+                | Some crcSig when crcSig.CrcMeta.Value.Params.Width = 8 ->
+                    let meta = crcSig.CrcMeta.Value
+
+                    let funcName =
+                        match meta.Algorithm with
+                        | CrcAlgorithmId.CRC8_SAE_J1850 -> "sc_crc8_sae_j1850"
+                        | CrcAlgorithmId.CRC8_8H2F -> "sc_crc8_8h2f"
+                        | CrcAlgorithmId.Custom name -> sprintf "sc_crc8_%s" (name.ToLowerInvariant().Replace("-", "_"))
+                        | _ -> "sc_crc8_unknown"
+
+                    let byteCount = meta.ByteRange.End - meta.ByteRange.Start + 1
+
+                    match message.CrcCounterMode with
+                    | Some CrcCounterMode.Validate ->
+                        sprintf
+                            "    if (%s(&data[%d], %d) != (uint8_t)msg->%s) { return false; }"
+                            funcName
+                            meta.ByteRange.Start
+                            byteCount
+                            crcSig.Name
+                    | _ -> ""
+                | _ -> ""
+
+            let crcEncodeInsert =
+                match crcSignalOpt with
+                | Some crcSig when crcSig.CrcMeta.Value.Params.Width = 8 ->
+                    let meta = crcSig.CrcMeta.Value
+
+                    let funcName =
+                        match meta.Algorithm with
+                        | CrcAlgorithmId.CRC8_SAE_J1850 -> "sc_crc8_sae_j1850"
+                        | CrcAlgorithmId.CRC8_8H2F -> "sc_crc8_8h2f"
+                        | CrcAlgorithmId.Custom name -> sprintf "sc_crc8_%s" (name.ToLowerInvariant().Replace("-", "_"))
+                        | _ -> "sc_crc8_unknown"
+
+                    let byteCount = meta.ByteRange.End - meta.ByteRange.Start + 1
+                    let startEff = chooseStartBit crcSig config
+                    let (_, setFn) = accessorNames crcSig.ByteOrder
+
+                    match message.CrcCounterMode with
+                    | Some CrcCounterMode.Validate ->
+                        sprintf
+                            "    msg->%s = %s(&data[%d], %d);\n    %s(data, %d, %d, (uint64_t)msg->%s);"
+                            crcSig.Name
+                            funcName
+                            meta.ByteRange.Start
+                            byteCount
+                            setFn
+                            startEff
+                            (int crcSig.Length)
+                            crcSig.Name
+                    | _ -> ""
+                | _ -> ""
+
+            let counterCheckFuncImpl =
+                match counterSignalOpt with
+                | Some counterSig ->
+                    let meta = counterSig.CounterMeta.Value
+
+                    sprintf
+                        "bool %s_check_counter(%s_counter_state_t* state, const %s_t* msg) {\n    if (!state->initialized) { state->last_counter = (uint8_t)msg->%s; state->initialized = true; return true; }\n    uint8_t expected = (uint8_t)((state->last_counter + 1) %% %d);\n    state->last_counter = (uint8_t)msg->%s;\n    return (uint8_t)msg->%s == expected;\n}"
+                        message.Name
+                        message.Name
+                        message.Name
+                        counterSig.Name
+                        meta.Modulus
+                        counterSig.Name
+                        counterSig.Name
+                | None -> ""
+
             let headerContent =
                 let model : (string * obj) list =
                     [ "banner", box banner
@@ -738,9 +862,9 @@ module Codegen =
                       "struct_extra_fields", box muxStructFields
                       "signal_declarations_h", box signalDeclarationsH
                       "message_name", box message.Name
-                      "has_counter", box false
-                      "counter_state_type_decl", box ""
-                      "counter_check_func_decl", box "" ]
+                      "has_counter", box hasCounter
+                      "counter_state_type_decl", box counterStateTypeDecl
+                      "counter_check_func_decl", box counterCheckFuncDecl ]
 
                 Templates.renderOrRaise "message.h.scriban" model
 
@@ -754,10 +878,10 @@ module Codegen =
                       "message_length", box (int message.Length)
                       "signal_decode_c", box signalDecodeC
                       "signal_encode_c", box signalEncodeC
-                      "crc_decode_check", box ""
-                      "crc_encode_insert", box ""
-                      "has_counter", box false
-                      "counter_check_func_impl", box "" ]
+                      "crc_decode_check", box crcDecodeCheck
+                      "crc_encode_insert", box crcEncodeInsert
+                      "has_counter", box hasCounter
+                      "counter_check_func_impl", box counterCheckFuncImpl ]
 
                 Templates.renderOrRaise "message.c.scriban" model
 
@@ -931,112 +1055,159 @@ module Codegen =
             | None ->
                 let ir = Signal.CANdy.Core.Dbc.applyConfigMetadata (Some config) ir
 
+                let hasCrcValidateMode =
+                    match config.CrcCounter with
+                    | Some crcCfg when crcCfg.Mode = "validate" -> true
+                    | _ -> false
+
                 let crcCounterGuard =
-                    if config.CrcCounterCheck then
-                        ir.Messages
-                        |> List.tryPick (fun msg ->
-                            msg.Signals
-                            |> List.tryFind (fun s -> s.IsCrc || s.IsCounter)
-                            |> Option.map (fun s -> msg, s))
-                    else
+                    match config.CrcCounter with
+                    | Some crcCfg when crcCfg.Mode = "fail_fast" ->
+                        if crcCfg.Messages.IsEmpty then
+                            None
+                        else
+                            let firstMsg = crcCfg.Messages |> Map.toList |> List.head |> fst
+                            Some(firstMsg, "CRC/counter", None)
+                    | Some _ ->
                         None
+                    | None ->
+                        if config.CrcCounterCheck then
+                            ir.Messages
+                            |> List.tryPick (fun msg ->
+                                msg.Signals
+                                |> List.tryFind (fun s -> s.IsCrc || s.IsCounter)
+                                |> Option.map (fun s ->
+                                    (msg.Name,
+                                     (if s.IsCrc then
+                                          "CRC"
+                                      elif s.IsCounter then
+                                          "counter"
+                                      else
+                                          "CRC/counter"),
+                                     Some s.Name)))
+                        else
+                            None
 
                 match crcCounterGuard with
-                | Some(msg, signal) ->
-                    let kind =
-                        match signal.IsCrc, signal.IsCounter with
-                        | true, true -> "CRC/counter"
-                        | true, false -> "CRC"
-                        | false, true -> "counter"
-                        | false, false -> "CRC/counter"
+                | Some(msgName, kind, signalNameOpt) ->
+                    let signalInfo =
+                        match signalNameOpt with
+                        | Some signalName -> sprintf ", signal '%s'" signalName
+                        | None -> ""
 
                     Error(
                         CodeGenError.UnsupportedFeature(
                             sprintf
-                                "crc_counter_check=true is not supported yet for inferred %s signal '%s' in message '%s'. Explicit CRC/counter metadata and generated validation semantics are not implemented."
+                                "crc_counter_check=true: CRC/counter signal in message '%s' (%s%s) is not supported in the current configuration. Use crc_counter.mode=validate for explicit CRC validation."
+                                msgName
                                 kind
-                                signal.Name
-                                msg.Name
+                                signalInfo
                         )
                     )
                 | None ->
-
-                    // Clean stale prefixed common files
-                    let keepUtilsH = Utils.utilsHeaderName config
-                    let keepUtilsC = Utils.utilsSourceName config
-                    let keepRegH = sprintf "%sregistry.h" config.FilePrefix
-                    let keepRegC = sprintf "%sregistry.c" config.FilePrefix
-                    let includeDir = Path.Combine(outputPath, "include")
-                    let srcDir = Path.Combine(outputPath, "src")
-
-                    if Directory.Exists includeDir then
-                        Directory.GetFiles(includeDir, "*utils.h")
-                        |> Array.iter (fun f ->
-                            if Path.GetFileName(f) <> keepUtilsH then
-                                try
-                                    File.Delete f
-                                with _ ->
-                                    ())
-
-                        Directory.GetFiles(includeDir, "*registry.h")
-                        |> Array.iter (fun f ->
-                            if Path.GetFileName(f) <> keepRegH then
-                                try
-                                    File.Delete f
-                                with _ ->
-                                    ())
-
-                    if Directory.Exists srcDir then
-                        Directory.GetFiles(srcDir, "*utils.c")
-                        |> Array.iter (fun f ->
-                            if Path.GetFileName(f) <> keepUtilsC then
-                                try
-                                    File.Delete f
-                                with _ ->
-                                    ())
-
-                        Directory.GetFiles(srcDir, "*registry.c")
-                        |> Array.iter (fun f ->
-                            if Path.GetFileName(f) <> keepRegC then
-                                try
-                                    File.Delete f
-                                with _ ->
-                                    ())
-
-                    // Generate utils
-                    let uH = Utils.utilsHeaderName config
-                    let uC = Utils.utilsSourceName config
-                    let uHPath = Path.Combine(outputPath, "include", uH)
-                    let uCPath = Path.Combine(outputPath, "src", uC)
-                    File.WriteAllText(uHPath, Utils.utilsHContent config)
-                    File.WriteAllText(uCPath, Utils.utilsCContent config)
-
-                    // Emit compatibility shims
-                    let shimUtilsPath = Path.Combine(outputPath, "include", "utils.h")
-                    let shimRegPath = Path.Combine(outputPath, "include", "registry.h")
-                    File.WriteAllText(shimUtilsPath, shimHeader "utils.h" uH)
-                    File.WriteAllText(shimRegPath, shimHeader "registry.h" keepRegH)
-
-                    // Messages
-                    let msgFiles =
+                    let hasAnyCrcMeta =
                         ir.Messages
-                        |> List.map (fun m -> Message.generateMessageFiles m outputPath config)
-                    // Registry
-                    let regHPath, regCPath = Registry.generateRegistryFiles ir outputPath config
+                        |> List.exists (fun msg -> msg.Signals |> List.exists (fun s -> s.CrcMeta.IsSome))
 
-                    let sources = msgFiles |> List.map snd |> (fun xs -> uCPath :: regCPath :: xs)
+                    let crcWidthError =
+                        if hasCrcValidateMode || hasAnyCrcMeta then
+                            ir.Messages
+                            |> List.tryPick (fun msg ->
+                                msg.Signals
+                                |> List.tryPick (fun s ->
+                                    match s.CrcMeta with
+                                    | Some meta when meta.Params.Width <> 8 ->
+                                        Some(
+                                            sprintf
+                                                "CRC signal '%s' in message '%s' has unsupported width %d (only CRC-8 is supported in this version)."
+                                                s.Name
+                                                msg.Name
+                                                meta.Params.Width
+                                        )
+                                    | _ -> None))
+                        else
+                            None
 
-                    let headers =
-                        msgFiles
-                        |> List.map fst
-                        |> fun xs -> uHPath :: regHPath :: shimUtilsPath :: shimRegPath :: xs
+                    match crcWidthError with
+                    | Some errMsg -> Error(CodeGenError.UnsupportedFeature errMsg)
+                    | None ->
 
-                    let others: string list = []
+                        // Clean stale prefixed common files
+                        let keepUtilsH = Utils.utilsHeaderName config
+                        let keepUtilsC = Utils.utilsSourceName config
+                        let keepRegH = sprintf "%sregistry.h" config.FilePrefix
+                        let keepRegC = sprintf "%sregistry.c" config.FilePrefix
+                        let includeDir = Path.Combine(outputPath, "include")
+                        let srcDir = Path.Combine(outputPath, "src")
 
-                    Ok
-                        { Sources = sources
-                          Headers = headers
-                          Others = others }
+                        if Directory.Exists includeDir then
+                            Directory.GetFiles(includeDir, "*utils.h")
+                            |> Array.iter (fun f ->
+                                if Path.GetFileName(f) <> keepUtilsH then
+                                    try
+                                        File.Delete f
+                                    with _ ->
+                                        ())
+
+                            Directory.GetFiles(includeDir, "*registry.h")
+                            |> Array.iter (fun f ->
+                                if Path.GetFileName(f) <> keepRegH then
+                                    try
+                                        File.Delete f
+                                    with _ ->
+                                        ())
+
+                        if Directory.Exists srcDir then
+                            Directory.GetFiles(srcDir, "*utils.c")
+                            |> Array.iter (fun f ->
+                                if Path.GetFileName(f) <> keepUtilsC then
+                                    try
+                                        File.Delete f
+                                    with _ ->
+                                        ())
+
+                            Directory.GetFiles(srcDir, "*registry.c")
+                            |> Array.iter (fun f ->
+                                if Path.GetFileName(f) <> keepRegC then
+                                    try
+                                        File.Delete f
+                                    with _ ->
+                                        ())
+
+                        // Generate utils
+                        let uH = Utils.utilsHeaderName config
+                        let uC = Utils.utilsSourceName config
+                        let uHPath = Path.Combine(outputPath, "include", uH)
+                        let uCPath = Path.Combine(outputPath, "src", uC)
+                        File.WriteAllText(uHPath, Utils.utilsHContent config ir)
+                        File.WriteAllText(uCPath, Utils.utilsCContent config ir)
+
+                        // Emit compatibility shims
+                        let shimUtilsPath = Path.Combine(outputPath, "include", "utils.h")
+                        let shimRegPath = Path.Combine(outputPath, "include", "registry.h")
+                        File.WriteAllText(shimUtilsPath, shimHeader "utils.h" uH)
+                        File.WriteAllText(shimRegPath, shimHeader "registry.h" keepRegH)
+
+                        // Messages
+                        let msgFiles =
+                            ir.Messages
+                            |> List.map (fun m -> Message.generateMessageFiles m outputPath config)
+                        // Registry
+                        let regHPath, regCPath = Registry.generateRegistryFiles ir outputPath config
+
+                        let sources = msgFiles |> List.map snd |> (fun xs -> uCPath :: regCPath :: xs)
+
+                        let headers =
+                            msgFiles
+                            |> List.map fst
+                            |> fun xs -> uHPath :: regHPath :: shimUtilsPath :: shimRegPath :: xs
+
+                        let others: string list = []
+
+                        Ok
+                            { Sources = sources
+                              Headers = headers
+                              Others = others }
         with
         | TemplateRenderException msg -> Error(CodeGenError.TemplateError msg)
         | ex -> Error(CodeGenError.Unknown(sprintf "Codegen exception: %s" ex.Message))
