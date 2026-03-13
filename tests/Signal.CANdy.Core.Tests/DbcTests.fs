@@ -311,3 +311,117 @@ BS_:
             | Error e -> failwithf "Expected success (empty DBC), got: %A" e
         finally
             File.Delete(path)
+
+    // -------------------------------------------------------
+    // T12: IsCrc / IsCounter heuristic detection (name substring)
+    // -------------------------------------------------------
+
+    [<Theory>]
+    [<InlineData("CRC")>]
+    [<InlineData("crc")>]
+    [<InlineData("Checksum")>]
+    [<InlineData("CHECKSUM")>]
+    [<InlineData("EngineCRC8")>]
+    [<InlineData("MsgChecksum")>]
+    let ``IsCrc heuristic detects CRC signals by name substring`` (signalName: string) =
+        let dbc =
+            sprintf """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 100 MSG: 8 Vector__XXX
+ SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+""" signalName
+
+        let path = createTempDbcFile dbc
+
+        try
+            match parseDbcFile path with
+            | Ok ir ->
+                let msg = ir.Messages |> List.exactlyOne
+                let sig = msg.Signals |> List.exactlyOne
+                sig.IsCrc |> should equal true
+            | Error e -> failwithf "Expected success, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Theory>]
+    [<InlineData("Counter")>]
+    [<InlineData("COUNTER")>]
+    [<InlineData("AliveCounter")>]
+    [<InlineData("ALIVE_CNT")>]
+    let ``IsCounter heuristic detects counter signals by name substring`` (signalName: string) =
+        let dbc =
+            sprintf """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 200 MSG2: 8 Vector__XXX
+ SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+""" signalName
+
+        let path = createTempDbcFile dbc
+
+        try
+            match parseDbcFile path with
+            | Ok ir ->
+                let msg = ir.Messages |> List.exactlyOne
+                let sig = msg.Signals |> List.exactlyOne
+                sig.IsCounter |> should equal true
+            | Error e -> failwithf "Expected success, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Theory>]
+    [<InlineData("Speed")>]
+    [<InlineData("Voltage")>]
+    [<InlineData("Temperature")>]
+    let ``Non-CRC/non-Counter names are not detected`` (signalName: string) =
+        let dbc =
+            sprintf """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 300 MSG3: 8 Vector__XXX
+ SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+""" signalName
+
+        let path = createTempDbcFile dbc
+
+        try
+            match parseDbcFile path with
+            | Ok ir ->
+                let msg = ir.Messages |> List.exactlyOne
+                let sig = msg.Signals |> List.exactlyOne
+                sig.IsCrc |> should equal false
+                sig.IsCounter |> should equal false
+            | Error e -> failwithf "Expected success, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``Current heuristic: CRC_OFF is detected as CRC (documented false positive)`` () =
+        // The parser uses a substring match for "crc"; names like "CRC_OFF" therefore are detected as CRC under current behavior.
+        let dbc =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 400 MSG4: 8 Vector__XXX
+ SG_ CRC_OFF : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+        let path = createTempDbcFile dbc
+
+        try
+            match parseDbcFile path with
+            | Ok ir ->
+                let sig = ir.Messages |> List.exactlyOne |> fun m -> m.Signals |> List.exactlyOne
+                sig.IsCrc |> should equal true
+            | Error e -> failwithf "Expected success, got: %A" e
+        finally
+            File.Delete(path)
