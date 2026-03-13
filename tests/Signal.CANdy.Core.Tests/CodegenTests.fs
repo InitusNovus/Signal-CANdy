@@ -825,3 +825,164 @@ module CodegenTests =
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
+
+    let private mkMuxSwitch name startBit length =
+        { Name = name
+          StartBit = startBit
+          Length = length
+          Factor = 1.0
+          Offset = 0.0
+          Minimum = Some 0.0
+          Maximum = Some 255.0
+          Unit = ""
+          IsSigned = false
+          IsCrc = false
+          IsCounter = false
+          ByteOrder = ByteOrder.Little
+          MultiplexerIndicator = Some "M"
+          MultiplexerSwitchValue = None
+          ValueTable = None
+          Receivers = [] }
+
+    let private mkBranchSignal name startBit length muxVal =
+        { Name = name
+          StartBit = startBit
+          Length = length
+          Factor = 1.0
+          Offset = 0.0
+          Minimum = Some 0.0
+          Maximum = Some 255.0
+          Unit = ""
+          IsSigned = false
+          IsCrc = false
+          IsCounter = false
+          ByteOrder = ByteOrder.Little
+          MultiplexerIndicator = Some "m"
+          MultiplexerSwitchValue = Some muxVal
+          ValueTable = None
+          Receivers = [] }
+
+    let private mkMuxMessage name msgId switchSig branchSignals baseSignals =
+        { Messages =
+            [ { Name = name
+                Id = msgId
+                IsExtended = false
+                Length = 8us
+                Signals = [ switchSig ] @ branchSignals @ baseSignals
+                Sender = "ECU"
+                Receivers = [] } ] }
+
+    [<Fact>]
+    let ``valid bitmask uses uint32_t for 8-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..6 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 (8 + (i * 8))) 8us i)
+
+        let ir = mkMuxMessage "MUX8_MSG" 900u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux8_msg.h")
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mux8_msg.c")
+                let headerContent = File.ReadAllText(msgH)
+                let sourceContent = File.ReadAllText(msgC)
+                headerContent |> should haveSubstring "uint32_t valid;"
+                headerContent |> should haveSubstring "(1u <<"
+                sourceContent |> should haveSubstring "= 0u;"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``valid bitmask uses uint64_t for 33-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..31 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX33_MSG" 901u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux33_msg.h")
+                let content = File.ReadAllText(msgH)
+                content |> should haveSubstring "uint64_t valid;"
+                content |> should haveSubstring "(1ULL <<"
+                content |> should haveSubstring "= 0ULL;"
+                content |> should haveSubstring "/* valid field widened"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``valid bitmask uses uint64_t for 64-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..62 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX64_MSG" 902u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux64_msg.h")
+                let content = File.ReadAllText(msgH)
+                content |> should haveSubstring "uint64_t valid;"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``codegen fails with UnsupportedFeature for 65-signal mux message valid bitmask`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..63 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX65_MSG" 903u switchSig branchSignals []
+        let result = generate ir "C:/tmp/nonexistent" defaultConfig
+
+        match result with
+        | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "65"
+        | _ -> failwith "Expected UnsupportedFeature error"
+
+    [<Fact>]
+    let ``non-mux message with many signals has no valid field valid bitmask`` () =
+        let signals =
+            [ 0..39 ]
+            |> List.map (fun i -> mkSignal (sprintf "Plain_%d" i) (uint16 (i % 64)) 1us)
+
+        let ir =
+            { Messages =
+                [ { Name = "PLAIN40_MSG"
+                    Id = 904u
+                    IsExtended = false
+                    Length = 8us
+                    Signals = signals
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "plain40_msg.h")
+
+                let content = File.ReadAllText(msgH)
+                content |> should not' (haveSubstring "valid")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir

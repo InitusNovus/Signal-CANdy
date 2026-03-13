@@ -349,6 +349,7 @@ clean:
                             | CodeGenError.TemplateError s -> sprintf "Template error: %s" s
                             | CodeGenError.IoError s -> sprintf "IO error: %s" s
                             | CodeGenError.Unknown s -> sprintf "Error: %s" s
+                            | CodeGenError.UnsupportedFeature s -> sprintf "Unsupported feature: %s" s
 
                     eprintfn "%s" msg
                     1

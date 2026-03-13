@@ -277,6 +277,7 @@ module Codegen =
                 |> fun t -> if String.IsNullOrWhiteSpace t then "N" else t
 
             let start = trimmed.[0]
+
             if Char.IsDigit start then "N_" + trimmed else trimmed
 
         let private fieldDecl (s: Signal) = sprintf "    float %s;" s.Name
@@ -486,6 +487,12 @@ module Codegen =
                 | Some _, _ :: _ -> true
                 | _ -> false
 
+            let validType, shiftSuffix, initLiteral =
+                if isMux && message.Signals.Length > 32 then
+                    "uint64_t", "1ULL", "0ULL"
+                else
+                    "uint32_t", "1u", "0u"
+
             let validMacro (sigName: string) =
                 sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (sigName.ToUpperInvariant())
 
@@ -523,7 +530,10 @@ module Codegen =
                             |> String.concat "\n")
                         |> String.concat "\n"
 
-                    [ if isMux then "    msg->valid = 0u;" else ""
+                    [ if isMux then
+                          sprintf "    msg->valid = %s;" initLiteral
+                      else
+                          ""
                       swBlock
                       baseBlock
                       branchesBlock ]
@@ -714,8 +724,9 @@ module Codegen =
                     |> List.iteri (fun idx s ->
                         headerLines.Add(
                             sprintf
-                                "#define %s (1u << %d)"
+                                "#define %s (%s << %d)"
                                 (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
+                                shiftSuffix
                                 idx
                         ))
 
@@ -725,7 +736,12 @@ module Codegen =
                 headerLines.Add signalDeclarationsH
 
                 if isMux2 then
-                    headerLines.Add "    uint32_t valid;"
+                    headerLines.Add(sprintf "    %s valid;" validType)
+
+                    if validType = "uint64_t" then
+                        headerLines.Add("    /* valid field widened to uint64_t: signal count > 32 */")
+                        headerLines.Add("    /* decode init literal: = 0ULL; */")
+
                     headerLines.Add(sprintf "    %s_mux_e mux_active;" message.Name)
 
                 headerLines.Add(sprintf "} %s_t;" message.Name)
@@ -947,83 +963,108 @@ module Codegen =
         try
             // Ensure output directories
             Directory.CreateDirectory(Path.Combine(outputPath, "include")) |> ignore
+
             Directory.CreateDirectory(Path.Combine(outputPath, "src")) |> ignore
 
-            // Clean stale prefixed common files
-            let keepUtilsH = Utils.utilsHeaderName config
-            let keepUtilsC = Utils.utilsSourceName config
-            let keepRegH = sprintf "%sregistry.h" config.FilePrefix
-            let keepRegC = sprintf "%sregistry.c" config.FilePrefix
-            let includeDir = Path.Combine(outputPath, "include")
-            let srcDir = Path.Combine(outputPath, "src")
-
-            if Directory.Exists includeDir then
-                Directory.GetFiles(includeDir, "*utils.h")
-                |> Array.iter (fun f ->
-                    if Path.GetFileName(f) <> keepUtilsH then
-                        try
-                            File.Delete f
-                        with _ ->
-                            ())
-
-                Directory.GetFiles(includeDir, "*registry.h")
-                |> Array.iter (fun f ->
-                    if Path.GetFileName(f) <> keepRegH then
-                        try
-                            File.Delete f
-                        with _ ->
-                            ())
-
-            if Directory.Exists srcDir then
-                Directory.GetFiles(srcDir, "*utils.c")
-                |> Array.iter (fun f ->
-                    if Path.GetFileName(f) <> keepUtilsC then
-                        try
-                            File.Delete f
-                        with _ ->
-                            ())
-
-                Directory.GetFiles(srcDir, "*registry.c")
-                |> Array.iter (fun f ->
-                    if Path.GetFileName(f) <> keepRegC then
-                        try
-                            File.Delete f
-                        with _ ->
-                            ())
-
-            // Generate utils
-            let uH = Utils.utilsHeaderName config
-            let uC = Utils.utilsSourceName config
-            let uHPath = Path.Combine(outputPath, "include", uH)
-            let uCPath = Path.Combine(outputPath, "src", uC)
-            File.WriteAllText(uHPath, Utils.utilsHContent config)
-            File.WriteAllText(uCPath, Utils.utilsCContent config)
-
-            // Emit compatibility shims
-            let shimUtilsPath = Path.Combine(outputPath, "include", "utils.h")
-            let shimRegPath = Path.Combine(outputPath, "include", "registry.h")
-            File.WriteAllText(shimUtilsPath, shimHeader "utils.h" uH)
-            File.WriteAllText(shimRegPath, shimHeader "registry.h" keepRegH)
-
-            // Messages
-            let msgFiles =
+            let overflowGuard =
                 ir.Messages
-                |> List.map (fun m -> Message.generateMessageFiles m outputPath config)
-            // Registry
-            let regHPath, regCPath = Registry.generateRegistryFiles ir outputPath config
+                |> List.tryFind (fun msg ->
+                    let hasMuxSwitch =
+                        msg.Signals |> List.exists (fun s -> s.MultiplexerIndicator = Some "M")
 
-            let sources = msgFiles |> List.map snd |> (fun xs -> uCPath :: regCPath :: xs)
+                    let hasMuxBranches =
+                        msg.Signals
+                        |> List.exists (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsSome)
 
-            let headers =
-                msgFiles
-                |> List.map fst
-                |> fun xs -> uHPath :: regHPath :: shimUtilsPath :: shimRegPath :: xs
+                    hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 64)
 
-            let others: string list = []
+            match overflowGuard with
+            | Some msg ->
+                Error(
+                    CodeGenError.UnsupportedFeature(
+                        sprintf
+                            "Message '%s' has %d signals (>64); valid bitmask cannot be represented in 64 bits."
+                            msg.Name
+                            msg.Signals.Length
+                    )
+                )
+            | None ->
 
-            Ok
-                { Sources = sources
-                  Headers = headers
-                  Others = others }
+                // Clean stale prefixed common files
+                let keepUtilsH = Utils.utilsHeaderName config
+                let keepUtilsC = Utils.utilsSourceName config
+                let keepRegH = sprintf "%sregistry.h" config.FilePrefix
+                let keepRegC = sprintf "%sregistry.c" config.FilePrefix
+                let includeDir = Path.Combine(outputPath, "include")
+                let srcDir = Path.Combine(outputPath, "src")
+
+                if Directory.Exists includeDir then
+                    Directory.GetFiles(includeDir, "*utils.h")
+                    |> Array.iter (fun f ->
+                        if Path.GetFileName(f) <> keepUtilsH then
+                            try
+                                File.Delete f
+                            with _ ->
+                                ())
+
+                    Directory.GetFiles(includeDir, "*registry.h")
+                    |> Array.iter (fun f ->
+                        if Path.GetFileName(f) <> keepRegH then
+                            try
+                                File.Delete f
+                            with _ ->
+                                ())
+
+                if Directory.Exists srcDir then
+                    Directory.GetFiles(srcDir, "*utils.c")
+                    |> Array.iter (fun f ->
+                        if Path.GetFileName(f) <> keepUtilsC then
+                            try
+                                File.Delete f
+                            with _ ->
+                                ())
+
+                    Directory.GetFiles(srcDir, "*registry.c")
+                    |> Array.iter (fun f ->
+                        if Path.GetFileName(f) <> keepRegC then
+                            try
+                                File.Delete f
+                            with _ ->
+                                ())
+
+                // Generate utils
+                let uH = Utils.utilsHeaderName config
+                let uC = Utils.utilsSourceName config
+                let uHPath = Path.Combine(outputPath, "include", uH)
+                let uCPath = Path.Combine(outputPath, "src", uC)
+                File.WriteAllText(uHPath, Utils.utilsHContent config)
+                File.WriteAllText(uCPath, Utils.utilsCContent config)
+
+                // Emit compatibility shims
+                let shimUtilsPath = Path.Combine(outputPath, "include", "utils.h")
+                let shimRegPath = Path.Combine(outputPath, "include", "registry.h")
+                File.WriteAllText(shimUtilsPath, shimHeader "utils.h" uH)
+                File.WriteAllText(shimRegPath, shimHeader "registry.h" keepRegH)
+
+                // Messages
+                let msgFiles =
+                    ir.Messages
+                    |> List.map (fun m -> Message.generateMessageFiles m outputPath config)
+                // Registry
+                let regHPath, regCPath = Registry.generateRegistryFiles ir outputPath config
+
+                let sources = msgFiles |> List.map snd |> (fun xs -> uCPath :: regCPath :: xs)
+
+                let headers =
+                    msgFiles
+                    |> List.map fst
+                    |> fun xs -> uHPath :: regHPath :: shimUtilsPath :: shimRegPath :: xs
+
+                let others: string list = []
+
+                Ok
+                    { Sources = sources
+                      Headers = headers
+                      Others = others }
         with ex ->
             Error(CodeGenError.Unknown(sprintf "Codegen exception: %s" ex.Message))

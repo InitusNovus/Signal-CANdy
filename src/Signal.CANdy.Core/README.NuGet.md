@@ -8,7 +8,7 @@ Core library for SignalCandy: parse DBC files, validate config, and generate C99
 ## Install
 
 ```
-dotnet add package SignalCandy.Core --version 0.3.1
+dotnet add package SignalCandy.Core --version 0.3.2
 ```
 
 ## Quick start (F#)

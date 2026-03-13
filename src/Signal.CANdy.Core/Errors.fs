@@ -10,6 +10,7 @@ module Errors =
         | TemplateError of string
         | IoError of string
         | Unknown of string
+        | UnsupportedFeature of string
 
     type ValidationError =
         | InvalidValue of string
