@@ -115,8 +115,8 @@
 ### L-2. CRC/Counter 자동 검증 구현
 
 - [x] **L-2a.** `Config.CrcCounterCheck` 플래그 활성화 설계
-- [ ] **L-2b.** CRC/Counter 시그널에 대한 코드 생성 로직 구현
-- [ ] **L-2c.** 검증 테스트 추가
+- [x] **L-2b.** CRC/Counter 시그널에 대한 코드 생성 로직 구현
+- [x] **L-2c.** 검증 테스트 추가
 
 ### L-3. valid 비트마스크 자동 확장
 
