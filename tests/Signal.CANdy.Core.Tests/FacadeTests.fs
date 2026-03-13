@@ -5,6 +5,8 @@ open FsUnit.Xunit
 open System
 open System.IO
 open Signal.CANdy
+open Signal.CANdy.Core.Ir
+open Signal.CANdy.Core.Config
 
 module FacadeTests =
 
@@ -13,6 +15,67 @@ module FacadeTests =
         let tempPath = Path.ChangeExtension(Path.GetTempFileName(), extension)
         File.WriteAllText(tempPath, content)
         tempPath
+
+    let private mkMuxSwitch name startBit length =
+        { Name = name
+          StartBit = startBit
+          Length = length
+          Factor = 1.0
+          Offset = 0.0
+          Minimum = Some 0.0
+          Maximum = Some 255.0
+          Unit = ""
+          IsSigned = false
+          IsCrc = false
+          IsCounter = false
+          ByteOrder = ByteOrder.Little
+          MultiplexerIndicator = Some "M"
+          MultiplexerSwitchValue = None
+          ValueTable = None
+          Receivers = [] }
+
+    let private mkBranchSignal name startBit length muxVal =
+        { Name = name
+          StartBit = startBit
+          Length = length
+          Factor = 1.0
+          Offset = 0.0
+          Minimum = Some 0.0
+          Maximum = Some 255.0
+          Unit = ""
+          IsSigned = false
+          IsCrc = false
+          IsCounter = false
+          ByteOrder = ByteOrder.Little
+          MultiplexerIndicator = Some "m"
+          MultiplexerSwitchValue = Some muxVal
+          ValueTable = None
+          Receivers = [] }
+
+    let private mkUnsupportedMuxIr () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0 .. 63 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        { Messages =
+            [ { Name = "MUX65_MSG"
+                Id = 903u
+                IsExtended = false
+                Length = 8us
+                Signals = [ switchSig ] @ branchSignals
+                Sender = "ECU"
+                Receivers = [] } ] }
+
+    let private defaultConfig: Config =
+        { PhysType = "float"
+          PhysMode = "double"
+          RangeCheck = false
+          Dispatch = "binary_search"
+          CrcCounterCheck = false
+          MotorolaStartBit = "msb"
+          FilePrefix = "sc_" }
 
     // -------------------------------------------------------
     // H-3c: Facade unit tests — exception type verification
@@ -100,3 +163,20 @@ phys_type: INVALID_TYPE
             Assert.Throws<SignalCandyValidationException>(fun () -> facade.ValidateConfig(badConfig))
 
         ex.Message |> should haveSubstring "phys_type"
+
+    [<Fact>]
+    let ``GenerateCode throws SignalCandyCodeGenException for UnsupportedFeature`` () =
+        let facade = GeneratorFacade()
+        let outDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+
+        try
+            let ex =
+                Assert.Throws<SignalCandyCodeGenException>(fun () ->
+                    facade.GenerateCode(mkUnsupportedMuxIr (), outDir, defaultConfig)
+                    |> ignore)
+
+            ex.Message |> should haveSubstring ">64"
+        finally
+            if Directory.Exists(outDir) then
+                Directory.Delete(outDir, true)

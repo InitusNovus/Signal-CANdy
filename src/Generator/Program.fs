@@ -164,6 +164,7 @@ module Program =
                             | CodeGenError.TemplateError s -> s
                             | CodeGenError.IoError s -> s
                             | CodeGenError.Unknown s -> s
+                            | CodeGenError.UnsupportedFeature s -> s
 
                         eprintfn "Code generation failed: %s" msg
                         1

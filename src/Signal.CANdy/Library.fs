@@ -84,6 +84,7 @@ type GeneratorFacade() =
                 | Signal.CANdy.Core.Errors.CodeGenError.TemplateError s -> s
                 | Signal.CANdy.Core.Errors.CodeGenError.IoError s -> s
                 | Signal.CANdy.Core.Errors.CodeGenError.Unknown s -> s
+                | Signal.CANdy.Core.Errors.CodeGenError.UnsupportedFeature s -> s
 
             raise (SignalCandyCodeGenException(msg))
 
@@ -131,6 +132,7 @@ type GeneratorFacade() =
                         | Signal.CANdy.Core.Errors.CodeGenError.TemplateError s -> sprintf "[TemplateError] %s" s
                         | Signal.CANdy.Core.Errors.CodeGenError.IoError s -> sprintf "[IoError] %s" s
                         | Signal.CANdy.Core.Errors.CodeGenError.Unknown s -> sprintf "[Unknown] %s" s
+                        | Signal.CANdy.Core.Errors.CodeGenError.UnsupportedFeature s -> sprintf "[UnsupportedFeature] %s" s
 
                     return raise (SignalCandyCodeGenException(msg))
         }
