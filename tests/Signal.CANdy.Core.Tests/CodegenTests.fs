@@ -877,7 +877,7 @@ module CodegenTests =
         let switchSig = mkMuxSwitch "MuxSel" 0us 4us
 
         let branchSignals =
-            [ 0 .. 6 ]
+            [ 0..6 ]
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 (8 + (i * 8))) 8us i)
 
         let ir = mkMuxMessage "MUX8_MSG" 900u switchSig branchSignals []
@@ -902,7 +902,7 @@ module CodegenTests =
         let switchSig = mkMuxSwitch "MuxSel" 0us 4us
 
         let branchSignals =
-            [ 0 .. 31 ]
+            [ 0..31 ]
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
 
         let ir = mkMuxMessage "MUX33_MSG" 901u switchSig branchSignals []
@@ -926,7 +926,7 @@ module CodegenTests =
         let switchSig = mkMuxSwitch "MuxSel" 0us 4us
 
         let branchSignals =
-            [ 0 .. 62 ]
+            [ 0..62 ]
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
 
         let ir = mkMuxMessage "MUX64_MSG" 902u switchSig branchSignals []
@@ -947,7 +947,7 @@ module CodegenTests =
         let switchSig = mkMuxSwitch "MuxSel" 0us 4us
 
         let branchSignals =
-            [ 0 .. 63 ]
+            [ 0..63 ]
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
 
         let ir = mkMuxMessage "MUX65_MSG" 903u switchSig branchSignals []
@@ -960,7 +960,7 @@ module CodegenTests =
     [<Fact>]
     let ``non-mux message with many signals has no valid field valid bitmask`` () =
         let signals =
-            [ 0 .. 39 ]
+            [ 0..39 ]
             |> List.map (fun i -> mkSignal (sprintf "Plain_%d" i) (uint16 (i % 64)) 1us)
 
         let ir =
@@ -978,7 +978,9 @@ module CodegenTests =
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "plain40_msg.h")
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "plain40_msg.h")
+
                 let content = File.ReadAllText(msgH)
                 content |> should not' (haveSubstring "valid")
             | Error e -> failwithf "Expected Ok, got: %A" e

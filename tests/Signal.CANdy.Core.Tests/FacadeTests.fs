@@ -56,7 +56,7 @@ module FacadeTests =
         let switchSig = mkMuxSwitch "MuxSel" 0us 4us
 
         let branchSignals =
-            [ 0 .. 63 ]
+            [ 0..63 ]
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
 
         { Messages =
@@ -173,8 +173,7 @@ phys_type: INVALID_TYPE
         try
             let ex =
                 Assert.Throws<SignalCandyCodeGenException>(fun () ->
-                    facade.GenerateCode(mkUnsupportedMuxIr (), outDir, defaultConfig)
-                    |> ignore)
+                    facade.GenerateCode(mkUnsupportedMuxIr (), outDir, defaultConfig) |> ignore)
 
             ex.Message |> should haveSubstring ">64"
         finally

@@ -13,11 +13,7 @@ module Codegen =
             let raw = (prefix + baseName).ToUpperInvariant()
 
             raw
-            |> Seq.map (fun ch ->
-                if Char.IsLetterOrDigit ch then
-                    ch
-                else
-                    '_')
+            |> Seq.map (fun ch -> if Char.IsLetterOrDigit ch then ch else '_')
             |> Seq.toArray
             |> fun arr -> new string (arr)
 
@@ -248,19 +244,15 @@ module Codegen =
             let physOutOfDeclaredRange = physMin < minV - eps || physMax > maxV + eps
 
             let matchesUnsignedRawCountRange =
-                abs minV <= eps
-                && abs (maxV - unsignedRawMax) <= eps
+                abs minV <= eps && abs (maxV - unsignedRawMax) <= eps
 
             let matchesSignedRawCountRange =
-                isSigned
-                && abs (minV - signedRawMin) <= eps
-                && abs (maxV - signedRawMax) <= eps
+                isSigned && abs (minV - signedRawMin) <= eps && abs (maxV - signedRawMax) <= eps
 
             let matchesSignedUnsignedPhysicalRange =
                 isSigned
                 && abs (minV - offset) <= eps
-                && abs (maxV - (offset + factor * unsignedRawMax))
-                   <= eps
+                && abs (maxV - (offset + factor * unsignedRawMax)) <= eps
 
             physOutOfDeclaredRange
             && (matchesUnsignedRawCountRange
@@ -276,28 +268,17 @@ module Codegen =
 
             let mapped =
                 up
-                |> Seq.map (fun ch ->
-                    if Char.IsLetterOrDigit ch then
-                        ch
-                    else
-                        '_')
+                |> Seq.map (fun ch -> if Char.IsLetterOrDigit ch then ch else '_')
                 |> Seq.toArray
                 |> fun arr -> new string (arr)
 
             let trimmed =
                 mapped.Trim([| '_' |])
-                |> fun t ->
-                    if String.IsNullOrWhiteSpace t then
-                        "N"
-                    else
-                        t
+                |> fun t -> if String.IsNullOrWhiteSpace t then "N" else t
 
             let start = trimmed.[0]
 
-            if Char.IsDigit start then
-                "N_" + trimmed
-            else
-                trimmed
+            if Char.IsDigit start then "N_" + trimmed else trimmed
 
         let private fieldDecl (s: Signal) = sprintf "    float %s;" s.Name
 
@@ -314,11 +295,7 @@ module Codegen =
                     ""
             // For signed signals, cast uint64_t to int64_t before floating-point conversion
             // so that sign-extended values are interpreted correctly as negative numbers.
-            let rawCast =
-                if s.IsSigned then
-                    sprintf "(int64_t)%s" raw
-                else
-                    raw
+            let rawCast = if s.IsSigned then sprintf "(int64_t)%s" raw else raw
 
             let physAssignFloatDouble =
                 sprintf "    msg->%s = (float)((double)%s * %.17g + %.17g);" s.Name rawCast s.Factor s.Offset
@@ -467,12 +444,10 @@ module Codegen =
 
         let private partitionMultiplex (message: Message) =
             let switchOpt =
-                message.Signals
-                |> List.tryFind (fun s -> s.MultiplexerIndicator = Some "M")
+                message.Signals |> List.tryFind (fun s -> s.MultiplexerIndicator = Some "M")
 
             let baseSignals =
-                message.Signals
-                |> List.filter (fun s -> s.MultiplexerIndicator.IsNone)
+                message.Signals |> List.filter (fun s -> s.MultiplexerIndicator.IsNone)
 
             let branches =
                 message.Signals
@@ -503,9 +478,7 @@ module Codegen =
                     config.MotorolaStartBit
 
             let signalDeclarationsH =
-                message.Signals
-                |> List.map fieldDecl
-                |> String.concat "\n"
+                message.Signals |> List.map fieldDecl |> String.concat "\n"
 
             let switchOpt, baseSignals, branches = partitionMultiplex message
 
@@ -530,8 +503,7 @@ module Codegen =
                 let body = signalDecodeFor s in
 
                 if isMux then
-                    body
-                    + (sprintf "\n    msg->valid |= %s;" (validMacro s.Name))
+                    body + (sprintf "\n    msg->valid |= %s;" (validMacro s.Name))
                 else
                     body
 
@@ -547,21 +519,14 @@ module Codegen =
                         + (sprintf "\n    msg->mux_active = (%s_mux_e)((int)%s);" message.Name rawVar)
 
                     let baseBlock =
-                        baseSignals
-                        |> List.map signalDecodeWithValid
-                        |> String.concat "\n\n"
+                        baseSignals |> List.map signalDecodeWithValid |> String.concat "\n\n"
 
                     let branchesBlock =
                         branches
                         |> List.map (fun (k, sigs) ->
-                            let inner =
-                                sigs
-                                |> List.map signalDecodeWithValid
-                                |> String.concat "\n\n"
+                            let inner = sigs |> List.map signalDecodeWithValid |> String.concat "\n\n"
 
-                            [ sprintf "    if ((int)%s == %d) {" rawVar k
-                              inner
-                              "    }" ]
+                            [ sprintf "    if ((int)%s == %d) {" rawVar k; inner; "    }" ]
                             |> String.concat "\n")
                         |> String.concat "\n"
 
@@ -574,10 +539,7 @@ module Codegen =
                       branchesBlock ]
                     |> List.filter (fun s -> not (String.IsNullOrWhiteSpace s))
                     |> String.concat "\n\n"
-                | _ ->
-                    message.Signals
-                    |> List.map signalDecodeFor
-                    |> String.concat "\n\n"
+                | _ -> message.Signals |> List.map signalDecodeFor |> String.concat "\n\n"
 
             let signalEncodeC =
                 match switchOpt, branches with
@@ -667,9 +629,7 @@ module Codegen =
                                 |> List.map (fun s -> genEncodeForSignal s config.RangeCheck config)
                                 |> String.concat "\n\n"
 
-                            [ sprintf "    if ((int)raw_%s == %d) {" sw.Name k
-                              inner
-                              "    }" ]
+                            [ sprintf "    if ((int)raw_%s == %d) {" sw.Name k; inner; "    }" ]
                             |> String.concat "\n")
                         |> String.concat "\n"
 
@@ -716,11 +676,7 @@ module Codegen =
                         let baseLabel = sanitizeEnumIdent name
 
                         let rec uniqueLabel lbl idx =
-                            let candidate =
-                                if idx = 0 then
-                                    lbl
-                                else
-                                    sprintf "%s_%d" lbl idx
+                            let candidate = if idx = 0 then lbl else sprintf "%s_%d" lbl idx
 
                             if used.Contains candidate then
                                 uniqueLabel lbl (idx + 1)
@@ -874,13 +830,8 @@ module Codegen =
             let registryCPath = Path.Combine(outputPath, "src", regCName)
 
             let guard =
-                (config.FilePrefix + "registry_h")
-                    .ToUpperInvariant()
-                |> Seq.map (fun ch ->
-                    if Char.IsLetterOrDigit ch then
-                        ch
-                    else
-                        '_')
+                (config.FilePrefix + "registry_h").ToUpperInvariant()
+                |> Seq.map (fun ch -> if Char.IsLetterOrDigit ch then ch else '_')
                 |> Seq.toArray
                 |> fun arr -> new string (arr)
 
@@ -988,9 +939,7 @@ module Codegen =
 
     // Compatibility shims for legacy includes (utils.h, registry.h)
     let private shimHeader (name: string) (target: string) =
-        let guard =
-            (name.Replace('.', '_') + "_SHIM")
-                .ToUpperInvariant()
+        let guard = (name.Replace('.', '_') + "_SHIM").ToUpperInvariant()
 
         "#ifndef "
         + guard
@@ -1013,28 +962,21 @@ module Codegen =
         : Result<GeneratedFiles, CodeGenError> =
         try
             // Ensure output directories
-            Directory.CreateDirectory(Path.Combine(outputPath, "include"))
-            |> ignore
+            Directory.CreateDirectory(Path.Combine(outputPath, "include")) |> ignore
 
-            Directory.CreateDirectory(Path.Combine(outputPath, "src"))
-            |> ignore
+            Directory.CreateDirectory(Path.Combine(outputPath, "src")) |> ignore
 
             let overflowGuard =
                 ir.Messages
                 |> List.tryFind (fun msg ->
                     let hasMuxSwitch =
-                        msg.Signals
-                        |> List.exists (fun s -> s.MultiplexerIndicator = Some "M")
+                        msg.Signals |> List.exists (fun s -> s.MultiplexerIndicator = Some "M")
 
                     let hasMuxBranches =
                         msg.Signals
-                        |> List.exists (fun s ->
-                            s.MultiplexerIndicator = Some "m"
-                            && s.MultiplexerSwitchValue.IsSome)
+                        |> List.exists (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsSome)
 
-                    hasMuxSwitch
-                    && hasMuxBranches
-                    && msg.Signals.Length > 64)
+                    hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 64)
 
             match overflowGuard with
             | Some msg ->
@@ -1062,16 +1004,16 @@ module Codegen =
                         if Path.GetFileName(f) <> keepUtilsH then
                             try
                                 File.Delete f
-                            with
-                            | _ -> ())
+                            with _ ->
+                                ())
 
                     Directory.GetFiles(includeDir, "*registry.h")
                     |> Array.iter (fun f ->
                         if Path.GetFileName(f) <> keepRegH then
                             try
                                 File.Delete f
-                            with
-                            | _ -> ())
+                            with _ ->
+                                ())
 
                 if Directory.Exists srcDir then
                     Directory.GetFiles(srcDir, "*utils.c")
@@ -1079,16 +1021,16 @@ module Codegen =
                         if Path.GetFileName(f) <> keepUtilsC then
                             try
                                 File.Delete f
-                            with
-                            | _ -> ())
+                            with _ ->
+                                ())
 
                     Directory.GetFiles(srcDir, "*registry.c")
                     |> Array.iter (fun f ->
                         if Path.GetFileName(f) <> keepRegC then
                             try
                                 File.Delete f
-                            with
-                            | _ -> ())
+                            with _ ->
+                                ())
 
                 // Generate utils
                 let uH = Utils.utilsHeaderName config
@@ -1111,17 +1053,12 @@ module Codegen =
                 // Registry
                 let regHPath, regCPath = Registry.generateRegistryFiles ir outputPath config
 
-                let sources =
-                    msgFiles
-                    |> List.map snd
-                    |> (fun xs -> uCPath :: regCPath :: xs)
+                let sources = msgFiles |> List.map snd |> (fun xs -> uCPath :: regCPath :: xs)
 
                 let headers =
                     msgFiles
                     |> List.map fst
-                    |> fun xs ->
-                        uHPath
-                        :: regHPath :: shimUtilsPath :: shimRegPath :: xs
+                    |> fun xs -> uHPath :: regHPath :: shimUtilsPath :: shimRegPath :: xs
 
                 let others: string list = []
 
@@ -1129,5 +1066,5 @@ module Codegen =
                     { Sources = sources
                       Headers = headers
                       Others = others }
-        with
-        | ex -> Error(CodeGenError.Unknown(sprintf "Codegen exception: %s" ex.Message))
+        with ex ->
+            Error(CodeGenError.Unknown(sprintf "Codegen exception: %s" ex.Message))
