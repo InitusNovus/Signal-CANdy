@@ -6,6 +6,18 @@ The format is based on Keep a Changelog, and this project adheres to Semantic Ve
 
 ## [Unreleased]
 
+## [0.3.2] - TBD
+
+### Added
+- **Valid bitmask auto-widening**: Multiplexed messages now auto-select `uint32_t` (<=32 signals) or `uint64_t` (33-64 signals) for the `valid` field in generated C code.
+
+### Changed
+- **User-facing UnsupportedFeature handling**: Facade/CLI/Generator caller layers now explicitly handle `CodeGenError.UnsupportedFeature` to preserve intentional error surfaces.
+- **Version/document alignment**: Core/Facade package versions, `Api.version()`, README install snippets, and NuGet README snippets are aligned to `0.3.2`.
+
+### Fixed
+- **Release blocker (FS0025)**: Removed incomplete pattern-match warnings introduced by `UnsupportedFeature` case expansion in caller layers.
+
 ## [0.2.0] - TBD
 
 ### Added
