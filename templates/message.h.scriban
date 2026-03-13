@@ -1,5 +1,6 @@
-#ifndef {{ message_name | string.upcase }}_H
-#define {{ message_name | string.upcase }}_H
+{{ banner }}
+#ifndef {{ header_guard }}
+#define {{ header_guard }}
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -8,19 +9,17 @@
 extern "C" {
 #endif
 
-// Message: {{ message_name }} (ID: {{ message_id }})
-typedef struct {
-{{ signal_declarations_h }}
+{{ if pre_struct_declarations != "" }}{{ pre_struct_declarations }}
+{{ end }}typedef struct {
+{{ signal_declarations_h }}{{ if struct_extra_fields != "" }}
+{{ struct_extra_fields }}{{ end }}
 } {{ message_name }}_t;
 
-// Decode function
 bool {{ message_name }}_decode({{ message_name }}_t* msg, const uint8_t data[], uint8_t dlc);
-
-// Encode function
 bool {{ message_name }}_encode(uint8_t data[], uint8_t* out_dlc, const {{ message_name }}_t* msg);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // {{ message_name | string.upcase }}_H
+#endif // {{ header_guard }}

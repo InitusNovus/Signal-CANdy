@@ -145,7 +145,8 @@ make -C gen build
   - msb: MSB 기반 톱니형(기본, 도구 일반)
   - lsb: LSB 기반 표기를 내부적으로 MSB 톱니형으로 변환
 - crc_counter_check: true | false
-  - 향후용(보류): CRC/카운터 자동 검증 훅
+  - 명시적 opt-in 가드레일입니다. 활성화 시 DBC 시그널 이름에서 CRC/카운터 계열(`crc`, `checksum`, `counter`, `alive`)이 추론되면, 실제 검증 없는 코드를 조용히 생성하지 않고 `UnsupportedFeature`로 즉시 실패합니다.
+  - 전체 CRC/카운터 생성 검증 로직은 여전히 명시적 알고리즘/메타데이터 지원이 추가될 때까지 보류 상태입니다.
 
 예시
 
@@ -601,7 +602,8 @@ void compare_state(int v) {
 
 ## ⚠️ 제한사항
 
-- CRC/Counter 자동 검증은 아직 구현되지 않았습니다(설정 플래그는 예약됨)
+- CRC/Counter 자동 검증의 전체 구현은 아직 제공되지 않습니다.
+- 현재 `crc_counter_check: true`는 지원되지 않는 경로를 조용히 통과시키지 않도록 하는 fail-fast 가드레일로 동작합니다.
 - 클래식 CAN(최대 8바이트)과 CAN FD(최대 64바이트) 페이로드를 모두 지원합니다
  - 32개 초과의 다중화(mux) 시그널이 있는 메시지는 `uint64_t` valid 비트마스크를 자동 사용합니다. 64개 초과 시그널 메시지는 코드 생성 시 `CodeGenError.UnsupportedFeature`를 반환합니다
 
@@ -636,7 +638,8 @@ switch (can_id) {
   - ID 기반 직접 매핑(컴팩트 switch 또는 테이블). O(1) 룩업. ID가 희소하면 메모리 비용 증가 가능.
 
 CRC/Counter 참고
-- 설정 플래그는 존재하나 자동 검증 구현은 보류 상태입니다. 상위 레이어에서 처리하거나, 추후 YAML 기반 CRC/카운터 매핑 옵션을 기다리세요.
+- 설정 플래그는 존재하며, 현재는 inferred CRC/카운터 시그널이 있을 때 지원되지 않는 경로를 fail-fast로 차단합니다.
+- 실제 생성 검증을 위해서는 상위 레이어 처리 또는 추후 추가될 YAML 기반 CRC/카운터 메타데이터가 필요합니다.
 
 ## 엔디안 및 비트 유틸리티
 

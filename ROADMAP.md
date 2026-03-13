@@ -106,15 +106,15 @@
 
 ### L-1. 템플릿 엔진 도입 (Scriban)
 
-- [ ] **L-1a.** `Codegen.fs`의 Utils 헤더/소스를 Scriban 템플릿(`.sbn`)으로 마이그레이션 (파일럿)
-- [ ] **L-1b.** Message 헤더/소스를 Scriban 템플릿으로 마이그레이션
-- [ ] **L-1c.** Registry 헤더/소스를 Scriban 템플릿으로 마이그레이션
-- [ ] **L-1d.** Core.fsproj에 Scriban 의존성 추가, `templates/` 디렉토리에 `.sbn` 파일 배치
-- [ ] **L-1e.** 생성 결과 동일성 검증 (기존 문자열 연결 대비)
+- [x] **L-1a.** `Codegen.fs`의 Utils 헤더/소스를 Scriban 템플릿으로 마이그레이션 (파일럿)
+- [x] **L-1b.** Message 헤더/소스를 Scriban 템플릿으로 마이그레이션
+- [x] **L-1c.** Registry 헤더/소스를 Scriban 템플릿으로 마이그레이션
+- [x] **L-1d.** Core.fsproj에 Scriban 의존성 추가, `templates/` 디렉토리에 템플릿 파일 배치
+- [x] **L-1e.** 생성 결과 동일성 검증 (golden parity tests for utils/message/registry)
 
 ### L-2. CRC/Counter 자동 검증 구현
 
-- [ ] **L-2a.** `Config.CrcCounterCheck` 플래그 활성화 설계
+- [x] **L-2a.** `Config.CrcCounterCheck` 플래그 활성화 설계
 - [ ] **L-2b.** CRC/Counter 시그널에 대한 코드 생성 로직 구현
 - [ ] **L-2c.** 검증 테스트 추가
 
@@ -189,5 +189,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-03-13 (B-O3 valid bitmask auto-widening 완료 반영, v0.3.2 — 기존 완료 항목 유지, Oracle 실패해결 플랜 O-1~O-10 반영, `Reports/` 기준으로 정렬)
+> **최종 갱신**: 2026-03-13 (L-1 Scriban migration 완료, L-2a fail-fast guardrail 반영, B-O3 valid bitmask auto-widening 포함)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`

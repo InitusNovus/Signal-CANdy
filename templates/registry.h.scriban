@@ -1,15 +1,17 @@
-// Auto-generated registry header (placeholder)
-#ifndef REGISTRY_H
-#define REGISTRY_H
+{{ banner }}#ifndef {{ header_guard }}
+#define {{ header_guard }}
+
+#include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-// ... registry API declarations will be rendered here ...
+{{ registry_declaration }}
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // REGISTRY_H
+#endif // {{ header_guard }}

@@ -6,6 +6,7 @@ open System.IO
 open Signal.CANdy.Core.Ir
 open Signal.CANdy.Core.Config
 open Signal.CANdy.Core.Codegen
+open Signal.CANdy.Core.Dbc
 open Signal.CANdy.Core.Errors
 
 module CodegenTests =
@@ -37,7 +38,9 @@ module CodegenTests =
           MultiplexerIndicator = None
           MultiplexerSwitchValue = None
           ValueTable = None
-          Receivers = [] }
+          Receivers = []
+          CrcMeta = None
+          CounterMeta = None }
 
     /// A minimal single-message IR for testing
     let private singleMessageIr =
@@ -48,7 +51,8 @@ module CodegenTests =
                 Length = 8us
                 Signals = [ mkSignal "Signal_1" 0us 8us; mkSignal "Signal_2" 8us 16us ]
                 Sender = "ECU"
-                Receivers = [] } ] }
+                Receivers = []
+                CrcCounterMode = None } ] }
 
     /// Helper: create temp output directory
     let private createTempOutDir () =
@@ -60,6 +64,129 @@ module CodegenTests =
     let private cleanupDir dir =
         if Directory.Exists(dir) then
             Directory.Delete(dir, true)
+
+    let private goldenPath fileName =
+        Path.Combine(__SOURCE_DIRECTORY__, "golden", fileName)
+
+    let private normalizeGeneratedText (text: string) =
+        text.Replace("\r\n", "\n").TrimEnd('\n')
+
+    let private assertGeneratedFileMatchesGolden generatedPath goldenFileName =
+        let generated = File.ReadAllText(generatedPath) |> normalizeGeneratedText
+        let golden = File.ReadAllText(goldenPath goldenFileName) |> normalizeGeneratedText
+        generated |> should equal golden
+
+    let private examplesPath fileName =
+        Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", fileName)
+
+    let private generateFromExample dbcFileName outDir =
+        let dbcPath = examplesPath dbcFileName
+        let configPath = examplesPath "config.yaml"
+
+        let config =
+            match Signal.CANdy.Core.Config.loadFromYaml configPath with
+            | Ok cfg -> cfg
+            | Error e -> failwithf "Expected config load success, got: %A" e
+
+        let ir =
+            match parseDbcFile dbcPath with
+            | Ok parsed -> parsed
+            | Error e -> failwithf "Expected DBC parse success, got: %A" e
+
+        match generate ir outDir config with
+        | Ok files -> files
+        | Error e -> failwithf "Expected Ok, got: %A" e
+
+    let private mkSignalWithValueTable name startBit length muxIndicator muxValue valueTable =
+        { Name = name
+          StartBit = startBit
+          Length = length
+          Factor = 1.0
+          Offset = 0.0
+          Minimum = Some 0.0
+          Maximum = Some 255.0
+          Unit = ""
+          IsSigned = false
+          IsCrc = false
+          IsCounter = false
+          ByteOrder = ByteOrder.Little
+          MultiplexerIndicator = muxIndicator
+          MultiplexerSwitchValue = muxValue
+          ValueTable = valueTable
+          Receivers = []
+          CrcMeta = None
+          CounterMeta = None }
+
+    let private muxMessageIr =
+        { Messages =
+            [ { Name = "MUX_MSG"
+                Id = 200u
+                IsExtended = false
+                Length = 8us
+                Signals =
+                    [ { mkSignal "MuxSwitch" 0us 4us with
+                          Maximum = Some 3.0
+                          MultiplexerIndicator = Some "M" }
+                      mkSignal "Base_8" 8us 8us
+                      { mkSignal "Sig_m1" 16us 8us with
+                          MultiplexerIndicator = Some "m"
+                          MultiplexerSwitchValue = Some 1 }
+                      { mkSignal "Sig_m2" 16us 16us with
+                          Maximum = Some 65535.0
+                          MultiplexerIndicator = Some "m"
+                          MultiplexerSwitchValue = Some 2 } ]
+                Sender = "ECU"
+                Receivers = []
+                CrcCounterMode = None } ] }
+
+    let private valueTableMuxIr =
+        { Messages =
+            [ { Name = "VT_MSG"
+                Id = 300u
+                IsExtended = false
+                Length = 8us
+                Signals =
+                    [ mkSignalWithValueTable
+                          "Mode"
+                          0us
+                          8us
+                          (Some "M")
+                          None
+                          (Some [ 0, "OFF"; 1, "ON"; 2, "AUTO" ])
+                      mkSignal "Base" 8us 8us
+                      mkSignalWithValueTable
+                          "State"
+                          16us
+                          8us
+                          (Some "m")
+                          (Some 0)
+                          (Some [ 0, "IDLE"; 1, "RUN"; 2, "STOP" ])
+                      mkSignalWithValueTable
+                          "Error"
+                          24us
+                          8us
+                          (Some "m")
+                          (Some 1)
+                          (Some [ 0, "OK"; 1, "WARN"; 2, "FAIL" ]) ]
+                Sender = "ECU"
+                Receivers = []
+                CrcCounterMode = None } ] }
+
+    let private crcSignalIr =
+        { Messages =
+            [ { Name = "CRC_MSG"
+                Id = 400u
+                IsExtended = false
+                Length = 8us
+                Signals =
+                    [ mkSignal "Payload" 0us 8us
+                      { mkSignal "MessageCrc" 8us 8us with
+                          IsCrc = true
+                          CrcMeta = None
+                          CounterMeta = None } ]
+                Sender = "ECU"
+                Receivers = []
+                CrcCounterMode = None } ] }
 
     // -------------------------------------------------------
     // H-1d: Codegen.generate tests
@@ -158,11 +285,12 @@ module CodegenTests =
                     IsExtended = false
                     Length = 8us
                     Signals =
-                      [ { mkSignal "Temp" 0us 16us with
-                            Factor = 0.01
-                            Offset = 0.0 } ]
+                        [ { mkSignal "Temp" 0us 16us with
+                              Factor = 0.01
+                              Offset = 0.0 } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         try
             match generate ir outDir fixedConfig with
@@ -246,7 +374,8 @@ module CodegenTests =
                     Length = 64us
                     Signals = [ mkSignal "FD_Sig" 0us 8us ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -312,6 +441,23 @@ module CodegenTests =
             cleanupDir outDir
 
     [<Fact>]
+    let ``generate sc_utils.h matches golden output`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.h")
+
+                let generated = File.ReadAllText(utilsH) |> normalizeGeneratedText
+                let golden = File.ReadAllText(goldenPath "sc_utils.h") |> normalizeGeneratedText
+                generated |> should equal golden
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
     let ``generate utils.c contains DLC mapping implementation`` () =
         let outDir = createTempOutDir ()
 
@@ -327,6 +473,105 @@ module CodegenTests =
                 content |> should haveSubstring "canfd_len_to_dlc"
                 content |> should haveSubstring "if (dlc > 15)"
                 content |> should haveSubstring "if (len <= 8)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate sc_utils.c matches golden output`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+
+                let generated = File.ReadAllText(utilsC) |> normalizeGeneratedText
+                let golden = File.ReadAllText(goldenPath "sc_utils.c") |> normalizeGeneratedText
+                generated |> should equal golden
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate message_1 files match golden output`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            let files = generateFromExample "sample.dbc" outDir
+            let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "message_1.h")
+            let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "message_1.c")
+            assertGeneratedFileMatchesGolden msgH "message_1.h"
+            assertGeneratedFileMatchesGolden msgC "message_1.c"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate mux_msg files match golden output`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            let files = generateFromExample "multiplex_suite.dbc" outDir
+            let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux_msg.h")
+            let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mux_msg.c")
+            assertGeneratedFileMatchesGolden msgH "mux_msg.h"
+            assertGeneratedFileMatchesGolden msgC "mux_msg.c"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate vt_msg files match golden output`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            let files = generateFromExample "value_table.dbc" outDir
+            let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "vt_msg.h")
+            let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "vt_msg.c")
+            assertGeneratedFileMatchesGolden msgH "vt_msg.h"
+            assertGeneratedFileMatchesGolden msgC "vt_msg.c"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate sc_registry files match golden output`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            let files = generateFromExample "sample.dbc" outDir
+            let regH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.h")
+            let regC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.c")
+            assertGeneratedFileMatchesGolden regH "sc_registry.h"
+            assertGeneratedFileMatchesGolden regC "sc_registry.c"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate rejects crc_counter_check when inferred CRC signal exists`` () =
+        let outDir = createTempOutDir ()
+        let cfg = { defaultConfig with CrcCounterCheck = true }
+
+        try
+            match generate crcSignalIr outDir cfg with
+            | Error(CodeGenError.UnsupportedFeature msg) ->
+                msg |> should haveSubstring "crc_counter_check=true"
+                msg |> should haveSubstring "MessageCrc"
+                msg |> should haveSubstring "CRC_MSG"
+            | Error e -> failwithf "Expected UnsupportedFeature, got: %A" e
+            | Ok _ -> failwith "Expected UnsupportedFeature when crc_counter_check is enabled"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``generate still succeeds when crc_counter_check is enabled without inferred CRC or counter signals`` () =
+        let outDir = createTempOutDir ()
+        let cfg = { defaultConfig with CrcCounterCheck = true }
+
+        try
+            match generate singleMessageIr outDir cfg with
+            | Ok files ->
+                files.Sources |> List.map Path.GetFileName |> should contain "message_1.c"
+                files.Headers |> List.map Path.GetFileName |> should contain "sc_registry.h"
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
@@ -348,7 +593,8 @@ module CodegenTests =
                             Maximum = None
                             Minimum = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -377,7 +623,8 @@ module CodegenTests =
                             Maximum = None
                             Minimum = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -406,7 +653,8 @@ module CodegenTests =
                             Maximum = None
                             Minimum = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let lsbConfig =
             { defaultConfig with
@@ -442,7 +690,8 @@ module CodegenTests =
                             Maximum = None
                             Minimum = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -477,7 +726,9 @@ module CodegenTests =
               MultiplexerIndicator = None
               MultiplexerSwitchValue = None
               ValueTable = None
-              Receivers = [] }
+              Receivers = []
+              CrcMeta = None
+              CounterMeta = None }
 
         let msg =
             { Name = "TEST_MSG"
@@ -486,7 +737,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -522,7 +774,9 @@ module CodegenTests =
               MultiplexerIndicator = None
               MultiplexerSwitchValue = None
               ValueTable = None
-              Receivers = [] }
+              Receivers = []
+              CrcMeta = None
+              CounterMeta = None }
 
         let msg =
             { Name = "INV_MSG"
@@ -531,7 +785,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ invSig ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -571,7 +826,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -601,7 +857,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -631,7 +888,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -660,7 +918,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -689,7 +948,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -718,7 +978,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -747,7 +1008,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -777,7 +1039,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ signal ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -807,7 +1070,8 @@ module CodegenTests =
               Length = 8us
               Signals = [ sigA; sigB ]
               Sender = "ECU"
-              Receivers = [] }
+              Receivers = []
+              CrcCounterMode = None }
 
         let ir = { Messages = [ msg ] }
         let config = { defaultConfig with RangeCheck = true }
@@ -842,7 +1106,9 @@ module CodegenTests =
           MultiplexerIndicator = Some "M"
           MultiplexerSwitchValue = None
           ValueTable = None
-          Receivers = [] }
+          Receivers = []
+          CrcMeta = None
+          CounterMeta = None }
 
     let private mkBranchSignal name startBit length muxVal =
         { Name = name
@@ -860,7 +1126,9 @@ module CodegenTests =
           MultiplexerIndicator = Some "m"
           MultiplexerSwitchValue = Some muxVal
           ValueTable = None
-          Receivers = [] }
+          Receivers = []
+          CrcMeta = None
+          CounterMeta = None }
 
     let private mkMuxMessage name msgId switchSig branchSignals baseSignals =
         { Messages =
@@ -870,7 +1138,8 @@ module CodegenTests =
                 Length = 8us
                 Signals = [ switchSig ] @ branchSignals @ baseSignals
                 Sender = "ECU"
-                Receivers = [] } ] }
+                Receivers = []
+                CrcCounterMode = None } ] }
 
     [<Fact>]
     let ``valid bitmask uses uint32_t for 8-signal mux message`` () =
@@ -971,7 +1240,8 @@ module CodegenTests =
                     Length = 8us
                     Signals = signals
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 

@@ -132,3 +132,50 @@ BO_ 100 MESSAGE_2: 8 Vector__XXX
         finally
             if Directory.Exists(outDir) then
                 Directory.Delete(outDir, true)
+
+    [<Fact>]
+    let ``generateFromPaths returns CodeGen UnsupportedFeature for crc_counter_check without explicit CRC metadata support`` () =
+        let dbcContent =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 400 CRC_MSG: 8 Vector__XXX
+ SG_ Payload : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ MessageCrc : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+        let dbcPath = createTempFile dbcContent ".dbc"
+
+        let configContent =
+            """
+phys_type: float
+phys_mode: double
+range_check: false
+dispatch: binary_search
+crc_counter_check: true
+motorola_start_bit: msb
+file_prefix: sc_
+"""
+
+        let configPath = createTempFile configContent ".yaml"
+        let outDir = Path.Combine(Path.GetTempPath(), System.Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+
+        try
+            let t = Signal.CANdy.Core.Api.generateFromPaths dbcPath outDir (Some configPath)
+            let result = t.GetAwaiter().GetResult()
+
+            match result with
+            | Error(GenerateError.CodeGen(CodeGenError.UnsupportedFeature msg)) ->
+                msg |> should haveSubstring "crc_counter_check=true"
+                msg |> should haveSubstring "MessageCrc"
+            | Error e -> failwithf "Expected GenerateError.CodeGen(UnsupportedFeature), got: %A" e
+            | Ok _ -> failwith "Expected CodeGen UnsupportedFeature, got Ok"
+        finally
+            File.Delete(dbcPath)
+            File.Delete(configPath)
+
+            if Directory.Exists(outDir) then
+                Directory.Delete(outDir, true)

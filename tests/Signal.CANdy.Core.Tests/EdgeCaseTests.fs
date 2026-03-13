@@ -117,9 +117,12 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
                           ValueTable = None
-                          Receivers = [] } ]
+                          Receivers = []
+                          CrcMeta = None
+                          CounterMeta = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -164,7 +167,9 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
                           ValueTable = None
-                          Receivers = [] }
+                          Receivers = []
+                          CrcMeta = None
+                          CounterMeta = None }
                         { Name = "FD_High"
                           StartBit = 480us
                           Length = 16us
@@ -180,9 +185,12 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
                           ValueTable = None
-                          Receivers = [] } ]
+                          Receivers = []
+                          CrcMeta = None
+                          CounterMeta = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -227,9 +235,12 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
                           ValueTable = None
-                          Receivers = [] } ]
+                          Receivers = []
+                          CrcMeta = None
+                          CounterMeta = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -269,9 +280,12 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
                           ValueTable = None
-                          Receivers = [] } ]
+                          Receivers = []
+                          CrcMeta = None
+                          CounterMeta = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 
@@ -310,9 +324,12 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
                           ValueTable = None
-                          Receivers = [] } ]
+                          Receivers = []
+                          CrcMeta = None
+                          CounterMeta = None } ]
                     Sender = "ECU"
-                    Receivers = [] } ] }
+                    Receivers = []
+                    CrcCounterMode = None } ] }
 
         let outDir = createTempOutDir ()
 

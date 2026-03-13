@@ -338,7 +338,9 @@ module Dbc =
                                   MultiplexerIndicator = muxInd
                                   MultiplexerSwitchValue = muxVal
                                   ValueTable = (valMap |> Map.tryFind (msg.Name, s.Name))
-                                  Receivers = [] })
+                                  Receivers = []
+                                  CrcMeta = None
+                                  CounterMeta = None })
                             |> List.ofSeq
 
                         { Name = msg.Name
@@ -347,7 +349,8 @@ module Dbc =
                           Length = msg.DLC
                           Signals = signals
                           Sender = msg.Transmitter
-                          Receivers = [] })
+                          Receivers = []
+                          CrcCounterMode = None })
                     |> List.ofSeq
 
                 let validateMuxStructure (msgs: Message list) : string option =

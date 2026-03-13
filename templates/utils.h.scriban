@@ -1,5 +1,5 @@
-#ifndef UTILS_H
-#define UTILS_H
+{{ banner }}#ifndef {{ header_guard }}
+#define {{ header_guard }}
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -9,13 +9,23 @@ extern "C" {
 #endif
 
 // Little-endian bit extraction functions
-uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);
+{{ get_bits_le_decl }}
 
 // Little-endian bit insertion functions
-void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);
+{{ set_bits_le_decl }}
+
+// Big-endian (Motorola) bit extraction
+{{ get_bits_be_decl }}
+
+// Big-endian (Motorola) bit insertion
+{{ set_bits_be_decl }}
+
+// CAN FD DLC <-> length mapping
+{{ canfd_dlc_to_len_decl }}
+{{ canfd_len_to_dlc_decl }}
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif // UTILS_H
+#endif // {{ header_guard }}

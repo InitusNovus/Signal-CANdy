@@ -150,7 +150,8 @@ Optional file to control code generation behavior:
   - msb: treat DBC start bit as MSB-based sawtooth (default, common in many tools)
   - lsb: treat DBC start bit as LSB-based, generator converts to MSB sawtooth internally
 - crc_counter_check: true | false
-  - Reserved for future; hooks to validate CRC/counter signals (deferred)
+  - Explicit opt-in guardrail. If enabled and the parser infers CRC/counter-like signals from DBC names (`crc`, `checksum`, `counter`, `alive`), code generation now fails fast with `UnsupportedFeature` instead of silently generating non-validating code.
+  - Full generated CRC/counter validation is still deferred until explicit algorithm/metadata support is added.
 
 Examples:
 
@@ -675,7 +676,8 @@ Details can be reproduced via the stress suite and bulk runner in `scripts/bulk_
 
 ## ⚠️ Limitations
 
-- Automatic CRC/Counter validation is not yet implemented (config flag is reserved)
+- Full automatic CRC/Counter validation is not yet implemented.
+- When `crc_counter_check: true` is enabled today, code generation fails fast for inferred CRC/counter-like signals instead of silently accepting an unsupported path.
 - Supports both classic CAN (up to 8-byte) and CAN FD (up to 64-byte) payloads
 - Messages with >32 multiplexed signals automatically use a 64-bit `valid` bitmask (`uint64_t`). Messages with >64 multiplexed signals are not supported (code generation reports `CodeGenError.UnsupportedFeature`).
 
