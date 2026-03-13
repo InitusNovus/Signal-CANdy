@@ -1,0 +1,20 @@
+phys_type: float
+range_check: false
+dispatch: binary_search
+crc_counter_check: true
+motorola_start_bit: msb
+file_prefix: sc_
+crc_counter:
+  mode: validate
+  messages:
+    MESSAGE_1:
+      crc:
+        signal: CHECKSUM
+        algorithm: CRC8_SAE_J1850
+        byte_range:
+          start: 0
+          end: 0
+      counter:
+        signal: COUNTER
+        modulus: 15
+        increment: 1

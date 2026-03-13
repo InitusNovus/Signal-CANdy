@@ -721,7 +721,7 @@ module CodegenTests =
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "sc_crc8_sae_j1850"
                 content |> should haveSubstring "!= (uint8_t)msg->CHECKSUM) { return false; }"
-                content |> should haveSubstring "msg->CHECKSUM = sc_crc8_sae_j1850"
+                content |> should haveSubstring "uint8_t crc_val_CHECKSUM = sc_crc8_sae_j1850"
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir

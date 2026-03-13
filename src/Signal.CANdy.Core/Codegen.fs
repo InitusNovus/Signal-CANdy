@@ -826,7 +826,7 @@ module Codegen =
                     match message.CrcCounterMode with
                     | Some CrcCounterMode.Validate ->
                         sprintf
-                            "    msg->%s = %s(&data[%d], %d);\n    %s(data, %d, %d, (uint64_t)msg->%s);"
+                            "    uint8_t crc_val_%s = %s(&data[%d], %d);\n    %s(data, %d, %d, (uint64_t)crc_val_%s);"
                             crcSig.Name
                             funcName
                             meta.ByteRange.Start
