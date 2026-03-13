@@ -954,7 +954,7 @@ module CodegenTests =
         let result = generate ir "C:/tmp/nonexistent" defaultConfig
 
         match result with
-        | Error(UnsupportedFeature msg) -> msg |> should contain "65"
+        | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "65"
         | _ -> failwith "Expected UnsupportedFeature error"
 
     [<Fact>]
