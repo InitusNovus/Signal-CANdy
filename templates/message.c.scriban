@@ -7,13 +7,16 @@
 {{ if value_table_definitions != "" }}{{ value_table_definitions }}
 {{ end }}bool {{ message_name }}_decode({{ message_name }}_t* msg, const uint8_t data[], uint8_t dlc) {
     if (dlc < {{ message_length }}) { return false; }
-{{ signal_decode_c }}
+{{ signal_decode_c }}{{ if crc_decode_check != "" }}
+{{ crc_decode_check }}{{ end }}
     return true;
 }
 
 bool {{ message_name }}_encode(uint8_t data[], uint8_t* out_dlc, const {{ message_name }}_t* msg) {
     memset(data, 0, {{ message_length }});
     *out_dlc = {{ message_length }};
-{{ signal_encode_c }}
+{{ signal_encode_c }}{{ if crc_encode_insert != "" }}
+{{ crc_encode_insert }}{{ end }}
     return true;
-}
+}{{ if has_counter }}
+{{ counter_check_func_impl }}{{ end }}

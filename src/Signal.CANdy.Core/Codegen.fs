@@ -737,7 +737,10 @@ module Codegen =
                       "pre_struct_declarations", box preStructDeclarations
                       "struct_extra_fields", box muxStructFields
                       "signal_declarations_h", box signalDeclarationsH
-                      "message_name", box message.Name ]
+                      "message_name", box message.Name
+                      "has_counter", box false
+                      "counter_state_type_decl", box ""
+                      "counter_check_func_decl", box "" ]
 
                 Templates.renderOrRaise "message.h.scriban" model
 
@@ -750,7 +753,11 @@ module Codegen =
                       "message_name", box message.Name
                       "message_length", box (int message.Length)
                       "signal_decode_c", box signalDecodeC
-                      "signal_encode_c", box signalEncodeC ]
+                      "signal_encode_c", box signalEncodeC
+                      "crc_decode_check", box ""
+                      "crc_encode_insert", box ""
+                      "has_counter", box false
+                      "counter_check_func_impl", box "" ]
 
                 Templates.renderOrRaise "message.c.scriban" model
 

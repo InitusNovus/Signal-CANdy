@@ -16,7 +16,9 @@ extern "C" {
 } {{ message_name }}_t;
 
 bool {{ message_name }}_decode({{ message_name }}_t* msg, const uint8_t data[], uint8_t dlc);
-bool {{ message_name }}_encode(uint8_t data[], uint8_t* out_dlc, const {{ message_name }}_t* msg);
+bool {{ message_name }}_encode(uint8_t data[], uint8_t* out_dlc, const {{ message_name }}_t* msg);{{ if has_counter }}
+{{ counter_state_type_decl }}
+{{ counter_check_func_decl }}{{ end }}
 
 #ifdef __cplusplus
 }
