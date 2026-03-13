@@ -52,7 +52,84 @@ module Config =
     let private validPhysModes = [ "double"; "float"; "fixed_double"; "fixed_float" ]
     let private validDispatch = [ "binary_search"; "direct_map" ]
     let private validMoto = [ "msb"; "lsb" ]
+    let private validCrcCounterModes = [ "validate"; "passthrough"; "fail_fast" ]
+    let private builtinAlgorithmWidths =
+        [ "CRC8_SAE_J1850", 8
+          "CRC8_8H2F", 8
+          "CRC16_CCITT", 16
+          "CRC32P4", 32 ]
+        |> Map.ofList
+
     let private prefixRegex = Regex(@"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
+    let private validateCrcCounter (cfg: Config) : ValidationError option =
+        match cfg.CrcCounter with
+        | None -> None
+        | Some crcCfg ->
+            if not cfg.CrcCounterCheck then
+                Some(
+                    ConfigConflict
+                        "crc_counter block is present but crc_counter_check is false; set crc_counter_check: true to enable CRC/Counter validation"
+                )
+            elif not (List.contains crcCfg.Mode validCrcCounterModes) then
+                Some(
+                    InvalidValue(
+                        sprintf
+                            "Unknown crc_counter mode '%s'; valid: validate, passthrough, fail_fast"
+                            crcCfg.Mode
+                    )
+                )
+            else
+                let customAlgorithms = crcCfg.CustomAlgorithms |> Option.defaultValue Map.empty
+
+                let validateMessage (msgName: string) (msgCfg: CrcCounterMessageConfig) : ValidationError option =
+                    let crcError =
+                        match msgCfg.Crc with
+                        | Some crcSig ->
+                            if String.IsNullOrWhiteSpace(crcSig.Signal) then
+                                Some(
+                                    InvalidValue(
+                                        sprintf
+                                            "Signal name for CRC/Counter in message '%s' must not be empty"
+                                            msgName
+                                    )
+                                )
+                            else
+                                let builtinWidth = Map.tryFind crcSig.Algorithm builtinAlgorithmWidths
+                                let customWidth = customAlgorithms |> Map.tryFind crcSig.Algorithm |> Option.map _.Width
+
+                                match builtinWidth, customWidth with
+                                | None, None -> Some(UnknownAlgorithm crcSig.Algorithm)
+                                | Some width, _
+                                | _, Some width when width <> 8 ->
+                                    Some(
+                                        ConfigConflict(
+                                            sprintf
+                                                "CRC algorithm '%s' width must be 8 for MVP; CRC-16/32/64 not yet supported"
+                                                crcSig.Algorithm
+                                        )
+                                    )
+                                | _ -> None
+                        | None -> None
+
+                    let counterError =
+                        match msgCfg.Counter with
+                        | Some counterSig when counterSig.Modulus < 2 -> Some(InvalidModulus(msgName, counterSig.Modulus))
+                        | Some counterSig when String.IsNullOrWhiteSpace(counterSig.Signal) ->
+                            Some(
+                                InvalidValue(
+                                    sprintf
+                                        "Signal name for CRC/Counter in message '%s' must not be empty"
+                                        msgName
+                                )
+                            )
+                        | _ -> None
+
+                    Option.orElse crcError counterError
+
+                crcCfg.Messages
+                |> Map.toList
+                |> List.tryPick (fun (msgName, msgCfg) -> validateMessage msgName msgCfg)
 
     let validate (cfg: Config) : Result<Config, ValidationError> =
         if not (List.contains (cfg.PhysType.ToLowerInvariant()) validPhysTypes) then
@@ -66,7 +143,9 @@ module Config =
         elif not (prefixRegex.IsMatch cfg.FilePrefix) then
             Error(ValidationError.InvalidValue(sprintf "Invalid file_prefix '%s'" cfg.FilePrefix))
         else
-            Ok cfg
+            match validateCrcCounter cfg with
+            | Some err -> Error err
+            | None -> Ok cfg
 
     // --- YAML loading helpers ---
     let private tryGetString (map: IDictionary<string, obj>) (keys: string list) : string option =
