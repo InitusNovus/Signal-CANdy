@@ -420,9 +420,10 @@ BS_:
         try
             match parseDbcFile path with
             | Ok ir ->
-                let signal = ir.Messages |> List.exactlyOne |> fun m -> m.Signals |> List.exactlyOne
+                let signal =
+                    ir.Messages |> List.exactlyOne |> (fun m -> m.Signals |> List.exactlyOne)
+
                 signal.IsCrc |> should equal true
             | Error e -> failwithf "Expected success, got: %A" e
         finally
             File.Delete(path)
-

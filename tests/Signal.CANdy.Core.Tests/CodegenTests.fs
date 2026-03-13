@@ -125,17 +125,17 @@ module CodegenTests =
                 IsExtended = false
                 Length = 8us
                 Signals =
-                    [ { mkSignal "MuxSwitch" 0us 4us with
-                          Maximum = Some 3.0
-                          MultiplexerIndicator = Some "M" }
-                      mkSignal "Base_8" 8us 8us
-                      { mkSignal "Sig_m1" 16us 8us with
-                          MultiplexerIndicator = Some "m"
-                          MultiplexerSwitchValue = Some 1 }
-                      { mkSignal "Sig_m2" 16us 16us with
-                          Maximum = Some 65535.0
-                          MultiplexerIndicator = Some "m"
-                          MultiplexerSwitchValue = Some 2 } ]
+                  [ { mkSignal "MuxSwitch" 0us 4us with
+                        Maximum = Some 3.0
+                        MultiplexerIndicator = Some "M" }
+                    mkSignal "Base_8" 8us 8us
+                    { mkSignal "Sig_m1" 16us 8us with
+                        MultiplexerIndicator = Some "m"
+                        MultiplexerSwitchValue = Some 1 }
+                    { mkSignal "Sig_m2" 16us 16us with
+                        Maximum = Some 65535.0
+                        MultiplexerIndicator = Some "m"
+                        MultiplexerSwitchValue = Some 2 } ]
                 Sender = "ECU"
                 Receivers = []
                 CrcCounterMode = None } ] }
@@ -147,28 +147,16 @@ module CodegenTests =
                 IsExtended = false
                 Length = 8us
                 Signals =
-                    [ mkSignalWithValueTable
-                          "Mode"
-                          0us
-                          8us
-                          (Some "M")
-                          None
-                          (Some [ 0, "OFF"; 1, "ON"; 2, "AUTO" ])
-                      mkSignal "Base" 8us 8us
-                      mkSignalWithValueTable
-                          "State"
-                          16us
-                          8us
-                          (Some "m")
-                          (Some 0)
-                          (Some [ 0, "IDLE"; 1, "RUN"; 2, "STOP" ])
-                      mkSignalWithValueTable
-                          "Error"
-                          24us
-                          8us
-                          (Some "m")
-                          (Some 1)
-                          (Some [ 0, "OK"; 1, "WARN"; 2, "FAIL" ]) ]
+                  [ mkSignalWithValueTable "Mode" 0us 8us (Some "M") None (Some [ 0, "OFF"; 1, "ON"; 2, "AUTO" ])
+                    mkSignal "Base" 8us 8us
+                    mkSignalWithValueTable
+                        "State"
+                        16us
+                        8us
+                        (Some "m")
+                        (Some 0)
+                        (Some [ 0, "IDLE"; 1, "RUN"; 2, "STOP" ])
+                    mkSignalWithValueTable "Error" 24us 8us (Some "m") (Some 1) (Some [ 0, "OK"; 1, "WARN"; 2, "FAIL" ]) ]
                 Sender = "ECU"
                 Receivers = []
                 CrcCounterMode = None } ] }
@@ -180,11 +168,11 @@ module CodegenTests =
                 IsExtended = false
                 Length = 8us
                 Signals =
-                    [ mkSignal "Payload" 0us 8us
-                      { mkSignal "MessageCrc" 8us 8us with
-                          IsCrc = true
-                          CrcMeta = None
-                          CounterMeta = None } ]
+                  [ mkSignal "Payload" 0us 8us
+                    { mkSignal "MessageCrc" 8us 8us with
+                        IsCrc = true
+                        CrcMeta = None
+                        CounterMeta = None } ]
                 Sender = "ECU"
                 Receivers = []
                 CrcCounterMode = None } ] }
@@ -194,7 +182,7 @@ module CodegenTests =
           Messages = Map.ofList [ messageName, { Crc = crcCfg; Counter = counterCfg } ]
           CustomAlgorithms = None }
 
-    let private mkCrc8SaeJ1850Params : CrcAlgorithmParams =
+    let private mkCrc8SaeJ1850Params: CrcAlgorithmParams =
         { Width = 8
           Poly = 0x1DUL
           Init = 0xFFUL
@@ -202,7 +190,7 @@ module CodegenTests =
           ReflectIn = false
           ReflectOut = false }
 
-    let private mkCrc88h2fParams : CrcAlgorithmParams =
+    let private mkCrc88h2fParams: CrcAlgorithmParams =
         { Width = 8
           Poly = 0x2FUL
           Init = 0xFFUL
@@ -313,9 +301,9 @@ module CodegenTests =
                     IsExtended = false
                     Length = 8us
                     Signals =
-                        [ { mkSignal "Temp" 0us 16us with
-                              Factor = 0.01
-                              Offset = 0.0 } ]
+                      [ { mkSignal "Temp" 0us 16us with
+                            Factor = 0.01
+                            Offset = 0.0 } ]
                     Sender = "ECU"
                     Receivers = []
                     CrcCounterMode = None } ] }
@@ -567,8 +555,13 @@ module CodegenTests =
 
         try
             let files = generateFromExample "sample.dbc" outDir
-            let regH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.h")
-            let regC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.c")
+
+            let regH =
+                files.Headers |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.h")
+
+            let regC =
+                files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_registry.c")
+
             assertGeneratedFileMatchesGolden regH "sc_registry.h"
             assertGeneratedFileMatchesGolden regC "sc_registry.c"
         finally
@@ -577,7 +570,10 @@ module CodegenTests =
     [<Fact>]
     let ``generate rejects crc_counter_check when inferred CRC signal exists`` () =
         let outDir = createTempOutDir ()
-        let cfg = { defaultConfig with CrcCounterCheck = true }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true }
 
         try
             match generate crcSignalIr outDir cfg with
@@ -593,7 +589,10 @@ module CodegenTests =
     [<Fact>]
     let ``generate still succeeds when crc_counter_check is enabled without inferred CRC or counter signals`` () =
         let outDir = createTempOutDir ()
-        let cfg = { defaultConfig with CrcCounterCheck = true }
+
+        let cfg =
+            { defaultConfig with
+                CrcCounterCheck = true }
 
         try
             match generate singleMessageIr outDir cfg with
@@ -679,8 +678,7 @@ module CodegenTests =
     let ``generate validate mode emits CRC-8 SAE J1850 decode and encode checks`` () =
         let outDir = createTempOutDir ()
 
-        let crcMeta =
-            mkCrcSignalMeta CrcAlgorithmId.CRC8_SAE_J1850 mkCrc8SaeJ1850Params 0 0
+        let crcMeta = mkCrcSignalMeta CrcAlgorithmId.CRC8_SAE_J1850 mkCrc8SaeJ1850Params 0 0
 
         let crcSignal =
             { (mkSignal "CHECKSUM" 8us 8us) with
@@ -730,8 +728,7 @@ module CodegenTests =
     let ``generate validate mode emits CRC-8 8H2F verification call`` () =
         let outDir = createTempOutDir ()
 
-        let crcMeta =
-            mkCrcSignalMeta CrcAlgorithmId.CRC8_8H2F mkCrc88h2fParams 0 0
+        let crcMeta = mkCrcSignalMeta CrcAlgorithmId.CRC8_8H2F mkCrc88h2fParams 0 0
 
         let crcSignal =
             { (mkSignal "CHECKSUM" 8us 8us) with
@@ -885,8 +882,12 @@ module CodegenTests =
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "parity_msg.c")
-                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "parity_msg.h")
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "parity_msg.c")
+
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "parity_msg.h")
+
                 let sourceContent = File.ReadAllText(msgC)
                 let headerContent = File.ReadAllText(msgH)
                 sourceContent.Contains("sc_crc8_") |> should equal false
@@ -899,8 +900,7 @@ module CodegenTests =
     let ``generate emits CRC helper declarations and definitions in utils for validate config`` () =
         let outDir = createTempOutDir ()
 
-        let crcMeta =
-            mkCrcSignalMeta CrcAlgorithmId.CRC8_SAE_J1850 mkCrc8SaeJ1850Params 0 0
+        let crcMeta = mkCrcSignalMeta CrcAlgorithmId.CRC8_SAE_J1850 mkCrc8SaeJ1850Params 0 0
 
         let crcSignal =
             { (mkSignal "CHECKSUM" 8us 8us) with
@@ -937,8 +937,12 @@ module CodegenTests =
         try
             match generate ir outDir cfg with
             | Ok files ->
-                let utilsH = files.Headers |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.h"))
-                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.c"))
+                let utilsH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.h"))
+
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.c"))
+
                 let utilsHContent = File.ReadAllText(utilsH)
                 let utilsCContent = File.ReadAllText(utilsC)
                 utilsHContent |> should haveSubstring "sc_crc8_sae_j1850"
@@ -965,7 +969,9 @@ module CodegenTests =
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let utilsC = files.Sources |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.c"))
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f).EndsWith("utils.c"))
+
                 let content = File.ReadAllText(utilsC)
                 content.Contains("sc_crc8_") |> should equal false
             | Error e -> failwithf "Expected Ok, got: %A" e

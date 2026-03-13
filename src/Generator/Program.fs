@@ -137,11 +137,17 @@ module Program =
                                 | ValidationError.SignalNotFound(messageName, signalName) ->
                                     sprintf "signal '%s' not found in message '%s'." signalName messageName
                                 | ValidationError.InvalidModulus(messageName, modulus) ->
-                                    sprintf "invalid counter modulus %d in message '%s' (must be >= 2)." modulus messageName
-                                | ValidationError.ConfigConflict reason ->
-                                    sprintf "configuration conflict: %s" reason
+                                    sprintf
+                                        "invalid counter modulus %d in message '%s' (must be >= 2)."
+                                        modulus
+                                        messageName
+                                | ValidationError.ConfigConflict reason -> sprintf "configuration conflict: %s" reason
                                 | ValidationError.CrcWidthMismatch(messageName, crcWidth, signalBits) ->
-                                    sprintf "CRC width mismatch for message '%s': crc width %d vs signal bits %d." messageName crcWidth signalBits
+                                    sprintf
+                                        "CRC width mismatch for message '%s': crc width %d vs signal bits %d."
+                                        messageName
+                                        crcWidth
+                                        signalBits
                                 | ValidationError.MessageNotFound name ->
                                     sprintf "message '%s' not found in configuration." name
 

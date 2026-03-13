@@ -345,12 +345,26 @@ clean:
                             | Errors.ValidationError.IoError s -> sprintf "IO error: %s" s
                             | Errors.ValidationError.Unknown s -> sprintf "Validation error: %s" s
                             | Errors.ValidationError.ConfigConflict s -> sprintf "Config conflict: %s" s
-                            | Errors.ValidationError.SignalNotFound(message, signal) -> sprintf "Validation error: signal '%s' not found in message '%s'" signal message
-                            | Errors.ValidationError.ByteRangeExceedsDlc(message, rangeEnd, dlc) -> sprintf "Validation error: byte_range end %d exceeds DLC %d in message '%s'" rangeEnd dlc message
-                            | Errors.ValidationError.UnknownAlgorithm name -> sprintf "Validation error: unknown algorithm '%s' referenced" name
-                            | Errors.ValidationError.InvalidModulus(message, modulus) -> sprintf "Validation error: invalid counter modulus %d in message '%s'" modulus message
-                            | Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) -> sprintf "Validation error: crc width %d mismatches signal bits %d in message '%s'" crcWidth signalBits message
-                            | Errors.ValidationError.MessageNotFound name -> sprintf "Validation error: message '%s' not found" name
+                            | Errors.ValidationError.SignalNotFound(message, signal) ->
+                                sprintf "Validation error: signal '%s' not found in message '%s'" signal message
+                            | Errors.ValidationError.ByteRangeExceedsDlc(message, rangeEnd, dlc) ->
+                                sprintf
+                                    "Validation error: byte_range end %d exceeds DLC %d in message '%s'"
+                                    rangeEnd
+                                    dlc
+                                    message
+                            | Errors.ValidationError.UnknownAlgorithm name ->
+                                sprintf "Validation error: unknown algorithm '%s' referenced" name
+                            | Errors.ValidationError.InvalidModulus(message, modulus) ->
+                                sprintf "Validation error: invalid counter modulus %d in message '%s'" modulus message
+                            | Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) ->
+                                sprintf
+                                    "Validation error: crc width %d mismatches signal bits %d in message '%s'"
+                                    crcWidth
+                                    signalBits
+                                    message
+                            | Errors.ValidationError.MessageNotFound name ->
+                                sprintf "Validation error: message '%s' not found" name
                         | GenerateError.CodeGen ce ->
                             match ce with
                             | CodeGenError.TemplateError s -> sprintf "Template error: %s" s

@@ -53,11 +53,9 @@ module Config =
     let private validDispatch = [ "binary_search"; "direct_map" ]
     let private validMoto = [ "msb"; "lsb" ]
     let private validCrcCounterModes = [ "validate"; "passthrough"; "fail_fast" ]
+
     let private builtinAlgorithmWidths =
-        [ "CRC8_SAE_J1850", 8
-          "CRC8_8H2F", 8
-          "CRC16_CCITT", 16
-          "CRC32P4", 32 ]
+        [ "CRC8_SAE_J1850", 8; "CRC8_8H2F", 8; "CRC16_CCITT", 16; "CRC32P4", 32 ]
         |> Map.ofList
 
     let private prefixRegex = Regex(@"^[a-zA-Z_][a-zA-Z0-9_]*$")
@@ -74,9 +72,7 @@ module Config =
             elif not (List.contains crcCfg.Mode validCrcCounterModes) then
                 Some(
                     InvalidValue(
-                        sprintf
-                            "Unknown crc_counter mode '%s'; valid: validate, passthrough, fail_fast"
-                            crcCfg.Mode
+                        sprintf "Unknown crc_counter mode '%s'; valid: validate, passthrough, fail_fast" crcCfg.Mode
                     )
                 )
             else
@@ -89,14 +85,14 @@ module Config =
                             if String.IsNullOrWhiteSpace(crcSig.Signal) then
                                 Some(
                                     InvalidValue(
-                                        sprintf
-                                            "Signal name for CRC/Counter in message '%s' must not be empty"
-                                            msgName
+                                        sprintf "Signal name for CRC/Counter in message '%s' must not be empty" msgName
                                     )
                                 )
                             else
                                 let builtinWidth = Map.tryFind crcSig.Algorithm builtinAlgorithmWidths
-                                let customWidth = customAlgorithms |> Map.tryFind crcSig.Algorithm |> Option.map _.Width
+
+                                let customWidth =
+                                    customAlgorithms |> Map.tryFind crcSig.Algorithm |> Option.map _.Width
 
                                 match builtinWidth, customWidth with
                                 | None, None -> Some(UnknownAlgorithm crcSig.Algorithm)
@@ -114,13 +110,12 @@ module Config =
 
                     let counterError =
                         match msgCfg.Counter with
-                        | Some counterSig when counterSig.Modulus < 2 -> Some(InvalidModulus(msgName, counterSig.Modulus))
+                        | Some counterSig when counterSig.Modulus < 2 ->
+                            Some(InvalidModulus(msgName, counterSig.Modulus))
                         | Some counterSig when String.IsNullOrWhiteSpace(counterSig.Signal) ->
                             Some(
                                 InvalidValue(
-                                    sprintf
-                                        "Signal name for CRC/Counter in message '%s' must not be empty"
-                                        msgName
+                                    sprintf "Signal name for CRC/Counter in message '%s' must not be empty" msgName
                                 )
                             )
                         | _ -> None
@@ -177,11 +172,16 @@ module Config =
         | :? IDictionary<string, obj> as dict -> Some dict
         | :? IDictionary<obj, obj> as d ->
             let result = System.Collections.Generic.Dictionary<string, obj>()
+
             for kv in d do
                 match kv.Key with
                 | :? string as k -> result.[k] <- kv.Value
                 | _ -> ()
-            if result.Count > 0 then Some(result :> IDictionary<string, obj>) else None
+
+            if result.Count > 0 then
+                Some(result :> IDictionary<string, obj>)
+            else
+                None
         | _ -> None
 
     let private tryParseInt64FromString (s: string) : int64 option =
@@ -359,19 +359,28 @@ module Config =
                                                                     (start, ending)
                                                                 | :? IDictionary<obj, obj> as rangeObj ->
                                                                     // YamlDotNet may deserialize nested maps as IDictionary<obj,obj>
-                                                                    let tmp = System.Collections.Generic.Dictionary<string, obj>()
+                                                                    let tmp =
+                                                                        System.Collections.Generic.Dictionary<
+                                                                            string,
+                                                                            obj
+                                                                         >()
+
                                                                     for kv in rangeObj do
                                                                         match kv.Key with
                                                                         | :? string as k -> tmp.[k] <- kv.Value
                                                                         | _ -> ()
 
                                                                     let start =
-                                                                        tryGetInt64 (tmp :> IDictionary<string, obj>) [ "start" ]
+                                                                        tryGetInt64
+                                                                            (tmp :> IDictionary<string, obj>)
+                                                                            [ "start" ]
                                                                         |> Option.map int
                                                                         |> Option.defaultValue 0
 
                                                                     let ending =
-                                                                        tryGetInt64 (tmp :> IDictionary<string, obj>) [ "end" ]
+                                                                        tryGetInt64
+                                                                            (tmp :> IDictionary<string, obj>)
+                                                                            [ "end" ]
                                                                         |> Option.map int
                                                                         |> Option.defaultValue 0
 
@@ -429,11 +438,7 @@ module Config =
                                                     | None -> None
                                                 | _ -> None
 
-                                            Some(
-                                                msgEntry.Key,
-                                                { Crc = crcCfg
-                                                  Counter = counterCfg }
-                                            )
+                                            Some(msgEntry.Key, { Crc = crcCfg; Counter = counterCfg })
                                         | None -> None)
                                     |> Map.ofSeq
                                 | None -> Map.empty

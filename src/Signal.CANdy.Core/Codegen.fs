@@ -34,18 +34,14 @@ module Codegen =
                 let template = Template.Parse(text, path)
 
                 if template.HasErrors then
-                    let messages =
-                        template.Messages
-                        |> Seq.map string
-                        |> String.concat "; "
+                    let messages = template.Messages |> Seq.map string |> String.concat "; "
 
                     raise (TemplateRenderException(sprintf "Template parse failed for %s: %s" templateName messages))
 
                 let context = TemplateContext()
                 let scriptObject = ScriptObject()
 
-                model
-                |> List.iter (fun (name, value) -> scriptObject.Add(name, value))
+                model |> List.iter (fun (name, value) -> scriptObject.Add(name, value))
 
                 context.PushGlobal(scriptObject)
                 template.Render(context)
@@ -105,13 +101,17 @@ module Codegen =
                         | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_8H2F
                         | None -> false))
 
-            let model : (string * obj) list =
+            let model: (string * obj) list =
                 [ "banner", box (banner config)
                   "header_guard", box (guard config.FilePrefix "utils_h")
-                  "get_bits_le_decl", box "uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);"
-                  "set_bits_le_decl", box "void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
-                  "get_bits_be_decl", box "uint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length);"
-                  "set_bits_be_decl", box "void set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
+                  "get_bits_le_decl",
+                  box "uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length);"
+                  "set_bits_le_decl",
+                  box "void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
+                  "get_bits_be_decl",
+                  box "uint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length);"
+                  "set_bits_be_decl",
+                  box "void set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
                   "canfd_dlc_to_len_decl", box "uint8_t canfd_dlc_to_len(uint8_t dlc);"
                   "canfd_len_to_dlc_decl", box "uint8_t canfd_len_to_dlc(uint8_t len);"
                   "has_crc_j1850", box hasCrcJ1850
@@ -138,7 +138,7 @@ module Codegen =
                         | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_8H2F
                         | None -> false))
 
-            let model : (string * obj) list =
+            let model: (string * obj) list =
                 [ "banner", box (banner config)
                   "utils_header_name", box (utilsHeaderName config)
                   "has_crc_j1850", box hasCrcJ1850
@@ -767,18 +767,27 @@ module Codegen =
                 String.concat "\n" (List.ofSeq lines)
 
             let crcSignalOpt = message.Signals |> List.tryFind (fun s -> s.CrcMeta.IsSome)
-            let counterSignalOpt = message.Signals |> List.tryFind (fun s -> s.CounterMeta.IsSome)
+
+            let counterSignalOpt =
+                message.Signals |> List.tryFind (fun s -> s.CounterMeta.IsSome)
+
             let hasCounter = counterSignalOpt.IsSome
 
             let counterStateTypeDecl =
                 if hasCounter then
-                    sprintf "typedef struct { uint8_t last_counter; bool initialized; } %s_counter_state_t;" message.Name
+                    sprintf
+                        "typedef struct { uint8_t last_counter; bool initialized; } %s_counter_state_t;"
+                        message.Name
                 else
                     ""
 
             let counterCheckFuncDecl =
                 if hasCounter then
-                    sprintf "bool %s_check_counter(%s_counter_state_t* state, const %s_t* msg);" message.Name message.Name message.Name
+                    sprintf
+                        "bool %s_check_counter(%s_counter_state_t* state, const %s_t* msg);"
+                        message.Name
+                        message.Name
+                        message.Name
                 else
                     ""
 
@@ -855,7 +864,7 @@ module Codegen =
                 | None -> ""
 
             let headerContent =
-                let model : (string * obj) list =
+                let model: (string * obj) list =
                     [ "banner", box banner
                       "header_guard", box (sprintf "%s_H" (message.Name.ToUpperInvariant()))
                       "pre_struct_declarations", box preStructDeclarations
@@ -869,7 +878,7 @@ module Codegen =
                 Templates.renderOrRaise "message.h.scriban" model
 
             let sourceContent =
-                let model : (string * obj) list =
+                let model: (string * obj) list =
                     [ "banner", box banner
                       "message_header_name", box (sprintf "%s.h" messageNameLower)
                       "utils_header_name", box (Utils.utilsHeaderName config)
@@ -923,10 +932,11 @@ module Codegen =
                     config.MotorolaStartBit
 
             let registryHContent =
-                let model : (string * obj) list =
+                let model: (string * obj) list =
                     [ "banner", box banner
                       "header_guard", box guard
-                      "registry_declaration", box "bool decode_message(uint32_t id, const uint8_t data[], uint8_t dlc, void* msg);" ]
+                      "registry_declaration",
+                      box "bool decode_message(uint32_t id, const uint8_t data[], uint8_t dlc, void* msg);" ]
 
                 Templates.renderOrRaise "registry.h.scriban" model
 
@@ -990,7 +1000,7 @@ module Codegen =
                     table + search
 
             let finalC =
-                let model : (string * obj) list =
+                let model: (string * obj) list =
                     [ "banner", box banner
                       "registry_header_name", box (sprintf "%sregistry.h" config.FilePrefix)
                       "message_includes", box includes
@@ -1068,8 +1078,7 @@ module Codegen =
                         else
                             let firstMsg = crcCfg.Messages |> Map.toList |> List.head |> fst
                             Some(firstMsg, "CRC/counter", None)
-                    | Some _ ->
-                        None
+                    | Some _ -> None
                     | None ->
                         if config.CrcCounterCheck then
                             ir.Messages
@@ -1078,12 +1087,9 @@ module Codegen =
                                 |> List.tryFind (fun s -> s.IsCrc || s.IsCounter)
                                 |> Option.map (fun s ->
                                     (msg.Name,
-                                     (if s.IsCrc then
-                                          "CRC"
-                                      elif s.IsCounter then
-                                          "counter"
-                                      else
-                                          "CRC/counter"),
+                                     (if s.IsCrc then "CRC"
+                                      elif s.IsCounter then "counter"
+                                      else "CRC/counter"),
                                      Some s.Name)))
                         else
                             None

@@ -27,9 +27,7 @@ module Ir =
           ByteRange: {| Start: int; End: int |}
           DataId: uint16 option }
 
-    type CounterSignalMeta =
-        { Modulus: int
-          Increment: int }
+    type CounterSignalMeta = { Modulus: int; Increment: int }
 
     type CrcCounterMode =
         | Validate

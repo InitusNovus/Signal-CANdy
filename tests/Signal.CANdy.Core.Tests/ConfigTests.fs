@@ -185,6 +185,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -212,6 +213,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -237,6 +239,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -250,6 +253,7 @@ crc_counter:
     let ``Config without crc_counter block gives CrcCounter=None`` () =
         let yaml = "{}"
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg -> cfg.CrcCounter |> should equal None
@@ -273,6 +277,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok cfg ->
@@ -303,6 +308,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Ok _ -> ()
@@ -326,6 +332,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Error(ConfigConflict msg) -> msg |> should haveSubstring "must be 8"
@@ -350,6 +357,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Error(InvalidModulus(msgName, m)) ->
@@ -376,6 +384,7 @@ crc_counter:
 """
 
         let path = createTempFile yaml ".yaml"
+
         try
             match loadFromYaml path with
             | Error(InvalidValue msg) -> msg |> should haveSubstring "must not be empty"

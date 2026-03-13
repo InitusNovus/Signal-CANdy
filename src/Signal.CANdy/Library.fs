@@ -53,11 +53,16 @@ type GeneratorFacade() =
                 | Signal.CANdy.Core.Errors.ValidationError.IoError s -> s
                 | Signal.CANdy.Core.Errors.ValidationError.Unknown s -> s
                 | Signal.CANdy.Core.Errors.ValidationError.ConfigConflict s -> s
-                | Signal.CANdy.Core.Errors.ValidationError.SignalNotFound(message, signal) -> sprintf "signal '%s' not found in message '%s'" signal message
-                | Signal.CANdy.Core.Errors.ValidationError.ByteRangeExceedsDlc(message, rangeEnd, dlc) -> sprintf "byte_range end %d exceeds DLC %d in message '%s'" rangeEnd dlc message
-                | Signal.CANdy.Core.Errors.ValidationError.UnknownAlgorithm name -> sprintf "unknown algorithm '%s' referenced in configuration" name
-                | Signal.CANdy.Core.Errors.ValidationError.InvalidModulus(message, modulus) -> sprintf "invalid counter modulus %d in message '%s'" modulus message
-                | Signal.CANdy.Core.Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) -> sprintf "crc width %d mismatches signal bits %d in message '%s'" crcWidth signalBits message
+                | Signal.CANdy.Core.Errors.ValidationError.SignalNotFound(message, signal) ->
+                    sprintf "signal '%s' not found in message '%s'" signal message
+                | Signal.CANdy.Core.Errors.ValidationError.ByteRangeExceedsDlc(message, rangeEnd, dlc) ->
+                    sprintf "byte_range end %d exceeds DLC %d in message '%s'" rangeEnd dlc message
+                | Signal.CANdy.Core.Errors.ValidationError.UnknownAlgorithm name ->
+                    sprintf "unknown algorithm '%s' referenced in configuration" name
+                | Signal.CANdy.Core.Errors.ValidationError.InvalidModulus(message, modulus) ->
+                    sprintf "invalid counter modulus %d in message '%s'" modulus message
+                | Signal.CANdy.Core.Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) ->
+                    sprintf "crc width %d mismatches signal bits %d in message '%s'" crcWidth signalBits message
                 | Signal.CANdy.Core.Errors.ValidationError.MessageNotFound name -> sprintf "message '%s' not found" name
 
             raise (SignalCandyValidationException(msg))
@@ -132,12 +137,26 @@ type GeneratorFacade() =
                         | Signal.CANdy.Core.Errors.ValidationError.IoError s -> sprintf "[IoError] %s" s
                         | Signal.CANdy.Core.Errors.ValidationError.Unknown s -> sprintf "[Unknown] %s" s
                         | Signal.CANdy.Core.Errors.ValidationError.ConfigConflict s -> sprintf "[ConfigConflict] %s" s
-                        | Signal.CANdy.Core.Errors.ValidationError.SignalNotFound(message, signal) -> sprintf "[SignalNotFound] signal '%s' not found in message '%s'" signal message
-                        | Signal.CANdy.Core.Errors.ValidationError.ByteRangeExceedsDlc(message, rangeEnd, dlc) -> sprintf "[ByteRangeExceedsDlc] byte_range end %d exceeds DLC %d in message '%s'" rangeEnd dlc message
-                        | Signal.CANdy.Core.Errors.ValidationError.UnknownAlgorithm name -> sprintf "[UnknownAlgorithm] unknown algorithm '%s' referenced" name
-                        | Signal.CANdy.Core.Errors.ValidationError.InvalidModulus(message, modulus) -> sprintf "[InvalidModulus] invalid counter modulus %d in message '%s'" modulus message
-                        | Signal.CANdy.Core.Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) -> sprintf "[CrcWidthMismatch] crc width %d mismatches signal bits %d in message '%s'" crcWidth signalBits message
-                        | Signal.CANdy.Core.Errors.ValidationError.MessageNotFound name -> sprintf "[MessageNotFound] message '%s' not found" name
+                        | Signal.CANdy.Core.Errors.ValidationError.SignalNotFound(message, signal) ->
+                            sprintf "[SignalNotFound] signal '%s' not found in message '%s'" signal message
+                        | Signal.CANdy.Core.Errors.ValidationError.ByteRangeExceedsDlc(message, rangeEnd, dlc) ->
+                            sprintf
+                                "[ByteRangeExceedsDlc] byte_range end %d exceeds DLC %d in message '%s'"
+                                rangeEnd
+                                dlc
+                                message
+                        | Signal.CANdy.Core.Errors.ValidationError.UnknownAlgorithm name ->
+                            sprintf "[UnknownAlgorithm] unknown algorithm '%s' referenced" name
+                        | Signal.CANdy.Core.Errors.ValidationError.InvalidModulus(message, modulus) ->
+                            sprintf "[InvalidModulus] invalid counter modulus %d in message '%s'" modulus message
+                        | Signal.CANdy.Core.Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) ->
+                            sprintf
+                                "[CrcWidthMismatch] crc width %d mismatches signal bits %d in message '%s'"
+                                crcWidth
+                                signalBits
+                                message
+                        | Signal.CANdy.Core.Errors.ValidationError.MessageNotFound name ->
+                            sprintf "[MessageNotFound] message '%s' not found" name
 
                     return raise (SignalCandyValidationException(msg))
                 | Signal.CANdy.Core.Errors.GenerateError.CodeGen ce ->

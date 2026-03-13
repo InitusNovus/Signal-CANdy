@@ -134,7 +134,9 @@ BO_ 100 MESSAGE_2: 8 Vector__XXX
                 Directory.Delete(outDir, true)
 
     [<Fact>]
-    let ``generateFromPaths returns CodeGen UnsupportedFeature for crc_counter_check without explicit CRC metadata support`` () =
+    let ``generateFromPaths returns CodeGen UnsupportedFeature for crc_counter_check without explicit CRC metadata support``
+        ()
+        =
         let dbcContent =
             """
 VERSION ""
