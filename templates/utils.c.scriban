@@ -7,12 +7,20 @@ uint64_t get_bits_le(const uint8_t* data, uint16_t start_bit, uint16_t length) {
     uint16_t bit_offset = start_bit % 8;
 
     uint16_t n_bytes = (bit_offset + length + 7) / 8;
-    for (uint16_t i = 0; i < n_bytes; ++i) {
+    uint16_t core_bytes = (n_bytes > 8) ? 8 : n_bytes;
+
+    for (uint16_t i = 0; i < core_bytes; ++i) {
         value |= (uint64_t)data[byte_offset + i] << (i * 8);
     }
 
     // Shift and mask to get the desired bits
-    value >>= bit_offset;
+    if (n_bytes > 8) {
+        uint8_t extra = data[byte_offset + 8];
+        value = (value >> bit_offset) | ((uint64_t)extra << (64 - bit_offset));
+    } else {
+        value >>= bit_offset;
+    }
+
     value &= (length == 64) ? UINT64_MAX : ((1ULL << length) - 1);
 
     return value;
@@ -26,12 +34,22 @@ void set_bits_le(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t va
     uint64_t mask = (length == 64) ? UINT64_MAX : ((1ULL << length) - 1);
     uint64_t clear_mask = mask << bit_offset;
     uint16_t n_bytes = (bit_offset + length + 7) / 8;
-    for (uint16_t i = 0; i < n_bytes; ++i) {
+    uint16_t core_bytes = (n_bytes > 8) ? 8 : n_bytes;
+
+    for (uint16_t i = 0; i < core_bytes; ++i) {
         data[byte_offset + i] &= ~(uint8_t)(clear_mask >> (i * 8));
     }
 
     uint64_t insert_value = (value & mask) << bit_offset;
-    for (uint16_t i = 0; i < n_bytes; ++i) {
+    for (uint16_t i = 0; i < core_bytes; ++i) {
         data[byte_offset + i] |= (uint8_t)(insert_value >> (i * 8));
+    }
+
+    if (n_bytes > 8) {
+        uint8_t extra_bits = (uint8_t)(bit_offset + length - 64);
+        uint8_t extra_mask = (uint8_t)((1u << extra_bits) - 1u);
+        uint8_t extra_value = (uint8_t)(((value & mask) >> (length - extra_bits)) & extra_mask);
+        data[byte_offset + 8] &= (uint8_t)~extra_mask;
+        data[byte_offset + 8] |= extra_value;
     }
 }
