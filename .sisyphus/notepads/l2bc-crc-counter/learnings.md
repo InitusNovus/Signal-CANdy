@@ -14,3 +14,5 @@
 
 ⏭ 다음 계획
 - No further changes required for this issue.
+
+20260313_2230_Dbc_T12_blankline_fix: Removed blank lines after triple-quoted DBC literals in T12 tests (IsCrc/IsCounter/Non-CRC/CRC_OFF). Build+tests: OK.
