@@ -17,6 +17,13 @@ module Errors =
         | MissingField of string
         | IoError of string
         | Unknown of string
+        | ConfigConflict of string
+        | SignalNotFound of messageName: string * signalName: string
+        | ByteRangeExceedsDlc of messageName: string * rangeEnd: int * dlc: int
+        | UnknownAlgorithm of name: string
+        | InvalidModulus of messageName: string * modulus: int
+        | CrcWidthMismatch of messageName: string * crcWidth: int * signalBits: int
+        | MessageNotFound of messageName: string
 
     /// Unified error type for the full generate-from-paths pipeline.
     /// Preserves the original error category so consumers can distinguish
