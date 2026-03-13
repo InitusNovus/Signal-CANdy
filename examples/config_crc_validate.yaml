@@ -1,16 +1,25 @@
 #RX|PhysType: float
-#JZ|RangeCheck: false
+#MK|RangeCheck: true
 #VN|Dispatch: direct_map
 #MZ|CrcCounterCheck: true
 
 crc_counter:
-  mode: fail_fast
+  mode: validate
+  algorithms:
+    CRC8_SAE_J1850:      # standard CRC-8 (J1850-style)
+      width: 8
+      poly: 0x31
+      init: 0x00
+      xor_out: 0x00
+      reflect_in: false
+      reflect_out: false
   messages:
     MESSAGE_1:
       crc:
         signal: CHECKSUM
         algorithm: CRC8_SAE_J1850
         byte_range: { start: 0, end: 7 }
+        data_id: 0x00
       counter:
         signal: COUNTER
         modulus: 15

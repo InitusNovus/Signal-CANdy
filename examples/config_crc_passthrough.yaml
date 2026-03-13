@@ -1,0 +1,6 @@
+#RX|PhysType: float
+#MK|RangeCheck: true
+#VN|Dispatch: direct_map
+#MZ|CrcCounterCheck: false
+
+crc_counter: { mode: passthrough }
