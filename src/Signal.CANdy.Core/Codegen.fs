@@ -95,14 +95,18 @@ module Codegen =
                   "get_bits_be_decl", box "uint64_t get_bits_be(const uint8_t* data, uint16_t start_bit, uint16_t length);"
                   "set_bits_be_decl", box "void set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
                   "canfd_dlc_to_len_decl", box "uint8_t canfd_dlc_to_len(uint8_t dlc);"
-                  "canfd_len_to_dlc_decl", box "uint8_t canfd_len_to_dlc(uint8_t len);" ]
+                  "canfd_len_to_dlc_decl", box "uint8_t canfd_len_to_dlc(uint8_t len);"
+                  "has_crc_j1850", box false
+                  "has_crc_8h2f", box false ]
 
             Templates.renderOrRaise "utils.h.scriban" model
 
         let utilsCContent (config: Signal.CANdy.Core.Config.Config) =
             let model : (string * obj) list =
                 [ "banner", box (banner config)
-                  "utils_header_name", box (utilsHeaderName config) ]
+                  "utils_header_name", box (utilsHeaderName config)
+                  "has_crc_j1850", box false
+                  "has_crc_8h2f", box false ]
 
             Templates.renderOrRaise "utils.c.scriban" model
 

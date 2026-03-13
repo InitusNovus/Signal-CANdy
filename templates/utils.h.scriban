@@ -2,7 +2,8 @@
 #define {{ header_guard }}
 
 #include <stdint.h>
-#include <stdbool.h>
+#include <stdbool.h>{{ if has_crc_j1850 || has_crc_8h2f }}
+#include <stddef.h>{{ end }}
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,7 +23,11 @@ extern "C" {
 
 // CAN FD DLC <-> length mapping
 {{ canfd_dlc_to_len_decl }}
-{{ canfd_len_to_dlc_decl }}
+{{ canfd_len_to_dlc_decl }}{{ if has_crc_j1850 || has_crc_8h2f }}
+
+{{ if has_crc_j1850 }}uint8_t sc_crc8_sae_j1850(const uint8_t* data, size_t len);
+{{ end }}{{ if has_crc_8h2f }}uint8_t sc_crc8_8h2f(const uint8_t* data, size_t len);
+{{ end }}{{ end }}
 
 #ifdef __cplusplus
 }
