@@ -62,6 +62,10 @@ Thumbs.db
 tmp/stress_reports/
 analysis/
 
+# Python cache
+__pycache__/
+*.py[cod]
+
 # Backups/archives
 *.zip
 *.tar
@@ -70,3 +74,5 @@ analysis/
 *.bak
 backup/
 *_backup/
+TestResults/
+coverage_report/

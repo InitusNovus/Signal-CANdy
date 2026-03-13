@@ -115,6 +115,11 @@ int test_roundtrip() {
     printf("Decoded Signal_1: %f\n", msg_rx.Signal_1);
     printf("Decoded Signal_2: %f\n", msg_rx.Signal_2);
 
+    printf("TRACE: encode Signal_1=%.2f Signal_2=%.2f -> bytes=[", msg_tx.Signal_1, msg_tx.Signal_2);
+    for (int i = 0; i < dlc; ++i) printf("%s0x%02X", i ? "," : "", data[i]);
+    printf("]\n");
+    printf("TRACE: decode -> Signal_1=%.6f Signal_2=%.6f\n", msg_rx.Signal_1, msg_rx.Signal_2);
+
     printf("Roundtrip successful!\n");
     return 0;
 }
@@ -674,6 +679,73 @@ static int test_moto_lsb_roundtrip() {
     printf("Moto LSB roundtrip successful!\n");
     return 0;
 }
+
+/*
+ * Comprehensive Motorola LSB test with hand-calculated test vectors.
+ *
+ * DBC (motorola_lsb_suite.dbc) defines 4 signals in LSB_TEST (BO_ 300, DLC=8):
+ *   LSB_BE_8    : 0|8@0+  (1,0) [0|255]      unsigned, byte 0
+ *   LSB_BE_8_B1 : 8|8@0+  (1,0) [0|255]      unsigned, byte 1
+ *   LSB_BE_8_B2 : 16|8@0+ (1,0) [0|255]      unsigned, byte 2
+ *   LSB_BE_S8_B3: 24|8@0- (1,0) [-128|127]   signed,   byte 3
+ *
+ * All signals are 8-bit byte-aligned. motorolaMsbFromLsb(N,8) traces:
+ *   N=0:  0->1->2->3->4->5->6->7   MSB=7  (byte 0)
+ *   N=8:  8->9->10->11->12->13->14->15  MSB=15 (byte 1)
+ *   N=16: 16->17->18->19->20->21->22->23 MSB=23 (byte 2)
+ *   N=24: 24->25->26->27->28->29->30->31 MSB=31 (byte 3)
+ *
+ * Test vector:
+ *   LSB_BE_8    = 0x5A = 90      -> byte0 = 0x5A
+ *   LSB_BE_8_B1 = 0xCD = 205     -> byte1 = 0xCD
+ *   LSB_BE_8_B2 = 0x34 = 52      -> byte2 = 0x34
+ *   LSB_BE_S8_B3 = -42           -> raw = (uint8_t)(-42) = 0xD6 -> byte3 = 0xD6
+ *   Bytes 4-7 are unused (zero).
+ *
+ *   known_data = { 0x5A, 0xCD, 0x34, 0xD6, 0x00, 0x00, 0x00, 0x00 }
+ */
+static int test_moto_lsb_comprehensive() {
+    printf("--- Running test_moto_lsb_comprehensive ---\n");
+
+    const double tol = 0.5;
+    const uint8_t known_data[8] = { 0x5A, 0xCD, 0x34, 0xD6, 0x00, 0x00, 0x00, 0x00 };
+
+    /* --- Decode from known bytes --- */
+    LSB_TEST_t rx = {0};
+    if (!LSB_TEST_decode(&rx, known_data, 8)) {
+        printf("LSB_TEST decode failed\n");
+        return 1;
+    }
+
+    assert_close_f64("LSB_BE_8 decode",    rx.LSB_BE_8,    90.0,  tol);
+    assert_close_f64("LSB_BE_8_B1 decode",  rx.LSB_BE_8_B1, 205.0, tol);
+    assert_close_f64("LSB_BE_8_B2 decode",  rx.LSB_BE_8_B2, 52.0,  tol);
+    assert_close_f64("LSB_BE_S8_B3 decode", rx.LSB_BE_S8_B3, -42.0, tol);
+
+    /* --- Encode and compare bytes --- */
+    LSB_TEST_t tx = {0};
+    tx.LSB_BE_8     = 90.0;
+    tx.LSB_BE_8_B1  = 205.0;
+    tx.LSB_BE_8_B2  = 52.0;
+    tx.LSB_BE_S8_B3 = -42.0;
+
+    uint8_t encoded[8] = {0};
+    uint8_t dlc = 0;
+    if (!LSB_TEST_encode(encoded, &dlc, &tx)) {
+        printf("LSB_TEST encode failed\n");
+        return 1;
+    }
+
+    assert_equal_bytes("LSB_TEST encode", encoded, known_data, 8);
+
+    printf("TRACE: encode LSB_BE_8=%.0f LSB_BE_8_B1=%.0f LSB_BE_8_B2=%.0f LSB_BE_S8_B3=%.0f -> bytes=[",
+           tx.LSB_BE_8, tx.LSB_BE_8_B1, tx.LSB_BE_8_B2, tx.LSB_BE_S8_B3);
+    for (int i = 0; i < 8; ++i) printf("%s0x%02X", i ? "," : "", encoded[i]);
+    printf("]\n");
+
+    printf("Comprehensive Motorola LSB test successful!\n");
+    return 0;
+}
 #endif
 
 #ifdef HAVE_MUX_MSG
@@ -731,12 +803,17 @@ static int test_fixed_roundtrip() {
         return 1;
     }
 
-    // Signal_2 factor=0.1 -> quantized to nearest 0.1
+     // Signal_2 factor=0.1 -> quantized to nearest 0.1
     double expected_s2 = floor(45.67 * 10.0 + 0.5) / 10.0;
     if (fabs(msg_rx.Signal_2 - expected_s2) > 1e-6) {
         printf("Fixed S2 mismatch: got %f exp %f\n", msg_rx.Signal_2, expected_s2);
         return 1;
     }
+
+    printf("TRACE: encode Signal_1=%.2f Signal_2=%.2f -> bytes=[", msg_tx.Signal_1, msg_tx.Signal_2);
+    for (int i = 0; i < dlc; ++i) printf("%s0x%02X", i ? "," : "", data[i]);
+    printf("]\n");
+    printf("TRACE: decode -> Signal_1=%.6f Signal_2=%.6f\n", msg_rx.Signal_1, msg_rx.Signal_2);
 
     printf("Fixed roundtrip successful!\n");
     return 0;
@@ -925,6 +1002,9 @@ int main(int argc, char *argv[]) {
     #ifdef HAVE_LSB_TEST
         else if (strcmp(argv[1], "test_moto_lsb_roundtrip") == 0) {
             return test_moto_lsb_roundtrip();
+        }
+        else if (strcmp(argv[1], "test_moto_lsb_comprehensive") == 0) {
+            return test_moto_lsb_comprehensive();
         }
     #endif
 #ifdef HAVE_MUX_MSG

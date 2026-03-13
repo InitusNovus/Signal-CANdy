@@ -194,6 +194,22 @@ let ``Validation fails for duplicate message IDs`` () =
 - **Do not modify test framework** — xUnit + FsUnit is the standard; keep assertions idiomatic
 - **Mutable state** only in parsing/IO-bound code where it improves clarity
 
+## Evidence & Source-of-Truth
+
+- **Primary evidence**: actual repository source files, tracked workspace files, current directory layout, build/test outputs, and generated reports under `Reports/`
+- **Secondary support**: prior reports, `.sisyphus/` planning notes, helper tools, and external references
+- Do not let secondary support override direct repository evidence
+- If something is not directly supported by source evidence, state that clearly instead of filling the gap with assumptions
+- Do not treat absence of evidence as proof that something was removed, deprecated, or intentionally changed
+
+## Local-Only / Historical Boundaries
+
+- `Reports/` is an append-only historical record for completed sessions. Existing reports must not be modified after the session that created them ends
+- If a prior report is stale or inaccurate, record the correction in the current session's report instead of rewriting history
+- `.sisyphus/` is agent working state, not canonical product source. Use it for planning/recovery context, but verify important claims against actual repo files before acting on them
+- `gen/` and `tmp/` are working/output areas. Do not treat them as authoritative implementation sources unless the task is explicitly about generated artifacts or transient validation output
+- `external_test/` may contain local validation material; do not treat proprietary/local contents there as safe-to-commit by default
+
 ## 작업 보고 및 로그 (Workflow & Reporting)
 
 > ⚠️ **이 섹션의 규칙은 예외 없이 반드시 준수해야 합니다.**
@@ -201,7 +217,7 @@ let ``Validation fails for duplicate message IDs`` () =
 
 ### 규칙 1: 작업 종료 시 필수 보고
 
-**모든 작업 세션이 종료될 때, 반드시 `Report/` 폴더에 작업 보고서를 작성해야 한다.**
+**모든 작업 세션이 종료될 때, 반드시 `Reports/` 폴더에 작업 보고서를 작성해야 한다.**
 코드 변경이 있었든 분석만 수행했든, 세션에서 수행한 모든 내용을 기록한다.
 보고서가 없는 작업 세션은 **완료된 것으로 인정하지 않는다.**
 
@@ -210,14 +226,14 @@ let ``Validation fails for duplicate message IDs`` () =
 보고서 파일명은 다음 형식을 **반드시** 따른다:
 
 ```
-Report/YYYYMMDD_HHMM_작업내용요약.md
+Reports/YYYYMMDD_HHMM_작업내용요약.md
 ```
 
 - `YYYYMMDD`: 작업 날짜 (예: 20260212)
 - `HHMM`: 작업 종료 시각 (24시간제, 예: 1430)
 - `작업내용요약`: 핵심 작업을 간결하게 (예: `Dbc_예외삼킴_수정`, `Core_테스트_구축`)
 
-예시: `Report/20260212_1430_Dbc_예외삼킴_수정.md`
+예시: `Reports/20260212_1430_Dbc_예외삼킴_수정.md`
 
 ### 규칙 3: 보고서 필수 포함 항목
 
@@ -234,6 +250,19 @@ Report/YYYYMMDD_HHMM_작업내용요약.md
 
 작업 세션에서 ROADMAP 항목을 완료했다면, **해당 세션 내에서 즉시** `ROADMAP.md`의 체크박스를 `[x]`로 갱신한다.
 보고서에도 완료된 ROADMAP 항목 ID를 명시한다 (예: "C-1a, C-1b 완료").
+
+### 규칙 5: 보고서 불변성과 정정 방식
+
+- 기존 `Reports/` 파일은 **불변의 이력**으로 취급한다. 과거 세션이 끝난 뒤에는 수정하지 않는다
+- 과거 보고서의 내용이 현재 사실과 어긋나는 것이 확인되면, 원본을 고치지 말고 **현재 세션 보고서**에 정정 사항을 별도 섹션으로 남긴다
+- 즉, **이력은 불변 / 현재 진실은 patch-forward** 원칙을 따른다
+
+### 규칙 6: 장기 실행 배치의 RUN_ID 규칙 (선택 적용)
+
+- 기본 규칙은 위의 `Reports/YYYYMMDD_HHMM_작업내용요약.md` 단일 보고서 방식이다
+- 다만 작업이 여러 세션에 걸쳐 이어지는 **장기 실행 배치**라면, 필요 시 `RUN_ID`(`yyyymmdd-hhmm`, KST 기준)를 정하고 여러 보고서가 동일한 RUN_ID를 공유하도록 할 수 있다
+- 같은 미종료 배치를 이어서 수행하는 경우에는 새 RUN_ID를 임의로 만들지 말고 기존 RUN_ID를 재사용한다
+- 이 선택 규칙은 복구성과 추적성을 높이기 위한 보강 규칙이며, 현재 레포의 기본 단일 보고서 관행을 대체하지 않는다
 
 ---
 

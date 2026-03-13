@@ -2,7 +2,7 @@
 
 > **목표**: 코드 생성기의 **신뢰성, 유지보수성, 테스트 커버리지**를 펌웨어 양산 수준으로 끌어올린다.
 > **근거 문서**: `Analysis/Codebase_Analysis.md` (2026-02-12 코드베이스 심층 분석)
-> **진행 관리**: 완료 항목은 `[x]`로 표시. 작업 보고서는 `Report/` 폴더에 기록.
+> **진행 관리**: 완료 항목은 `[x]`로 표시. 작업 보고서는 `Reports/` 폴더에 기록.
 
 ---
 
@@ -132,6 +132,47 @@
 
 ---
 
+## [Tracking] — Oracle 실패해결 플랜 (2026-02-13 수립본)
+
+> 본 섹션은 `Reports/`, `tests/oracle/ORACLE_RESULTS.md`, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` 기준의 **진행 추적용 상태판**입니다.
+> 기존 C/H/M/L 항목과 별개로, 오라클 검증 파이프라인 플랜(Task 0~9)의 현재 도달 지점을 기록합니다.
+
+> **Source-of-Truth 우선순위**:
+> 1. `Reports/20260312-1530_Oracle_실패해결_완료.md`
+> 2. `tests/oracle/ORACLE_RESULTS.md`
+> 3. `tests/oracle/CATEGORY_C_EXCEPTIONS.md`
+> 4. `.sisyphus/*` (보조 작업 상태; canonical source 아님)
+
+- [x] **O-1. Task 0** 만료 플랜 아카이브 + boulder 갱신 (`.sisyphus/plans/archived/*`, `.sisyphus/boulder.json`, `Reports/20260312-1530_Oracle_실패해결_완료.md`)
+- [x] **O-2. Task 1** DbcParserLib 속성 타입 검증 (`Reports/20260312-1235_DbcParserLib_Type_Probe_Test.md`)
+- [x] **O-3. Task 2** C 오라클 하네스 템플릿/유틸 구현 (`Reports/20260213_1817_Oracle_하네스_템플릿_구현.md`)
+- [x] **O-4. Task 3** Oracle Core Engine/CLI 구현 (`Reports/20260213_1838_Oracle_Core_Engine_구현.md`, `Reports/20260213_1850_Oracle_Core_Engine_구현.md`)
+- [x] **O-5. Task 4** tolerance/metadata 비교 로직 구현 (`Reports/20260213_1848_Oracle_Tolerance_Metadata_Comparison.md`)
+- [x] **O-6. Task 5** 벡터 생성 오버플로 가드레일 (`Reports/20260312-1235_Oracle_Overflow_Guardrails.md`, commit `e0fc6fa`)
+- [x] **O-7. Task 6** cantools 파싱 비호환 DBC 분류 (`Reports/20260312-1235_Oracle_DBC_Parse_Triage.md`)
+- [x] **O-8. Task 7** Category C 예외 판정 기준 문서화 (`tests/oracle/CATEGORY_C_EXCEPTIONS.md`, `Reports/20260312-1530_Oracle_Category_C_Exception_5_추가.md`)
+- [x] **O-9. Task 8** Oracle pytest 스위트 구축 (`Reports/20260213_1937_Oracle_pytest_스위트_구축.md`)
+- [x] **O-10. Task 9** 전체 통합 실행 + 결과 문서화 (`Reports/20260312-1530_Oracle_실패해결_완료.md`, `tests/oracle/ORACLE_RESULTS.md`)
+
+### Oracle 후속 backlog (우선순위순)
+
+- [x] **B-O1. DBC raw-range detection heuristic**
+  - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #1, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 5
+  - 범위: `[min|max]`가 raw-count sentinel로 보이는 경우의 선택적 탐지/정책 결정
+  - 상태: **완료** (2026-03-12, commit `1017b52` — `isRawRangeSentinel` heuristic in `Codegen.fs`, 1,101 oracle failures eliminated)
+
+- [x] **B-O2. Oracle multiplex mode**
+  - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #2, Exception 1 (`cantools_oracle_limitation`)
+  - 범위: `run_oracle.py`가 mux branch를 선택해 skip 없이 검증 가능하도록 확장
+  - 상태: **완료** (2026-03-12 — `_generate_mux_vectors()` in `engine.py`, all vendor mux signals now tested, 0 skipped)
+
+- [ ] **B-O3. Valid bitmask auto-widening**
+  - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #3, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 3
+  - 범위: >32 signal 메시지에서 `uint64_t` 또는 배열 기반 valid 필드 자동 선택
+  - 상태: **미완료 backlog** (기존 `L-3`와 연결되는 구조 개선 과제)
+
+---
+
 ## 작업 순서 의존성 그래프
 
 ```
@@ -148,5 +189,5 @@ M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 
 ---
 
-> **최종 갱신**: 2026-02-12 (C-1, C-2, H-1, H-2, H-3, M-1, M-2, M-3, M-4 완료 — [Medium] 전체 완료, L-4a, L-4b, L-4c 완료 — CAN FD DLC 매핑 완료, signed signal decode 버그 수정)
+> **최종 갱신**: 2026-03-13 (기존 완료 항목 상태 유지, Oracle 실패해결 플랜 O-1~O-10 완료 반영, Oracle 후속 backlog B-O1~B-O3 추가, `Reports/` 기준으로 정렬)
 > **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`

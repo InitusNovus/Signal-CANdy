@@ -199,6 +199,22 @@ module CodegenTests =
     // -------------------------------------------------------
 
     [<Fact>]
+    let ``CAN FD LE signal wider than 8 bytes n_bytes clamp absent from generated utils`` () =
+        let outDir = createTempOutDir ()
+
+        try
+            match generate singleMessageIr outDir defaultConfig with
+            | Ok files ->
+                let utilsC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "sc_utils.c")
+
+                let content = File.ReadAllText(utilsC)
+                content.Contains("if (n_bytes > 8) n_bytes = 8;") |> should equal false
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
     let ``generate utils.c contains n_bytes for FD-safe LE accessors`` () =
         let outDir = createTempOutDir ()
 
@@ -377,6 +393,42 @@ module CodegenTests =
             cleanupDir outDir
 
     [<Fact>]
+    let ``motorolaMsbFromLsb crosses byte boundary correctly`` () =
+        let ir =
+            { Messages =
+                [ { Name = "BE_LSB_BOUNDARY_MSG"
+                    Id = 553u
+                    IsExtended = false
+                    Length = 8us
+                    Signals =
+                      [ { mkSignal "SigBEBoundary" 8us 16us with
+                            ByteOrder = ByteOrder.Big
+                            Maximum = None
+                            Minimum = None } ]
+                    Sender = "ECU"
+                    Receivers = [] } ] }
+
+        let lsbConfig =
+            { defaultConfig with
+                MotorolaStartBit = "lsb" }
+
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir lsbConfig with
+            | Ok files ->
+                let msgC =
+                    files.Sources
+                    |> List.find (fun f -> Path.GetFileName(f) = "be_lsb_boundary_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "get_bits_be(data, 7, 16)"
+                content |> should haveSubstring "set_bits_be(data, 7, 16"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
     let ``generate creates sign extension for signed 16-bit signal`` () =
         let ir =
             { Messages =
@@ -403,6 +455,373 @@ module CodegenTests =
                 let content = File.ReadAllText(msgC)
                 content |> should haveSubstring "1ULL << (16 - 1)"
                 content |> should haveSubstring "~((1ULL << 16) - 1)"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Range check skipped for DBC no-range sentinel 0 0`` () =
+        let signal =
+            { Name = "TestSig"
+              StartBit = 0us
+              Length = 8us
+              Factor = 1.0
+              Offset = 0.0
+              Minimum = Some 0.0
+              Maximum = Some 0.0
+              Unit = ""
+              IsSigned = false
+              IsCrc = false
+              IsCounter = false
+              ByteOrder = ByteOrder.Little
+              MultiplexerIndicator = None
+              MultiplexerSwitchValue = None
+              ValueTable = None
+              Receivers = [] }
+
+        let msg =
+            { Name = "TEST_MSG"
+              Id = 1u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "test_msg.c")
+                let result = File.ReadAllText(msgC)
+                result |> should not' (haveSubstring "TestSig < 0")
+                result |> should not' (haveSubstring "TestSig > 0")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Range check skipped for inverted DBC range sentinel min gt max`` () =
+        // Signal with [1|0] (inverted DBC sentinel): min=1.0, max=0.0 - no range defined
+        let invSig =
+            { Name = "InvSig"
+              StartBit = 0us
+              Length = 8us
+              Factor = 1.0
+              Offset = 0.0
+              Minimum = Some 1.0
+              Maximum = Some 0.0
+              Unit = ""
+              IsSigned = false
+              IsCrc = false
+              IsCounter = false
+              ByteOrder = ByteOrder.Little
+              MultiplexerIndicator = None
+              MultiplexerSwitchValue = None
+              ValueTable = None
+              Receivers = [] }
+
+        let msg =
+            { Name = "INV_MSG"
+              Id = 2u
+              IsExtended = false
+              Length = 8us
+              Signals = [ invSig ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "inv_msg.c")
+                let result = File.ReadAllText(msgC)
+                result |> should not' (haveSubstring "InvSig < 1")
+                result |> should not' (haveSubstring "InvSig > 0")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    // -------------------------------------------------------
+    // B-O1: Raw-range sentinel detection tests
+    // -------------------------------------------------------
+
+    let private mkSignalWithRange name startBit length factor offset minV maxV isSigned =
+        { mkSignal name startBit length with
+            Factor = factor
+            Offset = offset
+            Minimum = Some minV
+            Maximum = Some maxV
+            IsSigned = isSigned }
+
+    [<Fact>]
+    let ``Raw range heuristic skips Chrysler LAT_DIST style sentinel`` () =
+        let signal = mkSignalWithRange "LAT_DIST" 0us 11us 0.005 -1000.0 0.0 2047.0 false
+
+        let msg =
+            { Name = "CHRYSLER_MSG"
+              Id = 300u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "chrysler_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should not' (haveSubstring "LAT_DIST < ")
+                content |> should not' (haveSubstring "LAT_DIST > ")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic skips Mercedes offset sentinel`` () =
+        let signal = mkSignalWithRange "STEER_DIR" 0us 1us 1.0 2.0 0.0 1.0 false
+
+        let msg =
+            { Name = "MERCEDES_MSG"
+              Id = 301u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mercedes_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should not' (haveSubstring "STEER_DIR < ")
+                content |> should not' (haveSubstring "STEER_DIR > ")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic keeps normal physical range checks`` () =
+        let signal = mkSignalWithRange "NORMAL_C" 0us 8us 0.1 0.0 0.0 25.5 false
+
+        let msg =
+            { Name = "NORMAL_C_MSG"
+              Id = 310u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "normal_c_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "return false"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic keeps identity full-scale checks`` () =
+        let signal = mkSignalWithRange "IDENTITY_D" 0us 8us 1.0 0.0 0.0 255.0 false
+
+        let msg =
+            { Name = "IDENTITY_D_MSG"
+              Id = 311u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "identity_d_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "return false"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic keeps narrowed physical range checks`` () =
+        let signal = mkSignalWithRange "NARROW_E" 0us 8us 1.0 0.0 10.0 200.0 false
+
+        let msg =
+            { Name = "NARROW_E_MSG"
+              Id = 312u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "narrow_e_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "return false"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic keeps Ford full-scale checks`` () =
+        let signal = mkSignalWithRange "FORD_F" 0us 12us 0.0625 0.0 0.0 255.9375 false
+
+        let msg =
+            { Name = "FORD_F_MSG"
+              Id = 313u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "ford_f_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "return false"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic skips signed sentinel ranges`` () =
+        let signal = mkSignalWithRange "SIGNED_G" 0us 12us 0.1 0.0 0.0 409.5 true
+
+        let msg =
+            { Name = "SIGNED_G_MSG"
+              Id = 320u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_g_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should not' (haveSubstring "SIGNED_G < ")
+                content |> should not' (haveSubstring "SIGNED_G > ")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic keeps valid signed physical range checks`` () =
+        let signal = mkSignalWithRange "SIGNED_H" 0us 8us 1.0 0.0 -128.0 127.0 true
+
+        let msg =
+            { Name = "SIGNED_H_MSG"
+              Id = 321u
+              IsExtended = false
+              Length = 8us
+              Signals = [ signal ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC =
+                    files.Sources |> List.find (fun f -> Path.GetFileName(f) = "signed_h_msg.c")
+
+                let content = File.ReadAllText(msgC)
+                content |> should haveSubstring "return false"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``Raw range heuristic selectively skips per signal in same message`` () =
+        let sigA = mkSignalWithRange "RAW_SIG" 0us 11us 0.005 -1000.0 0.0 2047.0 false
+        let sigB = mkSignalWithRange "NORMAL_SIG" 16us 8us 0.1 0.0 0.0 25.5 false
+
+        let msg =
+            { Name = "MIXED_MSG"
+              Id = 400u
+              IsExtended = false
+              Length = 8us
+              Signals = [ sigA; sigB ]
+              Sender = "ECU"
+              Receivers = [] }
+
+        let ir = { Messages = [ msg ] }
+        let config = { defaultConfig with RangeCheck = true }
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir config with
+            | Ok files ->
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mixed_msg.c")
+                let content = File.ReadAllText(msgC)
+                content |> should not' (haveSubstring "RAW_SIG < ")
+                content |> should not' (haveSubstring "RAW_SIG > ")
+                content |> should haveSubstring "NORMAL_SIG"
+                content |> should haveSubstring "return false"
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir

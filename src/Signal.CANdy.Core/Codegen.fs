@@ -107,7 +107,6 @@ module Codegen =
                   "    uint16_t byte_offset = start_bit / 8;"
                   "    uint16_t bit_offset = start_bit % 8;"
                   "    uint16_t n_bytes = (bit_offset + length + 7) / 8;"
-                  "    if (n_bytes > 8) n_bytes = 8;"
                   "    for (uint16_t i = 0; i < n_bytes; ++i) {"
                   "        value |= (uint64_t)data[byte_offset + i] << (i * 8);"
                   "    }"
@@ -123,7 +122,6 @@ module Codegen =
                   "    uint64_t mask = (length == 64) ? UINT64_MAX : ((1ULL << length) - 1);"
                   "    uint64_t clear_mask = mask << bit_offset;"
                   "    uint16_t n_bytes = (bit_offset + length + 7) / 8;"
-                  "    if (n_bytes > 8) n_bytes = 8;"
                   "    for (uint16_t i = 0; i < n_bytes; ++i) {"
                   "        data[byte_offset + i] &= ~(uint8_t)(clear_mask >> (i * 8));"
                   "    }"
@@ -180,8 +178,8 @@ module Codegen =
                 if bitIdx < 7 then
                     bitIdx <- bitIdx + 1
                 else
-                    (byteIdx <- byteIdx + 1
-                     bitIdx <- 7)
+                    (byteIdx <- byteIdx - 1
+                     bitIdx <- 0)
 
             byteIdx * 8 + bitIdx
 
@@ -216,6 +214,50 @@ module Codegen =
                             loop (n + 1)
 
                 loop 0
+
+        /// Detect when DBC [min|max] fields store raw CAN counts instead of physical values.
+        /// Returns true if the declared min/max range cannot contain the full physical range
+        /// computed from factor, offset, and bit width - indicating raw-count sentinel usage.
+        let isRawRangeSentinel
+            (minV: float)
+            (maxV: float)
+            (factor: float)
+            (offset: float)
+            (length: uint16)
+            (isSigned: bool)
+            : bool =
+            let bitLen = int length
+            let unsignedRawMax = Math.Pow(2.0, float bitLen) - 1.0
+            let signedHalf = Math.Pow(2.0, float (bitLen - 1))
+            let signedRawMin = -signedHalf
+            let signedRawMax = signedHalf - 1.0
+
+            let rawMin, rawMax =
+                if isSigned then
+                    (signedRawMin, signedRawMax)
+                else
+                    (0.0, unsignedRawMax)
+
+            let physMin = offset + factor * rawMin
+            let physMax = offset + factor * rawMax
+            let eps = 1e-9
+            let physOutOfDeclaredRange = physMin < minV - eps || physMax > maxV + eps
+
+            let matchesUnsignedRawCountRange =
+                abs minV <= eps && abs (maxV - unsignedRawMax) <= eps
+
+            let matchesSignedRawCountRange =
+                isSigned && abs (minV - signedRawMin) <= eps && abs (maxV - signedRawMax) <= eps
+
+            let matchesSignedUnsignedPhysicalRange =
+                isSigned
+                && abs (minV - offset) <= eps
+                && abs (maxV - (offset + factor * unsignedRawMax)) <= eps
+
+            physOutOfDeclaredRange
+            && (matchesUnsignedRawCountRange
+                || matchesSignedRawCountRange
+                || matchesSignedUnsignedPhysicalRange)
 
     module Message =
         open Utils
@@ -289,14 +331,19 @@ module Codegen =
                 if doRangeCheck then
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
-                        Some(
-                            sprintf
-                                "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
-                                s.Name
-                                minV
-                                s.Name
-                                maxV
-                        )
+                        if minV >= maxV then
+                            None
+                        elif Utils.isRawRangeSentinel minV maxV s.Factor s.Offset s.Length s.IsSigned then
+                            None
+                        else
+                            Some(
+                                sprintf
+                                    "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
+                                    s.Name
+                                    minV
+                                    s.Name
+                                    maxV
+                            )
                     | Some minV, None -> Some(sprintf "    if (msg->%s < %.17g) { return false; }" s.Name minV)
                     | None, Some maxV -> Some(sprintf "    if (msg->%s > %.17g) { return false; }" s.Name maxV)
                     | _ -> None
@@ -323,14 +370,19 @@ module Codegen =
                 if doRangeCheck then
                     match s.Minimum, s.Maximum with
                     | Some minV, Some maxV ->
-                        Some(
-                            sprintf
-                                "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
-                                s.Name
-                                minV
-                                s.Name
-                                maxV
-                        )
+                        if minV >= maxV then
+                            None
+                        elif Utils.isRawRangeSentinel minV maxV s.Factor s.Offset s.Length s.IsSigned then
+                            None
+                        else
+                            Some(
+                                sprintf
+                                    "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
+                                    s.Name
+                                    minV
+                                    s.Name
+                                    maxV
+                            )
                     | Some minV, None -> Some(sprintf "    if (msg->%s < %.17g) { return false; }" s.Name minV)
                     | None, Some maxV -> Some(sprintf "    if (msg->%s > %.17g) { return false; }" s.Name maxV)
                     | _ -> None
@@ -490,14 +542,19 @@ module Codegen =
                         if config.RangeCheck then
                             match sw.Minimum, sw.Maximum with
                             | Some minV, Some maxV ->
-                                Some(
-                                    sprintf
-                                        "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
-                                        sw.Name
-                                        minV
-                                        sw.Name
-                                        maxV
-                                )
+                                if minV >= maxV then
+                                    None
+                                elif Utils.isRawRangeSentinel minV maxV sw.Factor sw.Offset sw.Length sw.IsSigned then
+                                    None
+                                else
+                                    Some(
+                                        sprintf
+                                            "    if (msg->%s < %.17g || msg->%s > %.17g) { return false; }"
+                                            sw.Name
+                                            minV
+                                            sw.Name
+                                            maxV
+                                    )
                             | Some minV, None -> Some(sprintf "    if (msg->%s < %.17g) { return false; }" sw.Name minV)
                             | None, Some maxV -> Some(sprintf "    if (msg->%s > %.17g) { return false; }" sw.Name maxV)
                             | _ -> None

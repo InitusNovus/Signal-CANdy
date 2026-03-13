@@ -2,7 +2,9 @@ namespace Signal.CANdy.Core.Tests
 
 open Xunit
 open FsUnit.Xunit
+open System
 open System.IO
+open DbcParserLib
 open Signal.CANdy.Core.Dbc
 open Signal.CANdy.Core.Errors
 open Signal.CANdy.Core.Ir
@@ -202,6 +204,63 @@ BO_ 300 MUX_MSG: 8 Vector__XXX
             | Error e -> failwithf "Expected success, got: %A" e
         finally
             File.Delete(path)
+
+    [<Fact>]
+    let ``BE signal gets ByteOrder.Big even when not in metaMap`` () =
+        let dbc =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 501 MSG_COMP_BE: 8 Vector__XXX
+SG_ BE_16: 7|16@0+ (1,0) [0|65535] "" Vector__XXX
+"""
+
+        let path = createTempDbcFile dbc
+
+        try
+            match parseDbcFile path with
+            | Ok ir ->
+                let beMsg = ir.Messages |> List.exactlyOne
+                let beSignal = beMsg.Signals |> List.exactlyOne
+                beSignal.ByteOrder |> should equal ByteOrder.Big
+            | Error e -> failwithf "Expected success, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``DbcParserLib ByteOrder and IsSigned mapping from comprehensive_test`` () =
+        let comprehensiveDbcPath =
+            Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "examples", "comprehensive_test.dbc"))
+
+        let parsed = Parser.ParseFromPath(comprehensiveDbcPath)
+
+        let beMsg = parsed.Messages |> Seq.find (fun m -> m.Name = "MSG_COMP_BE")
+        let leMsg = parsed.Messages |> Seq.find (fun m -> m.Name = "MSG_COMP_LE")
+        let signedMsg = parsed.Messages |> Seq.find (fun m -> m.Name = "MSG_COMP_SIGNED")
+
+        let beSignal = beMsg.Signals |> Seq.find (fun s -> s.Name = "BE_16")
+        let leSignal = leMsg.Signals |> Seq.find (fun s -> s.Name = "LE_16")
+        let signedSignal = signedMsg.Signals |> Seq.find (fun s -> s.Name = "S_LE_16")
+        let unsignedSignal = leMsg.Signals |> Seq.find (fun s -> s.Name = "LE_12_CROSS")
+
+        // DbcParserLib.Signal.ByteOrder: type=byte (numeric), 0=BigEndian, 1=LittleEndian
+        let beByteOrderRaw = Convert.ToInt32(beSignal.ByteOrder)
+        let leByteOrderRaw = Convert.ToInt32(leSignal.ByteOrder)
+        beSignal.ByteOrder.GetType() |> should equal typeof<byte>
+        beByteOrderRaw |> should equal 0
+        leByteOrderRaw |> should equal 1
+
+        let signedIsSignedProperty = signedSignal.GetType().GetProperty("IsSigned")
+        let unsignedIsSignedProperty = unsignedSignal.GetType().GetProperty("IsSigned")
+        signedIsSignedProperty |> should equal null
+        unsignedIsSignedProperty |> should equal null
+
+        // Signedness is not exposed as Signal.IsSigned in DbcParserLib v1.7.0.
+        // For these known signals, signedness is inferable from min range in the parsed model.
+        signedSignal.Minimum < 0.0 |> should equal true
+        unsignedSignal.Minimum < 0.0 |> should equal false
 
     [<Fact>]
     let ``parseDbcFile correctly parses value tables`` () =
