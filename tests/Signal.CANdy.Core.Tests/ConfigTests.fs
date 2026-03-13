@@ -161,6 +161,229 @@ file_prefix: fw_
         finally
             File.Delete(path)
 
+    // -------------------------------------------------------
+    // CRC / Counter parsing & validation tests (T13)
+    // -------------------------------------------------------
+
+    [<Fact>]
+    let ``CRC config with mode=validate parses correctly`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: validate
+  messages:
+    EngineStatus:
+      crc:
+        signal: EngineCRC
+        algorithm: CRC8_SAE_J1850
+        byte_range: [0, 6]
+      counter:
+        signal: EngineCounter
+        modulus: 16
+        increment: 1
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Ok cfg ->
+                cfg.CrcCounter.IsSome |> should be True
+                let cc = cfg.CrcCounter.Value
+                cc.Mode |> should equal "validate"
+                cc.Messages |> Map.containsKey "EngineStatus" |> should be True
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``CRC config with mode=passthrough parses correctly`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: passthrough
+  messages:
+    EngineStatus:
+      counter:
+        signal: EngineCounter
+        modulus: 16
+        increment: 1
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Ok cfg ->
+                cfg.CrcCounter.IsSome |> should be True
+                cfg.CrcCounter.Value.Mode |> should equal "passthrough"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``CRC config with mode=fail_fast parses correctly`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: fail_fast
+  messages:
+    EngineStatus:
+      crc:
+        signal: EngineCRC
+        algorithm: CRC8_8H2F
+        byte_range: [0, 3]
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Ok cfg ->
+                cfg.CrcCounter.IsSome |> should be True
+                cfg.CrcCounter.Value.Mode |> should equal "fail_fast"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``Config without crc_counter block gives CrcCounter=None`` () =
+        let yaml = "{}"
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Ok cfg -> cfg.CrcCounter |> should equal None
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``CRC config with J1850 algorithm parses algorithm name`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: validate
+  messages:
+    EngineStatus:
+      crc:
+        signal: EngineCRC
+        algorithm: CRC8_SAE_J1850
+        byte_range: [0, 6]
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Ok cfg ->
+                let crcOpt = cfg.CrcCounter.Value.Messages.["EngineStatus"].Crc
+                crcOpt.IsSome |> should be True
+                crcOpt.Value.Algorithm |> should equal "CRC8_SAE_J1850"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``validate accepts fail_fast mode with configured messages`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: fail_fast
+  messages:
+    EngineStatus:
+      crc:
+        signal: EngineCRC
+        algorithm: CRC8_8H2F
+        byte_range: [0, 3]
+      counter:
+        signal: EngineCounter
+        modulus: 16
+        increment: 1
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Ok _ -> ()
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``validation rejects non-8-bit CRC algorithm (e.g. CRC16_CCITT)`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: validate
+  messages:
+    MsgA:
+      crc:
+        signal: CRCsig
+        algorithm: CRC16_CCITT
+        byte_range: [0, 2]
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Error(ConfigConflict msg) -> msg |> should haveSubstring "must be 8"
+            | Error e -> failwithf "Expected ConfigConflict, got: %A" e
+            | Ok _ -> failwith "Expected validation error for non-8-bit CRC algorithm"
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``validation rejects invalid modulus < 2`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: validate
+  messages:
+    MsgB:
+      counter:
+        signal: Cnt
+        modulus: 1
+        increment: 1
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Error(InvalidModulus(msgName, m)) ->
+                msgName |> should equal "MsgB"
+                m |> should equal 1
+            | Error e -> failwithf "Expected InvalidModulus, got: %A" e
+            | Ok _ -> failwith "Expected validation error for invalid modulus"
+        finally
+            File.Delete(path)
+
+    [<Fact>]
+    let ``validation rejects empty CRC signal name`` () =
+        let yaml =
+            """
+crc_counter_check: true
+crc_counter:
+  mode: validate
+  messages:
+    MsgC:
+      crc:
+        signal: ""
+        algorithm: CRC8_8H2F
+        byte_range: [0, 1]
+"""
+
+        let path = createTempFile yaml ".yaml"
+        try
+            match loadFromYaml path with
+            | Error(InvalidValue msg) -> msg |> should haveSubstring "must not be empty"
+            | Error e -> failwithf "Expected InvalidValue, got: %A" e
+            | Ok _ -> failwith "Expected validation error for empty CRC signal name"
+        finally
+            File.Delete(path)
+
     [<Fact>]
     let ``loadFromYaml loads valid YAML with PascalCase keys`` () =
         let yaml =
