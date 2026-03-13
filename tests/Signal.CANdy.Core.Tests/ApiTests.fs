@@ -179,3 +179,111 @@ file_prefix: sc_
 
             if Directory.Exists(outDir) then
                 Directory.Delete(outDir, true)
+
+    [<Fact>]
+    let ``generateFromPaths succeeds for DBC with CRC signal and validate mode config`` () =
+        let dbcContent =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 200 TEST_MSG: 8 Vector__XXX
+ SG_ PAYLOAD : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ CHECKSUM : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+        let configContent =
+            """
+phys_type: float
+range_check: false
+dispatch: binary_search
+crc_counter_check: true
+motorola_start_bit: msb
+file_prefix: sc_
+crc_counter:
+  mode: validate
+  messages:
+    TEST_MSG:
+      crc:
+        signal: CHECKSUM
+        algorithm: CRC8_SAE_J1850
+        byte_range:
+          start: 0
+          end: 0
+"""
+
+        let dbcPath = createTempFile dbcContent ".dbc"
+        let configPath = createTempFile configContent ".yaml"
+        let outDir = Path.Combine(Path.GetTempPath(), System.Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+
+        try
+            let t = Signal.CANdy.Core.Api.generateFromPaths dbcPath outDir (Some configPath)
+            let result = t.GetAwaiter().GetResult()
+
+            match result with
+            | Ok files ->
+                files.Sources.Length |> should be (greaterThan 0)
+                files.Headers.Length |> should be (greaterThan 0)
+            | Error e -> failwithf "Expected Ok for CRC validate mode E2E, got: %A" e
+        finally
+            File.Delete(dbcPath)
+            File.Delete(configPath)
+
+            if Directory.Exists(outDir) then
+                Directory.Delete(outDir, true)
+
+    [<Fact>]
+    let ``generateFromPaths returns Validation UnknownAlgorithm for CRC validate mode with unknown algorithm`` () =
+        let dbcContent =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 200 TEST_MSG: 8 Vector__XXX
+ SG_ PAYLOAD : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ CHECKSUM : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+        let configContent =
+            """
+phys_type: float
+range_check: false
+dispatch: binary_search
+crc_counter_check: true
+motorola_start_bit: msb
+file_prefix: sc_
+crc_counter:
+  mode: validate
+  messages:
+    TEST_MSG:
+      crc:
+        signal: CHECKSUM
+        algorithm: CRC8_NOT_REAL
+        byte_range:
+          start: 0
+          end: 0
+"""
+
+        let dbcPath = createTempFile dbcContent ".dbc"
+        let configPath = createTempFile configContent ".yaml"
+        let outDir = Path.Combine(Path.GetTempPath(), System.Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+
+        try
+            let t = Signal.CANdy.Core.Api.generateFromPaths dbcPath outDir (Some configPath)
+            let result = t.GetAwaiter().GetResult()
+
+            match result with
+            | Error(GenerateError.Validation(ValidationError.UnknownAlgorithm name)) ->
+                name |> should equal "CRC8_NOT_REAL"
+            | Error e -> failwithf "Expected GenerateError.Validation(UnknownAlgorithm), got: %A" e
+            | Ok _ -> failwith "Expected validation error, got Ok"
+        finally
+            File.Delete(dbcPath)
+            File.Delete(configPath)
+
+            if Directory.Exists(outDir) then
+                Directory.Delete(outDir, true)

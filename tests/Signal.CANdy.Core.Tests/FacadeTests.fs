@@ -233,3 +233,111 @@ file_prefix: sc_
 
             if Directory.Exists(outDir) then
                 Directory.Delete(outDir, true)
+
+    [<Fact>]
+    let ``GenerateFromPathsAsync throws SignalCandyValidationException for unknown CRC algorithm`` () =
+        let facade = GeneratorFacade()
+
+        let dbcContent =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 200 TEST_MSG: 8 Vector__XXX
+ SG_ PAYLOAD : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ CHECKSUM : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+        let configContent =
+            """
+phys_type: float
+range_check: false
+dispatch: binary_search
+crc_counter_check: true
+motorola_start_bit: msb
+file_prefix: sc_
+crc_counter:
+  mode: validate
+  messages:
+    TEST_MSG:
+      crc:
+        signal: CHECKSUM
+        algorithm: CRC8_NOT_REAL
+        byte_range:
+          start: 0
+          end: 0
+"""
+
+        let dbcPath = createTempFile dbcContent ".dbc"
+        let configPath = createTempFile configContent ".yaml"
+        let outDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+
+        try
+            let ex =
+                Assert.ThrowsAsync<SignalCandyValidationException>(fun () ->
+                    facade.GenerateFromPathsAsync(dbcPath, outDir, configPath) :> System.Threading.Tasks.Task)
+
+            let result = ex.GetAwaiter().GetResult()
+            result.Message |> should haveSubstring "UnknownAlgorithm"
+        finally
+            File.Delete(dbcPath)
+            File.Delete(configPath)
+
+            if Directory.Exists(outDir) then
+                Directory.Delete(outDir, true)
+
+    [<Fact>]
+    let ``GenerateFromPathsAsync throws SignalCandyValidationException for non-8-bit CRC algorithm`` () =
+        let facade = GeneratorFacade()
+
+        let dbcContent =
+            """
+VERSION ""
+NS_ :
+BS_:
+
+BO_ 200 TEST_MSG: 8 Vector__XXX
+ SG_ PAYLOAD : 0|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ CHECKSUM : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+"""
+
+        let configContent =
+            """
+phys_type: float
+range_check: false
+dispatch: binary_search
+crc_counter_check: true
+motorola_start_bit: msb
+file_prefix: sc_
+crc_counter:
+  mode: validate
+  messages:
+    TEST_MSG:
+      crc:
+        signal: CHECKSUM
+        algorithm: CRC16_CCITT
+        byte_range:
+          start: 0
+          end: 0
+"""
+
+        let dbcPath = createTempFile dbcContent ".dbc"
+        let configPath = createTempFile configContent ".yaml"
+        let outDir = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString())
+        Directory.CreateDirectory(outDir) |> ignore
+
+        try
+            let ex =
+                Assert.ThrowsAsync<SignalCandyValidationException>(fun () ->
+                    facade.GenerateFromPathsAsync(dbcPath, outDir, configPath) :> System.Threading.Tasks.Task)
+
+            let result = ex.GetAwaiter().GetResult()
+            result.Message |> should haveSubstring "ConfigConflict"
+        finally
+            File.Delete(dbcPath)
+            File.Delete(configPath)
+
+            if Directory.Exists(outDir) then
+                Directory.Delete(outDir, true)

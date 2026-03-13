@@ -16,3 +16,5 @@
 - No further changes required for this issue.
 
 20260313_2230_Dbc_T12_blankline_fix: Removed blank lines after triple-quoted DBC literals in T12 tests (IsCrc/IsCounter/Non-CRC/CRC_OFF). Build+tests: OK.
+
+20260313_2348_T14_codegen_crc_counter_tests: Added CodegenTests coverage for CRC/counter modes (validate/passthrough/fail_fast), CRC mismatch/encode paths, counter rollover helper emission, and utils CRC helper parity/no-parity checks.
