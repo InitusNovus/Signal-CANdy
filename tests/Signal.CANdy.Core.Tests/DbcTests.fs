@@ -333,7 +333,6 @@ BS_:
 BO_ 100 MSG: 8 Vector__XXX
  SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
 """ signalName
-
         let path = createTempDbcFile dbc
 
         try
@@ -361,7 +360,6 @@ BS_:
 BO_ 200 MSG2: 8 Vector__XXX
  SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
 """ signalName
-
         let path = createTempDbcFile dbc
 
         try
@@ -388,7 +386,6 @@ BS_:
 BO_ 300 MSG3: 8 Vector__XXX
  SG_ %s : 0|8@1+ (1,0) [0|255] "" Vector__XXX
 """ signalName
-
         let path = createTempDbcFile dbc
 
         try
@@ -411,10 +408,9 @@ VERSION ""
 NS_ :
 BS_:
 
-BO_ 400 MSG4: 8 Vector__XXX
+ BO_ 400 MSG4: 8 Vector__XXX
  SG_ CRC_OFF : 0|8@1+ (1,0) [0|255] "" Vector__XXX
 """
-
         let path = createTempDbcFile dbc
 
         try
