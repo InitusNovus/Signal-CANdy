@@ -489,11 +489,20 @@ module Codegen =
                 | Some _, _ :: _ -> true
                 | _ -> false
 
+            let useValidArray = isMux && message.Signals.Length > 64
             let validType, shiftSuffix, initLiteral =
-                if isMux && message.Signals.Length > 32 then
+                if useValidArray then
+                    "uint8_t", "", ""
+                elif isMux && message.Signals.Length > 32 then
                     "uint64_t", "1ULL", "0ULL"
                 else
                     "uint32_t", "1u", "0u"
+
+            let validArraySize =
+                if useValidArray then
+                    (message.Signals.Length + 7) / 8
+                else
+                    0
 
             let validMacro (sigName: string) =
                 sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (sigName.ToUpperInvariant())
