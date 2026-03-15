@@ -514,7 +514,10 @@ module Codegen =
                 let body = signalDecodeFor s in
 
                 if isMux then
-                    body + (sprintf "\n    msg->valid |= %s;" (validMacro s.Name))
+                    if useValidArray then
+                        body + (sprintf "\n    sc_valid_set(msg->valid, %s);" (validMacro s.Name))
+                    else
+                        body + (sprintf "\n    msg->valid |= %s;" (validMacro s.Name))
                 else
                     body
 
@@ -541,13 +544,16 @@ module Codegen =
                             |> String.concat "\n")
                         |> String.concat "\n"
 
-                    [ if isMux then
-                          sprintf "    msg->valid = %s;" initLiteral
-                      else
-                          ""
-                      swBlock
-                      baseBlock
-                      branchesBlock ]
+                    let initBlock =
+                        if isMux then
+                            if useValidArray then
+                                "    memset(msg->valid, 0, sizeof(msg->valid));"
+                            else
+                                sprintf "    msg->valid = %s;" initLiteral
+                        else
+                            ""
+
+                    [ initBlock; swBlock; baseBlock; branchesBlock ]
                     |> List.filter (fun s -> not (String.IsNullOrWhiteSpace s))
                     |> String.concat "\n\n"
                 | _ -> message.Signals |> List.map signalDecodeFor |> String.concat "\n\n"
@@ -727,20 +733,35 @@ module Codegen =
 
                     message.Signals
                     |> List.iteri (fun idx s ->
-                        preambleLines.Add(
-                            sprintf
-                                "#define %s (%s << %d)"
-                                (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
-                                shiftSuffix
-                                idx
-                        ))
+                        if useValidArray then
+                            preambleLines.Add(
+                                sprintf
+                                    "#define %s %d"
+                                    (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
+                                    idx
+                            )
+                        else
+                            preambleLines.Add(
+                                sprintf
+                                    "#define %s (%s << %d)"
+                                    (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
+                                    shiftSuffix
+                                    idx
+                            ))
+
+                    if useValidArray then
+                        preambleLines.Add(sprintf "#define %s_VALID_BYTES %d" (message.Name.ToUpperInvariant()) validArraySize)
 
                     preambleLines.Add ""
 
-                    structFieldLines.Add(sprintf "    %s valid;" validType)
+                    if useValidArray then
+                        structFieldLines.Add(sprintf "    uint8_t valid[%d];" validArraySize)
+                    elif isMux && message.Signals.Length > 32 then
+                        structFieldLines.Add("    uint64_t valid; /* valid field widened to 64-bit */")
+                    else
+                        structFieldLines.Add("    uint32_t valid;")
 
                     if validType = "uint64_t" then
-                        structFieldLines.Add("    /* valid field widened to uint64_t: signal count > 32 */")
                         structFieldLines.Add("    /* decode init literal: = 0ULL; */")
 
                     structFieldLines.Add(sprintf "    %s_mux_e mux_active;" message.Name)
