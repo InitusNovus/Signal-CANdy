@@ -1080,14 +1080,14 @@ module Codegen =
                         msg.Signals
                         |> List.exists (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsSome)
 
-                    hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 64)
+                    hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 1024)
 
             match overflowGuard with
             | Some msg ->
                 Error(
                     CodeGenError.UnsupportedFeature(
                         sprintf
-                            "Message '%s' has %d signals (>64); valid bitmask cannot be represented in 64 bits."
+                            "Message '%s' has %d signals (>1024); valid bitmask cannot support more than 1024 signals."
                             msg.Name
                             msg.Signals.Length
                     )
