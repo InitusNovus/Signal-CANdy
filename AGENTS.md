@@ -181,6 +181,7 @@ let ``Validation fails for duplicate message IDs`` () =
 |---------|---------|---------|
 | DbcParserLib | 1.7.0 | Core — DBC file parsing |
 | YamlDotNet | 16.3.0 | Core — YAML config loading |
+| Scriban | 6.2.1 | Core — C code generation templates |
 | FsUnit.xUnit | 7.1.1 | Tests — assertion matchers |
 | xunit | 2.5.3 | Tests — test framework |
 | Microsoft.NET.Test.Sdk | 17.8.0 | Tests — test SDK |

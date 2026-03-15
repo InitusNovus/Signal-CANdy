@@ -151,7 +151,7 @@ Optional file to control code generation behavior:
   - lsb: treat DBC start bit as LSB-based, generator converts to MSB sawtooth internally
 - crc_counter_check: true | false
   - Explicit opt-in guardrail. If enabled and the parser infers CRC/counter-like signals from DBC names (`crc`, `checksum`, `counter`, `alive`), code generation now fails fast with `UnsupportedFeature` instead of silently generating non-validating code.
-  - Full generated CRC/counter validation is still deferred until explicit algorithm/metadata support is added.
+  - Explicit YAML metadata support is now available via `crc_counter:` for generated CRC/counter handling (`validate`, `passthrough`, `fail_fast`). Current MVP scope is CRC-8 only.
 
 Examples:
 
@@ -676,8 +676,9 @@ Details can be reproduced via the stress suite and bulk runner in `scripts/bulk_
 
 ## ⚠️ Limitations
 
-- Full automatic CRC/Counter validation is not yet implemented.
-- When `crc_counter_check: true` is enabled today, code generation fails fast for inferred CRC/counter-like signals instead of silently accepting an unsupported path.
+- Automatic name-heuristic CRC/Counter validation is not implemented.
+- Generated CRC/Counter handling requires explicit `crc_counter:` YAML metadata; current supported algorithms are CRC-8 only.
+- When `crc_counter_check: true` is enabled without explicit metadata, code generation fails fast for inferred CRC/counter-like signals instead of silently accepting an unsupported path.
 - Supports both classic CAN (up to 8-byte) and CAN FD (up to 64-byte) payloads
 - Messages with >32 multiplexed signals automatically use a 64-bit `valid` bitmask (`uint64_t`). Messages with >64 multiplexed signals are not supported (code generation reports `CodeGenError.UnsupportedFeature`).
 
@@ -699,7 +700,8 @@ Comparison to nanopb
 - Differences: This registry is a hand-rolled CAN-ID router for C structs, not tied to protobuf descriptors or nanopb’s field/tag system.
 
 CRC/Counter note
-- The configuration flag exists, but automatic CRC/Counter validation is deferred. Handle at a higher layer or await a future generator option that maps CRC/counter signals from YAML.
+- `crc_counter_check` remains the opt-in fail-fast guard for inferred CRC/counter-like signals.
+- For generated CRC/counter handling, use explicit `crc_counter:` YAML metadata. Supported modes are `validate`, `passthrough`, and `fail_fast`; current algorithm support is CRC-8 (`CRC8_SAE_J1850`, `CRC8_8H2F`, or custom width-8 definitions).
 
 ## Endianness and bit utilities
 

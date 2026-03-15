@@ -146,7 +146,7 @@ make -C gen build
   - lsb: LSB 기반 표기를 내부적으로 MSB 톱니형으로 변환
 - crc_counter_check: true | false
   - 명시적 opt-in 가드레일입니다. 활성화 시 DBC 시그널 이름에서 CRC/카운터 계열(`crc`, `checksum`, `counter`, `alive`)이 추론되면, 실제 검증 없는 코드를 조용히 생성하지 않고 `UnsupportedFeature`로 즉시 실패합니다.
-  - 전체 CRC/카운터 생성 검증 로직은 여전히 명시적 알고리즘/메타데이터 지원이 추가될 때까지 보류 상태입니다.
+  - 명시적 `crc_counter:` YAML 메타데이터 기반 생성 검증은 현재 지원됩니다(`validate`, `passthrough`, `fail_fast`). 현재 MVP 범위는 CRC-8만 지원합니다.
 
 예시
 
@@ -638,8 +638,8 @@ switch (can_id) {
   - ID 기반 직접 매핑(컴팩트 switch 또는 테이블). O(1) 룩업. ID가 희소하면 메모리 비용 증가 가능.
 
 CRC/Counter 참고
-- 설정 플래그는 존재하며, 현재는 inferred CRC/카운터 시그널이 있을 때 지원되지 않는 경로를 fail-fast로 차단합니다.
-- 실제 생성 검증을 위해서는 상위 레이어 처리 또는 추후 추가될 YAML 기반 CRC/카운터 메타데이터가 필요합니다.
+- `crc_counter_check`는 inferred CRC/카운터 시그널에 대한 opt-in fail-fast 가드레일로 유지됩니다.
+- 실제 생성 검증은 명시적 `crc_counter:` YAML 메타데이터로 지원됩니다. 지원 모드는 `validate`, `passthrough`, `fail_fast`이며, 현재 알고리즘 범위는 CRC-8(`CRC8_SAE_J1850`, `CRC8_8H2F`, 또는 width=8 custom 정의)입니다.
 
 ## 엔디안 및 비트 유틸리티
 
