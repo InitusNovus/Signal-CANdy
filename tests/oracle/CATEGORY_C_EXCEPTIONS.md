@@ -9,7 +9,7 @@ To be classified as Category C, an exception must satisfy all four of the follow
 1.  **Clear Technical Limitation**: The divergence is rooted in a specific architectural choice, environment constraint, or reference tool behavior.
 2.  **Scoped Impact Count**: The number of affected signals or tests must be quantified.
 3.  **No Feasible Alternative**: There's no trivial fix without breaking existing functionality or requiring a major refactor.
-4.  **ROADMAP Entry**: The limitation must be tracked in `ROADMAP.md` for future resolution.
+4.  **Backlog Entry**: The limitation must be tracked in the current canonical planning document (`ROADMAP.md` when active, or `NEXT_ROADMAP.md` / successor roadmap after close-out) for future resolution.
 
 ---
 
@@ -65,7 +65,7 @@ Specific vendor DBCs contain syntax anomalies or 29-bit extended IDs that `canto
 | Technical Limitation | PASS | Reference decoder (`cantools`) cannot parse valid/used DBCs. |
 | Scoped Impact | PASS | 3 DBC files entirely excluded from oracle comparison. |
 | No Feasible Alternative | PASS | Requires a different reference decoder or `cantools` patch. |
-| ROADMAP Entry | PASS | Tracked under "cantools 29-bit extended-ID compatibility". |
+| Backlog Entry | PASS | After ROADMAP close-out, this remains tracked in `NEXT_ROADMAP.md` as the oracle reference-decoder incompatibility follow-up. |
 
 **Category**: `reference_decoder_incompatible`
 
@@ -84,7 +84,7 @@ Confirmed evidence: With `range_check: false`, Chrysler 2898/2898 pass (100%), M
 | Technical Limitation | PASS | DBC `[min\|max]` is encoded as raw counts, but range check uses physical values from the same field. The generator faithfully transcribes the DBC field; the authoring error is in the DBC. |
 | Scoped Impact | PASS | 1,005 failures in Chrysler + 96 failures in Mercedes = 1,101 total affected tests. |
 | No Feasible Alternative | **RESOLVED** | `isRawRangeSentinel` heuristic added to `Codegen.fs` (commit `1017b52`). Applied at all 3 range-check generation sites. 1,101 oracle failures eliminated. |
-| ROADMAP Entry | PASS | Tracked under "DBC raw-range detection heuristic" for future evaluation. |
+| Backlog Entry | PASS | Originally tracked under the roadmap heuristic follow-up; now resolved and retained here as historical evidence. |
 
 **Category**: `dbc_raw_range_sentinel`
 
