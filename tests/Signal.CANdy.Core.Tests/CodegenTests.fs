@@ -1638,7 +1638,10 @@ module CodegenTests =
                 headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_0 1"
                 headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_63 64"
                 headerContent |> should haveSubstring "#include \"sc_utils.h\""
-                sourceContent |> should haveSubstring "memset(msg->valid, 0, sizeof(msg->valid))"
+
+                sourceContent
+                |> should haveSubstring "memset(msg->valid, 0, sizeof(msg->valid))"
+
                 sourceContent |> should haveSubstring "sc_valid_set(msg->valid,"
                 sourceContent |> should not' (haveSubstring "msg->valid |=")
                 sourceContent |> should not' (haveSubstring "msg->valid = 0")
@@ -1660,7 +1663,9 @@ module CodegenTests =
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux128_msg.h")
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux128_msg.h")
+
                 let content = File.ReadAllText(msgH)
                 content |> should haveSubstring "uint8_t valid[16];"
                 content |> should haveSubstring "#define MUX128_MSG_VALID_BYTES 16"
@@ -1764,7 +1769,9 @@ module CodegenTests =
         try
             match generate ir outDir defaultConfig with
             | Ok files ->
-                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux1024_msg.h")
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux1024_msg.h")
+
                 let content = File.ReadAllText(msgH)
                 content |> should haveSubstring "uint8_t valid[128];"
                 content |> should haveSubstring "#define MUX1024_MSG_VALID_BYTES 128"

@@ -503,6 +503,7 @@ module Codegen =
                 | _ -> false
 
             let useValidArray = isMux && message.Signals.Length > 64
+
             let validType, shiftSuffix, initLiteral =
                 if useValidArray then
                     "uint8_t", "", ""
@@ -750,20 +751,28 @@ module Codegen =
                             preambleLines.Add(
                                 sprintf
                                     "#define %s %d"
-                                    (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
+                                    (sprintf
+                                        "%s_VALID_%s"
+                                        (message.Name.ToUpperInvariant())
+                                        (s.Name.ToUpperInvariant()))
                                     idx
                             )
                         else
                             preambleLines.Add(
                                 sprintf
                                     "#define %s (%s << %d)"
-                                    (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
+                                    (sprintf
+                                        "%s_VALID_%s"
+                                        (message.Name.ToUpperInvariant())
+                                        (s.Name.ToUpperInvariant()))
                                     shiftSuffix
                                     idx
                             ))
 
                     if useValidArray then
-                        preambleLines.Add(sprintf "#define %s_VALID_BYTES %d" (message.Name.ToUpperInvariant()) validArraySize)
+                        preambleLines.Add(
+                            sprintf "#define %s_VALID_BYTES %d" (message.Name.ToUpperInvariant()) validArraySize
+                        )
 
                     preambleLines.Add ""
 
