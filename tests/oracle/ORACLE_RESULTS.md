@@ -57,7 +57,7 @@ Additionally: Python oracle overflow guard added (`e0fc6fa`).
 | #5 — DBC raw range sentinel | chrysler_pacifica_2017, mercedes_benz_e350 | 1,101 | `dbc_raw_range_sentinel` |
 | All-Cat-C — Ford Lincoln | ford_lincoln_base_pt | 629 | mixed (see below) |
 | All-Cat-C — Tesla | tesla_can | 45 | `float32_rounding` + adversarial OOR |
-| Mux skip | hyundai_2015_ccan | 33 (skipped) | `cantools_oracle_limitation` |
+| Mux skip | hyundai_2015_ccan | 33 (historical; resolved in B-O2) | `cantools_oracle_limitation` |
 
 **Ford Lincoln 629 failures — all Category C:**
 - 227× `value_diff` → `float32_rounding` (Exception #2)
@@ -133,9 +133,9 @@ Matrix summary: **8/8 configs passed**, 4,704 passed, 0 failed, 0 skipped.
 
 ## Recommendations
 
-1. **DBC raw-range detection heuristic** (ROADMAP): add optional heuristic to detect when `[min|max]` likely stores raw counts (e.g., offset < min, or factor makes physical range impossible). Would resolve 1,101 Category C failures.
+1. **DBC raw-range detection heuristic** (ROADMAP): ~~add optional heuristic to detect when `[min|max]` likely stores raw counts (e.g., offset < min, or factor makes physical range impossible). Would resolve 1,101 Category C failures.~~ **COMPLETED (B-O1)** — `isRawRangeSentinel` added in `Codegen.fs`; see `CATEGORY_C_EXCEPTIONS.md` for resolved status.
 2. **Oracle multiplex mode** (ROADMAP): ~~extend `run_oracle.py` to support multi-branch signal selection; would cover the 83 currently-skipped signals.~~ **COMPLETED (B-O2)** — `_generate_mux_vectors()` in `engine.py` provides per-branch oracle testing.
-3. **Valid bitmask auto-widening** (ROADMAP L-3): auto-widen to `uint64_t` for messages with >32 signals.
+3. **Valid bitmask auto-widening** (ROADMAP L-3): ~~auto-widen to `uint64_t` for messages with >32 signals.~~ **COMPLETED (B-O3)** — ≤32 uses `uint32_t`, 33–64 uses `uint64_t`, >64 returns `UnsupportedFeature`.
 4. **CI corpus gate**: keep examples+matrix as required pass gate; track corpus adjusted pass rate (≥99%) as a trend metric.
 
 ## Reproduction Commands

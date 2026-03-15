@@ -55,7 +55,7 @@
 - [x] **H-2b.** Generator/Program.fs가 Core API를 직접 호출하도록 변경 (Config/Dbc/Codegen/Errors open)
 - [x] **H-2c.** Generator의 중복 모듈 제거: `Config.fs`, `Ir.fs`, `Dbc.fs`, `Codegen.Utils.fs`, `Codegen.Message.fs`, `Codegen.Registry.fs`, `Codegen.fs` — fsproj에서 제거 + 디스크에서 삭제
 - [x] **H-2d.** Generator/Result.fs → `Compat.fs`로 통합 (Result active pattern + Ir/Config/Dbc/Codegen 역호환 브리지)
-- [x] **H-2e.** Generator 기존 테스트(`tests/Generator.Tests/`) 16/16 통과 확인 (Compat.fs 브리지 경유)
+- [x] **H-2e.** Generator 기존 테스트(`tests/Generator.Tests/`) 통과 확인 (완료 당시 16/16, Compat.fs 브리지 경유)
 - [x] **H-2f.** E2E 검증: Generator CLI + Signal.CANdy.CLI 양쪽 모두 코드 생성 + gcc 빌드 + roundtrip 테스트 통과
 
 ### H-3. Facade 에러 매핑 정밀화
@@ -78,14 +78,14 @@
 - [x] **M-1b.** `Generator.fsproj`에서 `Argu 6.1.1` 패키지 참조 제거 (H-2c에서 완료)
 - [x] **M-1c.** `Generator.fsproj`에서 `FSharp.SystemTextJson 1.4.36` 패키지 참조 제거 (H-2c에서 완료)
 - [x] **M-1d.** `Generator.fsproj`에서 `FsToolkit.ErrorHandling 5.0.1` 패키지 참조 제거 (H-2c에서 완료)
-- [x] **M-1e.** `dotnet restore && dotnet build && dotnet test` 통과 확인 (63/63 pass)
+- [x] **M-1e.** `dotnet restore && dotnet build && dotnet test` 통과 확인 (완료 당시 63/63 pass)
 
 ### M-2. Dead Code 삭제
 
 - [x] **M-2a.** `Ir.fs` — `SignalType` DU 제거 (Signed | Unsigned | Float — 어디에서도 사용되지 않음)
 - [x] **M-2b.** `Core/Library.fs` — 플레이스홀더 파일 내용 점검 (실제 112줄 Facade — 유지)
 - [x] **M-2c.** `templates/` 디렉토리 점검 — L-1 Scriban 도입 시 사용 예정, 유지
-- [x] **M-2d.** 빌드 및 테스트 통과 확인 (63/63 pass)
+- [x] **M-2d.** 빌드 및 테스트 통과 확인 (완료 당시 63/63 pass)
 
 ### M-3. 코드 생성 문자열 가독성 개선
 
@@ -115,12 +115,12 @@
 ### L-2. CRC/Counter 자동 검증 구현
 
 - [x] **L-2a.** `Config.CrcCounterCheck` 플래그 활성화 설계
-- [x] **L-2b.** CRC/Counter 시그널에 대한 코드 생성 로직 구현
-- [x] **L-2c.** 검증 테스트 추가
+- [x] **L-2b.** CRC/Counter 시그널에 대한 코드 생성 로직 구현 (명시적 YAML 메타데이터 기반, validate/passthrough/fail_fast, CRC-8 only)
+- [x] **L-2c.** 검증 테스트 추가 (CRC-8 validate 경로, passthrough/fail_fast, facade/API 에러 매핑 포함)
 
 ### L-3. valid 비트마스크 자동 확장
 
-- [x] **L-3a.** 시그널 수 > 32인 메시지에서 `uint64_t` 또는 배열 기반 valid 필드 자동 선택
+- [x] **L-3a.** 시그널 수 > 32인 메시지에서 valid 필드 자동 확장 (`33–64 → uint64_t`, `>64 → UnsupportedFeature`; 배열 기반 fallback은 backlog)
 - [x] **L-3b.** 매크로 생성 로직 업데이트
 - [x] **L-3c.** 대규모 메시지 테스트 DBC 추가
 
@@ -138,9 +138,9 @@
 > 기존 C/H/M/L 항목과 별개로, 오라클 검증 파이프라인 플랜(Task 0~9)의 현재 도달 지점을 기록합니다.
 
 > **Source-of-Truth 우선순위**:
-> 1. `Reports/20260312-1530_Oracle_실패해결_완료.md`
-> 2. `tests/oracle/ORACLE_RESULTS.md`
-> 3. `tests/oracle/CATEGORY_C_EXCEPTIONS.md`
+> 1. 최신 `Reports/` 검증/정리 문서
+> 2. `tests/oracle/CATEGORY_C_EXCEPTIONS.md` (resolved status 포함)
+> 3. `tests/oracle/ORACLE_RESULTS.md` (통합 실행 스냅샷; 일부 recommendation 문구는 시점상 stale 가능)
 > 4. `.sisyphus/*` (보조 작업 상태; canonical source 아님)
 
 - [x] **O-1. Task 0** 만료 플랜 아카이브 + boulder 갱신 (`.sisyphus/plans/archived/*`, `.sisyphus/boulder.json`, `Reports/20260312-1530_Oracle_실패해결_완료.md`)
