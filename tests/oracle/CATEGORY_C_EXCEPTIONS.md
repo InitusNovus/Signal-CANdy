@@ -9,7 +9,7 @@ To be classified as Category C, an exception must satisfy all four of the follow
 1.  **Clear Technical Limitation**: The divergence is rooted in a specific architectural choice, environment constraint, or reference tool behavior.
 2.  **Scoped Impact Count**: The number of affected signals or tests must be quantified.
 3.  **No Feasible Alternative**: There's no trivial fix without breaking existing functionality or requiring a major refactor.
-4.  **Backlog Entry**: The limitation must be tracked in the current canonical planning document (`ROADMAP.md` when active, or `NEXT_ROADMAP.md` / successor roadmap after close-out) for future resolution.
+4.  **Backlog Entry**: The limitation must be tracked in the current canonical planning document (`Plans/ROADMAP.md` or successor roadmap under `Plans/`) for future resolution.
 
 ---
 
@@ -23,7 +23,7 @@ The current oracle pipeline executes tests using a single-signal configuration. 
 | Technical Limitation | PASS | Oracle `run_oracle.py` lacks multi-branch selection logic. |
 | Scoped Impact | PASS | 83 signals marked `skipped` in `ORACLE_RESULTS.md`. |
 | No Feasible Alternative | **RESOLVED** | Implemented `_generate_mux_vectors()` in `engine.py` (B-O2). |
-| ROADMAP Entry | PASS | Tracked under B-O2 (completed 2026-03-12). |
+| Backlog Entry | PASS | Tracked under B-O2 (completed 2026-03-12). |
 
 **Category**: `cantools_oracle_limitation`
 
@@ -35,7 +35,7 @@ Float32 rounding during the encode→decode cycle can introduce a ±1 LSB diverg
 | Technical Limitation | PASS | Inherent float32 rounding divergence in C vs Python. |
 | Scoped Impact | PASS | 227 value-level mismatches in corpus handled by tolerance. |
 | No Feasible Alternative | PASS | Floating-point behavior is non-deterministic across platforms. |
-| ROADMAP Entry | PASS | N/A (Intentionally covered by `tolerance.py` baseline). |
+| Backlog Entry | PASS | N/A (Intentionally covered by `tolerance.py` baseline). |
 
 **Category**: `float32_rounding`
 
@@ -47,7 +47,7 @@ The generated `valid` bitmask was a fixed `uint32_t`. Auto-widening (B-O3, v0.3.
 | Technical Limitation | PASS | Architectural choice of `uint32_t` for the `valid` field. |
 | Scoped Impact | PASS | Impact limited to complex industrial/heavy-duty DBCs. |
 | No Feasible Alternative | **RESOLVED** | Implemented auto-widening to `uint64_t` in `Codegen.fs` (B-O3, v0.3.2). |
-| ROADMAP Entry | PASS | Tracked under B-O3 (completed 0.3.2). |
+| Backlog Entry | PASS | Tracked under B-O3 (completed 0.3.2). |
 
 **Category**: `valid_mask_width`
 
@@ -65,7 +65,7 @@ Specific vendor DBCs contain syntax anomalies or 29-bit extended IDs that `canto
 | Technical Limitation | PASS | Reference decoder (`cantools`) cannot parse valid/used DBCs. |
 | Scoped Impact | PASS | 3 DBC files entirely excluded from oracle comparison. |
 | No Feasible Alternative | PASS | Requires a different reference decoder or `cantools` patch. |
-| Backlog Entry | PASS | After ROADMAP close-out, this remains tracked in `NEXT_ROADMAP.md` as the oracle reference-decoder incompatibility follow-up. |
+| Backlog Entry | PASS | After roadmap close-out, this remains tracked in active planning document `Plans/ROADMAP.md` as the oracle reference-decoder incompatibility follow-up. |
 
 **Category**: `reference_decoder_incompatible`
 

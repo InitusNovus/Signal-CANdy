@@ -13,6 +13,7 @@ tests/Signal.CANdy.Core.Tests/  xUnit + FsUnit tests for Core library
 tests/Generator.Tests/   xUnit + FsUnit tests (references Generator project)
 templates/               Scriban templates for C code generation
 examples/                Sample DBC files, YAML configs, and C test runner
+Plans/                  Active/archived roadmap documents
 ```
 
 ## Build & Test Commands
@@ -245,11 +246,11 @@ Reports/YYYYMMDD_HHMM_작업내용요약.md
 | 📝 **작업 요약** | 이번 세션에서 수행한 작업의 한 줄 요약 및 상세 설명 |
 | 🛠 **변경 상세** | 수정/생성/삭제한 파일 목록과 각 변경의 구체적 내용 |
 | ✅ **테스트 결과** | `dotnet test` 결과, C 빌드 결과, 수동 검증 내역 등 |
-| ⏭ **다음 계획** | 다음 세션에서 착수할 ROADMAP 항목 및 선행 조건 |
+| ⏭ **다음 계획** | 다음 세션에서 착수할 활성 계획(`Plans/ROADMAP.md`) 항목 및 선행 조건 |
 
 ### 규칙 4: ROADMAP 업데이트
 
-작업 세션에서 ROADMAP 항목을 완료했다면, **해당 세션 내에서 즉시** `ROADMAP.md`의 체크박스를 `[x]`로 갱신한다.
+작업 세션에서 활성 계획 항목을 완료했다면, **해당 세션 내에서 즉시** `Plans/ROADMAP.md`의 체크박스를 `[x]`로 갱신한다.
 보고서에도 완료된 ROADMAP 항목 ID를 명시한다 (예: "C-1a, C-1b 완료").
 
 ### 규칙 5: 보고서 불변성과 정정 방식

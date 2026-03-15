@@ -3,7 +3,7 @@
 **Date**: 2026-03-12 (B-O2 update)  
 **Commit**: `839e777` (oracle-failure-resolution boulder complete)
 
-> ⚠️ **Historical Snapshot**: 이 문서는 2026-03-12 시점의 통합 실행 결과 스냅샷입니다. Recommendation #1~#3 및 mux skip 이슈는 이후 세션에서 해결되었으며, 현재 상태 판정은 `ROADMAP.md` Tracking 섹션과 최신 `Reports/` 문서를 우선합니다.
+> ⚠️ **Historical Snapshot**: 이 문서는 2026-03-12 시점의 통합 실행 결과 스냅샷입니다. Recommendation #1~#3 및 mux skip 이슈는 이후 세션에서 해결되었으며, 현재 상태 판정은 `Plans/Archive/ROADMAP_202602_202603_Closed.md` Tracking 섹션, 활성 계획 `Plans/ROADMAP.md`, 최신 `Reports/` 문서를 우선합니다.
 
 ## Executive Summary
 
