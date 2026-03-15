@@ -602,7 +602,8 @@ void compare_state(int v) {
 
 ## ⚠️ 제한사항
 
-- CRC/Counter 자동 검증의 전체 구현은 아직 제공되지 않습니다.
+- 자동 이름-기반 CRC/Counter 검증(heuristic validation)은 구현되지 않았습니다.
+- 실제 CRC/Counter 생성 검증은 명시적 `crc_counter:` YAML 메타데이터가 필요하며, 현재 지원 알고리즘은 CRC-8만 해당합니다.
 - 현재 `crc_counter_check: true`는 지원되지 않는 경로를 조용히 통과시키지 않도록 하는 fail-fast 가드레일로 동작합니다.
 - 클래식 CAN(최대 8바이트)과 CAN FD(최대 64바이트) 페이로드를 모두 지원합니다
  - 32개 초과의 다중화(mux) 시그널이 있는 메시지는 `uint64_t` valid 비트마스크를 자동 사용합니다. 64개 초과 시그널 메시지는 코드 생성 시 `CodeGenError.UnsupportedFeature`를 반환합니다

@@ -1,8 +1,10 @@
 # ROADMAP — Signal-CANdy 펌웨어 실전 투입 (Production Ready)
 
+> ✅ **닫힌 로드맵 스냅샷** (2026-03-15 close-out). 이 문서는 **2026-02 ~ 2026-03 세대 계획 문서의 종결본**이며, 더 이상 active backlog로 사용하지 않습니다.
+> **다음 세대 작업 위치**: `NEXT_ROADMAP.md`
 > **목표**: 코드 생성기의 **신뢰성, 유지보수성, 테스트 커버리지**를 펌웨어 양산 수준으로 끌어올린다.
-> **근거 문서**: `Analysis/Codebase_Analysis.md` (2026-02-12 코드베이스 심층 분석)
-> **진행 관리**: 완료 항목은 `[x]`로 표시. 작업 보고서는 `Reports/` 폴더에 기록.
+> **근거 문서**: `analysis/Codebase_Analysis.md` (2026-02-12 코드베이스 심층 분석)
+> **운영 원칙**: 본 문서는 완료 시점의 snapshot이며, patch-forward 정정/후속 계획은 최신 `Reports/` 및 `NEXT_ROADMAP.md`에서 이어집니다.
 
 ---
 
@@ -154,7 +156,7 @@
 - [x] **O-9. Task 8** Oracle pytest 스위트 구축 (`Reports/20260213_1937_Oracle_pytest_스위트_구축.md`)
 - [x] **O-10. Task 9** 전체 통합 실행 + 결과 문서화 (`Reports/20260312-1530_Oracle_실패해결_완료.md`, `tests/oracle/ORACLE_RESULTS.md`)
 
-### Oracle 후속 backlog (우선순위순)
+### Oracle 후속 backlog (본 세대에서 종결된 항목)
 
 - [x] **B-O1. DBC raw-range detection heuristic**
   - 근거: `tests/oracle/ORACLE_RESULTS.md` Recommendation #1, `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 5
@@ -185,9 +187,10 @@ M-2 (Dead Code 삭제) ───────────────────
 M-3 (코드 생성 가독성) ── L-1 (Scriban 도입)
 ```
 
-> **권장 착수 순서**: C-1 → C-2 → H-1 → H-3 → M-1 → M-2 → H-2 → M-3 → M-4 → L-*
+> **당시 권장 착수 순서(역사 기록)**: C-1 → C-2 → H-1 → H-3 → M-1 → M-2 → H-2 → M-3 → M-4 → L-*
 
 ---
 
-> **최종 갱신**: 2026-03-13 (L-1 Scriban migration 완료, L-2a fail-fast guardrail 반영, B-O3 valid bitmask auto-widening 포함)
-> **참조**: `Analysis/Codebase_Analysis.md`, `AGENTS.md`
+> **최종 갱신**: 2026-03-15 (현 세대 ROADMAP close-out 완료, active backlog를 `NEXT_ROADMAP.md`로 분리)
+> **현재 canonical source 순서**: 최신 `Reports/` close-out 문서 → `ROADMAP.md` → `NEXT_ROADMAP.md` → `tests/oracle/CATEGORY_C_EXCEPTIONS.md` → `tests/oracle/ORACLE_RESULTS.md`
+> **참조**: `analysis/Codebase_Analysis.md`, `AGENTS.md`
