@@ -1635,8 +1635,8 @@ module CodegenTests =
                 let sourceContent = File.ReadAllText(msgC)
                 headerContent |> should haveSubstring "uint8_t valid[9];"
                 headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BYTES 9"
-                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_0 0"
-                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_63 63"
+                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_0 1"
+                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_63 64"
                 headerContent |> should haveSubstring "#include \"sc_utils.h\""
                 sourceContent |> should haveSubstring "memset(msg->valid, 0, sizeof(msg->valid))"
                 sourceContent |> should haveSubstring "sc_valid_set(msg->valid,"

@@ -101,6 +101,18 @@ module Codegen =
                         | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_8H2F
                         | None -> false))
 
+            let hasValidArray =
+                ir.Messages
+                |> List.exists (fun m ->
+                    let hasMuxSwitch =
+                        m.Signals |> List.exists (fun s -> s.MultiplexerIndicator = Some "M")
+
+                    let hasMuxBranches =
+                        m.Signals
+                        |> List.exists (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsSome)
+
+                    hasMuxSwitch && hasMuxBranches && m.Signals.Length > 64)
+
             let model: (string * obj) list =
                 [ "banner", box (banner config)
                   "header_guard", box (guard config.FilePrefix "utils_h")
@@ -114,6 +126,7 @@ module Codegen =
                   box "void set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
                   "canfd_dlc_to_len_decl", box "uint8_t canfd_dlc_to_len(uint8_t dlc);"
                   "canfd_len_to_dlc_decl", box "uint8_t canfd_len_to_dlc(uint8_t len);"
+                  "has_valid_array", box hasValidArray
                   "has_crc_j1850", box hasCrcJ1850
                   "has_crc_8h2f", box hasCrc8h2f ]
 
@@ -901,6 +914,8 @@ module Codegen =
                       "struct_extra_fields", box muxStructFields
                       "signal_declarations_h", box signalDeclarationsH
                       "message_name", box message.Name
+                      "needs_utils_include", box useValidArray
+                      "utils_header_name", box (Utils.utilsHeaderName config)
                       "has_counter", box hasCounter
                       "counter_state_type_decl", box counterStateTypeDecl
                       "counter_check_func_decl", box counterCheckFuncDecl ]
