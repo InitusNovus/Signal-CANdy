@@ -1,10 +1,15 @@
-# 📝 작업 요약
+# 작업 보고서: Valid_GT64_ByteArray_구현
+
+**RUN_ID**: 20260316-0807  
+**배치 내 단계 시각(원본 파일명 기준)**: 20260316_0807
+
+## 📝 작업 요약
 
 - `src/Signal.CANdy.Core/Codegen.fs`와 헤더 템플릿에 `>64` multiplexed signal valid bitmask byte-array fallback의 핵심 구현(Phase 2-4 + Phase 5 초안)을 적용했다.
 - 정확한 3개 로컬 커밋을 생성했고, 각 커밋 직후 `dotnet build --configuration Release --nologo`는 모두 성공했다.
 - 하지만 최종 GREEN 단계는 기존 테스트 기대치 2건이 새 설계와 불일치해 완료하지 못했다.
 
-# 🛠 변경 상세
+## 🛠 변경 상세
 
 - 수정 파일: `src/Signal.CANdy.Core/Codegen.fs`
   - Phase 2: `useValidArray`, 3-tier valid width 선택, `validArraySize` 추가.
@@ -26,7 +31,7 @@
   - `tests/Signal.CANdy.Core.Tests/CodegenTests.fs`
   - `tests/Signal.CANdy.Core.Tests/FacadeTests.fs`
 
-# ✅ 테스트 결과
+## ✅ 테스트 결과
 
 - `lsp_diagnostics`
   - `src/Signal.CANdy.Core/Codegen.fs`: clean
@@ -46,7 +51,7 @@
        - 실제 구현은 `List.iteri` 기준 전체 signal order 유지로 `MuxSel=0`, `Branch_0=1`, `Branch_63=64`
 - 따라서 사용자 요구의 최종 기준인 `152+ pass, 0 fail`에는 도달하지 못했다.
 
-# ⏭ 다음 계획
+## ⏭ 다음 계획
 
 - 활성 계획 항목: `Plans/ROADMAP.md`의 `1. valid 비트마스크 >64 신호 fallback 방식`
 - 다음 세션에서 단일 작업으로 아래 둘 중 하나를 선택해야 한다:

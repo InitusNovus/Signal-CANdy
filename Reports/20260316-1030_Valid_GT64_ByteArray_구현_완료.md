@@ -1,4 +1,11 @@
-# 📝 작업 요약
+# 작업 보고서: Valid_GT64_ByteArray_구현_완료
+
+**RUN_ID**: 20260316-1030  
+**배치 내 단계 시각(원본 파일명 기준)**: 20260316_1030
+
+> [정정 이력 - 2026-03-16] 실행 배치(1030~1500) RUN_ID 기준점 문서로 지정했다. 동일 배치 후속 보고서(1300/1445/1500/1006)는 RUN_ID `20260316-1030`을 공유한다.
+
+## 📝 작업 요약
 
 `>64` multiplexed signal valid bitmask byte-array fallback 기능 구현 **전체 완료** (Phase 1–7).
 
@@ -6,7 +13,7 @@
 
 ---
 
-# 🛠 변경 상세
+## 🛠 변경 상세
 
 ## 이번 세션에서 수행한 작업
 
@@ -17,8 +24,8 @@
 - 커밋: `3b82c65 refactor(codegen): apply fantomas formatting`
 
 ### 보고서 파일 커밋
-- `Reports/20260316_0749_Codegen_ValidBitmask_RED_Tests.md` (RED phase 보고서)
-- `Reports/20260316_0807_Valid_GT64_ByteArray_구현.md` (Phase 2-5 구현 보고서)
+- `Reports/20260316-0749_Codegen_ValidBitmask_RED_Tests.md` (RED phase 보고서)
+- `Reports/20260316-0807_Valid_GT64_ByteArray_구현.md` (Phase 2-5 구현 보고서)
 - 커밋: `9b1b7bd docs(reports): add implementation session reports for valid >64 bitmask feature`
 
 ### 워킹 트리 정리
@@ -55,7 +62,7 @@
 
 ---
 
-# ✅ 테스트 결과
+## ✅ 테스트 결과
 
 | 검증 항목 | 결과 |
 |-----------|------|
@@ -71,7 +78,7 @@
 
 ---
 
-# ⏭ 다음 계획
+## ⏭ 다음 계획
 
 - `Plans/ROADMAP.md`의 해당 항목 **완료** 처리 필요:
   - `valid 비트마스크 >64 신호 fallback 방식` 체크박스 → `[x]`
@@ -82,7 +89,7 @@
 
 ---
 
-# 🔖 구현 기술 요약 (다음 세션을 위한 인계)
+## 🔖 구현 기술 요약 (다음 세션을 위한 인계)
 
 ## valid 비트마스크 3단계 선택 로직 (Codegen.fs)
 

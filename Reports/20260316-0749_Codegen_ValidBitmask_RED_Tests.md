@@ -1,10 +1,15 @@
-# 📝 작업 요약
+# 작업 보고서: Codegen_ValidBitmask_RED_Tests
+
+**RUN_ID**: 20260316-0749  
+**배치 내 단계 시각(원본 파일명 기준)**: 20260316_0749
+
+## 📝 작업 요약
 
 - `tests/Signal.CANdy.Core.Tests/CodegenTests.fs`에 `>64` valid bitmask byte-array 기능용 RED 단계 테스트(T1–T6)를 추가/보강했다.
 - 기존 65-signal UnsupportedFeature 테스트를 성공 기대 테스트로 전환했고, 128/72/1024/1025/조건부 utils emission/비-mux 100-signal 시나리오를 추가해 현재 구현 한계를 명시적으로 깨뜨리도록 만들었다.
 - 요청된 로컬 커밋 `e0e788a` (`test(codegen): add failing tests for >64 valid byte-array`)를 생성했다.
 
-# 🛠 변경 상세
+## 🛠 변경 상세
 
 - 수정 파일: `tests/Signal.CANdy.Core.Tests/CodegenTests.fs`
   - 기존 `valid bitmask uses uint64_t for 64-signal mux message` 테스트에 `uint8_t` 배열이 나오지 않아야 함 / `1ULL` shift 사용 확인 assertion을 추가했다.
@@ -21,7 +26,7 @@
 - 추가 확인:
   - `lsp_diagnostics` 기준 변경 파일 컴파일 진단 오류 없음.
 
-# ✅ 테스트 결과
+## ✅ 테스트 결과
 
 - 실행 명령: `dotnet test --configuration Release -v minimal --nologo`
 - 결과:
@@ -40,7 +45,7 @@
   - 이는 RED phase 기대 결과와 일치한다.
 - `Generator.Tests`: 27개 통과.
 
-# ⏭ 다음 계획
+## ⏭ 다음 계획
 
 - 활성 ROADMAP 항목: `Plans/ROADMAP.md`의 `1. valid 비트마스크 >64 신호 fallback 방식`.
 - 다음 세션에서는 byte-array 기반 valid 표현(`uint8_t valid[N]`, helper emission, set/clear/test 호출, upper bound 정책)을 `src/Signal.CANdy.Core/Codegen.fs` 및 관련 템플릿에 구현하는 GREEN phase 작업이 필요하다.
