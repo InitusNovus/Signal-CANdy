@@ -24,8 +24,8 @@
 설치:
 
 ```pwsh
-dotnet add package SignalCandy.Core --version 0.4.0-alpha.1
-dotnet add package SignalCandy --version 0.4.0-alpha.1
+dotnet add package SignalCandy.Core --version 0.4.0
+dotnet add package SignalCandy --version 0.4.0
 ```
 
 ## ⚡ 빠른 시작 (5분)
