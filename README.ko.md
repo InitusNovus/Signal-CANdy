@@ -491,7 +491,7 @@ void handle_mux65(const uint8_t data[8]) {
     MUX65_MSG_t m = {0};
     if (MUX65_MSG_decode(&m, data, 8)) {
         if (m.mux_active == MUX65_MSG_MUX_5) {
-            if (sc_valid_test(m.valid, MUX65_MSG_VALIDBRANCH_5)) {
+            if (sc_valid_test(m.valid, MUX65_MSG_VALID_BRANCH_5)) {
                 /* m.Branch_5 사용 — >64개 신호 메시지의 인덱스 기반 valid 검사 */
             }
         }

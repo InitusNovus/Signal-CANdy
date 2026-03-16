@@ -360,7 +360,7 @@ void handle_mux65(const uint8_t data[8]) {
     MUX65_MSG_t m = {0};
     if (MUX65_MSG_decode(&m, data, 8)) {
         if (m.mux_active == MUX65_MSG_MUX_5) {
-            if (sc_valid_test(m.valid, MUX65_MSG_VALIDBRANCH_5)) {
+            if (sc_valid_test(m.valid, MUX65_MSG_VALID_BRANCH_5)) {
                 /* use m.Branch_5 — index-based valid check for >64 signal messages */
             }
         }
