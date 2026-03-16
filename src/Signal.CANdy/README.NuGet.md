@@ -8,7 +8,7 @@ C#-friendly facade over SignalCandy Core. Wraps Result-based F# API with excepti
 ## Install
 
 ```
-dotnet add package SignalCandy --version 0.3.2
+dotnet add package SignalCandy --version 0.4.0-alpha.1
 ```
 
 ## Quick start (C#)
