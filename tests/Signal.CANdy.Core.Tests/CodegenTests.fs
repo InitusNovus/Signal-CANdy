@@ -1728,11 +1728,16 @@ module CodegenTests =
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
 
         let ir = mkMuxMessage "MUX1025_MSG" 909u switchSig branchSignals []
-        let result = generate ir "C:/tmp/nonexistent" defaultConfig
+        let outDir = createTempOutDir ()
 
-        match result with
-        | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "1024"
-        | _ -> failwith "Expected UnsupportedFeature error"
+        try
+            let result = generate ir outDir defaultConfig
+
+            match result with
+            | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "1024"
+            | _ -> failwith "Expected UnsupportedFeature error"
+        finally
+            cleanupDir outDir
 
     [<Fact>]
     let ``valid bitmask uses uint8_t byte array for 72-signal mux message`` () =
