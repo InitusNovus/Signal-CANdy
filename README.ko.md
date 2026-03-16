@@ -457,7 +457,7 @@ make -C gen build
 참고
 - 분기 선택은 스위치 신호의 원시 정수값 기준입니다(일반 DBC 관례).
 - 멀티플렉스가 아닌 기반 신호는 항상 디코드/인코드됩니다.
-- 유효성 비트마스크 폭: 신호가 ≤32개인 메시지는 32비트 `valid` 필드(`uint32_t`)를 사용합니다; 33–64개 신호는 자동으로 64비트 필드(`uint64_t` + `1ULL` 시프트)를 사용합니다. 64개 초과 신호는 생성할 수 없으며 — 코드 생성은 `CodeGenError.UnsupportedFeature`를 보고합니다.
+- 유효성 비트마스크 폭: 신호가 ≤32개인 메시지는 32비트 `valid` 필드(`uint32_t`)를 사용합니다; 33–64개 신호는 자동으로 64비트 필드(`uint64_t` + `1ULL` 시프트)를 사용합니다; 65–1024개 신호는 바이트 배열 필드(`uint8_t valid[(N+7)/8]`)와 `sc_valid_set/clear/test()` 헬퍼 함수(`sc_utils.h`)를 사용합니다. 1024개 초과 다중화 신호 메시지는 지원되지 않습니다(코드 생성 시 `CodeGenError.UnsupportedFeature` 보고).
 
 valid와 mux_active 사용
 ```c
@@ -477,6 +477,23 @@ void handle_mux(const uint8_t data[8]) {
         }
         if (m.valid & MUX_MSG_VALID_BASE_8) {
             // 기반 신호 처리
+        }
+    }
+}
+```
+
+sc_valid_test 사용 (>64개 신호 — 바이트 배열 valid)
+```c
+#include "mux65_msg.h"
+#include "sc_utils.h"  /* sc_valid_test 헬퍼 — file_prefix가 sc_인 경우 sc_utils.h로 생성 */
+
+void handle_mux65(const uint8_t data[8]) {
+    MUX65_MSG_t m = {0};
+    if (MUX65_MSG_decode(&m, data, 8)) {
+        if (m.mux_active == MUX65_MSG_MUX_5) {
+            if (sc_valid_test(m.valid, MUX65_MSG_VALIDBRANCH_5)) {
+                /* m.Branch_5 사용 — >64개 신호 메시지의 인덱스 기반 valid 검사 */
+            }
         }
     }
 }
@@ -606,7 +623,7 @@ void compare_state(int v) {
 - 실제 CRC/Counter 생성 검증은 명시적 `crc_counter:` YAML 메타데이터가 필요하며, 현재 지원 알고리즘은 CRC-8만 해당합니다.
 - 현재 `crc_counter_check: true`는 지원되지 않는 경로를 조용히 통과시키지 않도록 하는 fail-fast 가드레일로 동작합니다.
 - 클래식 CAN(최대 8바이트)과 CAN FD(최대 64바이트) 페이로드를 모두 지원합니다
- - 32개 초과의 다중화(mux) 시그널이 있는 메시지는 `uint64_t` valid 비트마스크를 자동 사용합니다. 64개 초과 시그널 메시지는 코드 생성 시 `CodeGenError.UnsupportedFeature`를 반환합니다
+- ≤32개 다중화(mux) 시그널 메시지는 32비트 `valid` 비트마스크(`uint32_t`)를 사용합니다; 33–64개 신호는 64비트(`uint64_t`)를 사용합니다; 65–1024개 신호는 바이트 배열(`uint8_t valid[(N+7)/8]`)과 `sc_utils.h`의 `sc_valid_set/clear/test()` 헬퍼를 사용합니다. 1024개 초과 다중화 신호 메시지는 지원되지 않습니다(`CodeGenError.UnsupportedFeature`).
 
 ## 디스패치 모드와 레지스트리 (nanopb와의 관련성)
 
