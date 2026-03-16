@@ -40,18 +40,20 @@ Float32 rounding during the encode→decode cycle can introduce a ±1 LSB diverg
 **Category**: `float32_rounding`
 
 ### Exception 3 — 32-bit valid bitmask limit for messages with >32 signals
-The generated `valid` bitmask was a fixed `uint32_t`. Auto-widening (B-O3, v0.3.2) now selects `uint32_t` for ≤32 signals or `uint64_t` for 33–64 signals. Messages with >64 signals emit `CodeGenError.UnsupportedFeature` at generation time.
+The generated `valid` bitmask was a fixed `uint32_t`. Auto-widening (B-O3, v0.3.2) now selects `uint32_t` for ≤32 signals or `uint64_t` for 33–64 signals. A further byte-array fallback extension (2026-03-16) adds support for 65–1024 signals via `uint8_t valid[(N+7)/8]` with `sc_valid_set/clear/test()` helpers. Messages with >1024 signals emit `CodeGenError.UnsupportedFeature` at generation time.
 
 | Criterion | Status | Justification |
 | :--- | :--- | :--- |
 | Technical Limitation | PASS | Architectural choice of `uint32_t` for the `valid` field. |
 | Scoped Impact | PASS | Impact limited to complex industrial/heavy-duty DBCs. |
-| No Feasible Alternative | **RESOLVED** | Implemented auto-widening to `uint64_t` in `Codegen.fs` (B-O3, v0.3.2). |
-| Backlog Entry | PASS | Tracked under B-O3 (completed 0.3.2). |
+| No Feasible Alternative | **RESOLVED** | Auto-widening to `uint64_t` (B-O3, v0.3.2) + byte-array fallback for 65–1024 signals (2026-03-16). |
+| Backlog Entry | PASS | Tracked under B-O3 (completed 0.3.2); ROADMAP item #1 closed and removed per ROADMAP inclusion rules. |
 
 **Category**: `valid_mask_width`
 
 > **RESOLVED** (2026-03-13, commits `6bbe11d`, `da4f018`): Auto-widening implemented in `Codegen.fs` (B-O3). Messages with ≤32 signals use `uint32_t valid`; 33–64 signals use `uint64_t valid` + `1ULL` shift; >64 signals emit `CodeGenError.UnsupportedFeature`. Backward-compatible.
+
+> **RESOLVED** (2026-03-16, commits `63d62a7`, `60064c9`): Byte-array fallback implemented in `Codegen.fs`. Messages with 65–1024 multiplexed signals now generate `uint8_t valid[(N+7)/8]` with `sc_valid_set()`, `sc_valid_clear()`, `sc_valid_test()` helpers from `sc_utils.h`. The threshold for `CodeGenError.UnsupportedFeature` is now >1024 signals. ROADMAP item #1 closed.
 
 ### Exception 4 — cantools parsing incompatibility (hyundai, toyota, vw)
 Specific vendor DBCs contain syntax anomalies or 29-bit extended IDs that `cantools` (v41.2.1) rejects, while Signal-CANdy successfully parses and generates code for them. These files cannot be verified against `cantools`.
