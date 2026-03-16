@@ -349,6 +349,7 @@ void handle_mux(const uint8_t data[8]) {
     }
   }
 }
+```
 
 Using sc_valid_test for >64 signals (byte-array valid)
 ```c
@@ -365,7 +366,6 @@ void handle_mux65(const uint8_t data[8]) {
         }
     }
 }
-```
 ```
 
 ### Value tables (VAL_)
