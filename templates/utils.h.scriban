@@ -27,7 +27,19 @@ extern "C" {
 
 {{ if has_crc_j1850 }}uint8_t sc_crc8_sae_j1850(const uint8_t* data, size_t len);
 {{ end }}{{ if has_crc_8h2f }}uint8_t sc_crc8_8h2f(const uint8_t* data, size_t len);
-{{ end }}{{ end }}
+{{ end }}{{ end }}{{ if has_valid_array }}
+
+/* ── Valid bitmask helpers (byte-array, >64 signals) ── */
+static inline void sc_valid_set(uint8_t* arr, unsigned bit) {
+    arr[bit >> 3] |= (uint8_t)(1u << (bit & 7u));
+}
+static inline void sc_valid_clear(uint8_t* arr, unsigned bit) {
+    arr[bit >> 3] &= (uint8_t)~(1u << (bit & 7u));
+}
+static inline bool sc_valid_test(const uint8_t* arr, unsigned bit) {
+    return (arr[bit >> 3] & (uint8_t)(1u << (bit & 7u))) != 0;
+}
+{{ end }}
 
 #ifdef __cplusplus
 }

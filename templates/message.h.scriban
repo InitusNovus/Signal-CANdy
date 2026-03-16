@@ -3,7 +3,8 @@
 #define {{ header_guard }}
 
 #include <stdint.h>
-#include <stdbool.h>
+#include <stdbool.h>{{ if needs_utils_include }}
+#include "{{ utils_header_name }}"{{ end }}
 
 #ifdef __cplusplus
 extern "C" {

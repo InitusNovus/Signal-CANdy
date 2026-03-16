@@ -24,8 +24,8 @@ This project generates portable C99 parser modules (headers/sources) from a `.db
 Install:
 
 ```pwsh
-dotnet add package SignalCandy.Core --version 0.3.2
-dotnet add package SignalCandy --version 0.3.2
+dotnet add package SignalCandy.Core --version 0.4.0-alpha.1
+dotnet add package SignalCandy --version 0.4.0-alpha.1
 ```
 
 ## ⚡ Quick Start (5 minutes)
@@ -326,7 +326,7 @@ make -C gen build
 Notes
 - Branch selection uses the raw integer value of the switch signal (typical DBC semantics).
 - Base (non-multiplexed) signals are always decoded/encoded.
- - Valid bitmask width: messages with ≤32 signals use a 32-bit `valid` field (`uint32_t`); messages with 33–64 signals automatically use a 64-bit field (`uint64_t` + `1ULL` shift). Messages with >64 signals cannot be generated — codegen reports `CodeGenError.UnsupportedFeature`.
+ - Valid bitmask width: messages with ≤32 signals use a 32-bit `valid` field (`uint32_t`); messages with 33–64 signals automatically use a 64-bit field (`uint64_t` + `1ULL` shift); messages with 65–1024 signals use a byte-array field (`uint8_t valid[(N+7)/8]`) with `sc_valid_set/clear/test()` helper functions from `sc_utils.h`. Messages with >1024 multiplexed signals are not supported (codegen reports `CodeGenError.UnsupportedFeature`).
 
 Using valid and mux_active
 ```c
@@ -348,6 +348,23 @@ void handle_mux(const uint8_t data[8]) {
       // base signal always available when decoded
     }
   }
+}
+```
+
+Using sc_valid_test for >64 signals (byte-array valid)
+```c
+#include "mux65_msg.h"
+#include "sc_utils.h"  /* sc_valid_test helper — emitted as sc_utils.h when file_prefix is sc_ */
+
+void handle_mux65(const uint8_t data[8]) {
+    MUX65_MSG_t m = {0};
+    if (MUX65_MSG_decode(&m, data, 8)) {
+        if (m.mux_active == MUX65_MSG_MUX_5) {
+            if (sc_valid_test(m.valid, MUX65_MSG_VALID_BRANCH_5)) {
+                /* use m.Branch_5 — index-based valid check for >64 signal messages */
+            }
+        }
+    }
 }
 ```
 
@@ -680,7 +697,8 @@ Details can be reproduced via the stress suite and bulk runner in `scripts/bulk_
 - Generated CRC/Counter handling requires explicit `crc_counter:` YAML metadata; current supported algorithms are CRC-8 only.
 - When `crc_counter_check: true` is enabled without explicit metadata, code generation fails fast for inferred CRC/counter-like signals instead of silently accepting an unsupported path.
 - Supports both classic CAN (up to 8-byte) and CAN FD (up to 64-byte) payloads
-- Messages with >32 multiplexed signals automatically use a 64-bit `valid` bitmask (`uint64_t`). Messages with >64 multiplexed signals are not supported (code generation reports `CodeGenError.UnsupportedFeature`).
+- Messages with ≤32 multiplexed signals use a 32-bit `valid` bitmask (`uint32_t`); 33–64 signals use 64-bit (`uint64_t`); 65–1024 signals use a byte-array (`uint8_t valid[(N+7)/8]`) with `sc_valid_set/clear/test()` helpers from `sc_utils.h`. Messages with >1024 multiplexed signals are not supported (`CodeGenError.UnsupportedFeature`).
+
 
 ## Dispatch modes, registry, and relation to nanopb
 

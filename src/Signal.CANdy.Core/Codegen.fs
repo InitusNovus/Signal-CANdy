@@ -101,6 +101,18 @@ module Codegen =
                         | Some meta -> meta.Algorithm = CrcAlgorithmId.CRC8_8H2F
                         | None -> false))
 
+            let hasValidArray =
+                ir.Messages
+                |> List.exists (fun m ->
+                    let hasMuxSwitch =
+                        m.Signals |> List.exists (fun s -> s.MultiplexerIndicator = Some "M")
+
+                    let hasMuxBranches =
+                        m.Signals
+                        |> List.exists (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsSome)
+
+                    hasMuxSwitch && hasMuxBranches && m.Signals.Length > 64)
+
             let model: (string * obj) list =
                 [ "banner", box (banner config)
                   "header_guard", box (guard config.FilePrefix "utils_h")
@@ -114,6 +126,7 @@ module Codegen =
                   box "void set_bits_be(uint8_t* data, uint16_t start_bit, uint16_t length, uint64_t value);"
                   "canfd_dlc_to_len_decl", box "uint8_t canfd_dlc_to_len(uint8_t dlc);"
                   "canfd_len_to_dlc_decl", box "uint8_t canfd_len_to_dlc(uint8_t len);"
+                  "has_valid_array", box hasValidArray
                   "has_crc_j1850", box hasCrcJ1850
                   "has_crc_8h2f", box hasCrc8h2f ]
 
@@ -489,11 +502,21 @@ module Codegen =
                 | Some _, _ :: _ -> true
                 | _ -> false
 
+            let useValidArray = isMux && message.Signals.Length > 64
+
             let validType, shiftSuffix, initLiteral =
-                if isMux && message.Signals.Length > 32 then
+                if useValidArray then
+                    "uint8_t", "", ""
+                elif isMux && message.Signals.Length > 32 then
                     "uint64_t", "1ULL", "0ULL"
                 else
                     "uint32_t", "1u", "0u"
+
+            let validArraySize =
+                if useValidArray then
+                    (message.Signals.Length + 7) / 8
+                else
+                    0
 
             let validMacro (sigName: string) =
                 sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (sigName.ToUpperInvariant())
@@ -505,7 +528,10 @@ module Codegen =
                 let body = signalDecodeFor s in
 
                 if isMux then
-                    body + (sprintf "\n    msg->valid |= %s;" (validMacro s.Name))
+                    if useValidArray then
+                        body + (sprintf "\n    sc_valid_set(msg->valid, %s);" (validMacro s.Name))
+                    else
+                        body + (sprintf "\n    msg->valid |= %s;" (validMacro s.Name))
                 else
                     body
 
@@ -532,13 +558,16 @@ module Codegen =
                             |> String.concat "\n")
                         |> String.concat "\n"
 
-                    [ if isMux then
-                          sprintf "    msg->valid = %s;" initLiteral
-                      else
-                          ""
-                      swBlock
-                      baseBlock
-                      branchesBlock ]
+                    let initBlock =
+                        if isMux then
+                            if useValidArray then
+                                "    memset(msg->valid, 0, sizeof(msg->valid));"
+                            else
+                                sprintf "    msg->valid = %s;" initLiteral
+                        else
+                            ""
+
+                    [ initBlock; swBlock; baseBlock; branchesBlock ]
                     |> List.filter (fun s -> not (String.IsNullOrWhiteSpace s))
                     |> String.concat "\n\n"
                 | _ -> message.Signals |> List.map signalDecodeFor |> String.concat "\n\n"
@@ -718,20 +747,43 @@ module Codegen =
 
                     message.Signals
                     |> List.iteri (fun idx s ->
+                        if useValidArray then
+                            preambleLines.Add(
+                                sprintf
+                                    "#define %s %d"
+                                    (sprintf
+                                        "%s_VALID_%s"
+                                        (message.Name.ToUpperInvariant())
+                                        (s.Name.ToUpperInvariant()))
+                                    idx
+                            )
+                        else
+                            preambleLines.Add(
+                                sprintf
+                                    "#define %s (%s << %d)"
+                                    (sprintf
+                                        "%s_VALID_%s"
+                                        (message.Name.ToUpperInvariant())
+                                        (s.Name.ToUpperInvariant()))
+                                    shiftSuffix
+                                    idx
+                            ))
+
+                    if useValidArray then
                         preambleLines.Add(
-                            sprintf
-                                "#define %s (%s << %d)"
-                                (sprintf "%s_VALID_%s" (message.Name.ToUpperInvariant()) (s.Name.ToUpperInvariant()))
-                                shiftSuffix
-                                idx
-                        ))
+                            sprintf "#define %s_VALID_BYTES %d" (message.Name.ToUpperInvariant()) validArraySize
+                        )
 
                     preambleLines.Add ""
 
-                    structFieldLines.Add(sprintf "    %s valid;" validType)
+                    if useValidArray then
+                        structFieldLines.Add(sprintf "    uint8_t valid[%d];" validArraySize)
+                    elif isMux && message.Signals.Length > 32 then
+                        structFieldLines.Add("    uint64_t valid; /* valid field widened to 64-bit */")
+                    else
+                        structFieldLines.Add("    uint32_t valid;")
 
                     if validType = "uint64_t" then
-                        structFieldLines.Add("    /* valid field widened to uint64_t: signal count > 32 */")
                         structFieldLines.Add("    /* decode init literal: = 0ULL; */")
 
                     structFieldLines.Add(sprintf "    %s_mux_e mux_active;" message.Name)
@@ -871,6 +923,8 @@ module Codegen =
                       "struct_extra_fields", box muxStructFields
                       "signal_declarations_h", box signalDeclarationsH
                       "message_name", box message.Name
+                      "needs_utils_include", box useValidArray
+                      "utils_header_name", box (Utils.utilsHeaderName config)
                       "has_counter", box hasCounter
                       "counter_state_type_decl", box counterStateTypeDecl
                       "counter_check_func_decl", box counterCheckFuncDecl ]
@@ -1050,14 +1104,14 @@ module Codegen =
                         msg.Signals
                         |> List.exists (fun s -> s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsSome)
 
-                    hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 64)
+                    hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 1024)
 
             match overflowGuard with
             | Some msg ->
                 Error(
                     CodeGenError.UnsupportedFeature(
                         sprintf
-                            "Message '%s' has %d signals (>64); valid bitmask cannot be represented in 64 bits."
+                            "Message '%s' has %d signals (>1024); valid bitmask cannot support more than 1024 signals."
                             msg.Name
                             msg.Signals.Length
                     )

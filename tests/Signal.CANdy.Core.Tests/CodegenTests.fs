@@ -1609,12 +1609,14 @@ module CodegenTests =
                 let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux64_msg.h")
                 let content = File.ReadAllText(msgH)
                 content |> should haveSubstring "uint64_t valid;"
+                content |> should not' (haveSubstring "uint8_t valid[")
+                content |> should haveSubstring "(1ULL <<"
             | Error e -> failwithf "Expected Ok, got: %A" e
         finally
             cleanupDir outDir
 
     [<Fact>]
-    let ``codegen fails with UnsupportedFeature for 65-signal mux message valid bitmask`` () =
+    let ``valid bitmask uses uint8_t byte array for 65-signal mux message`` () =
         let switchSig = mkMuxSwitch "MuxSel" 0us 4us
 
         let branchSignals =
@@ -1622,22 +1624,176 @@ module CodegenTests =
             |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
 
         let ir = mkMuxMessage "MUX65_MSG" 903u switchSig branchSignals []
-        let result = generate ir "C:/tmp/nonexistent" defaultConfig
+        let outDir = createTempOutDir ()
 
-        match result with
-        | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "65"
-        | _ -> failwith "Expected UnsupportedFeature error"
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux65_msg.h")
+                let msgC = files.Sources |> List.find (fun f -> Path.GetFileName(f) = "mux65_msg.c")
+                let headerContent = File.ReadAllText(msgH)
+                let sourceContent = File.ReadAllText(msgC)
+                headerContent |> should haveSubstring "uint8_t valid[9];"
+                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BYTES 9"
+                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_0 1"
+                headerContent |> should haveSubstring "#define MUX65_MSG_VALID_BRANCH_63 64"
+                headerContent |> should haveSubstring "#include \"sc_utils.h\""
+
+                sourceContent
+                |> should haveSubstring "memset(msg->valid, 0, sizeof(msg->valid))"
+
+                sourceContent |> should haveSubstring "sc_valid_set(msg->valid,"
+                sourceContent |> should not' (haveSubstring "msg->valid |=")
+                sourceContent |> should not' (haveSubstring "msg->valid = 0")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
 
     [<Fact>]
-    let ``non-mux message with many signals has no valid field valid bitmask`` () =
+    let ``valid bitmask uses uint8_t byte array for 128-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..126 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX128_MSG" 906u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux128_msg.h")
+
+                let content = File.ReadAllText(msgH)
+                content |> should haveSubstring "uint8_t valid[16];"
+                content |> should haveSubstring "#define MUX128_MSG_VALID_BYTES 16"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``utils header emits sc_valid helpers only when a message has more than 64 mux signals`` () =
+        let outDir64 = createTempOutDir ()
+
+        try
+            let ir64 =
+                mkMuxMessage
+                    "MUX64B_MSG"
+                    907u
+                    (mkMuxSwitch "MuxSel" 0us 4us)
+                    ([ 0..62 ]
+                     |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i))
+                    []
+
+            match generate ir64 outDir64 defaultConfig with
+            | Ok files ->
+                let utilsH = files.Headers |> List.find (fun f -> f.EndsWith("utils.h"))
+                let content = File.ReadAllText(utilsH)
+                content |> should not' (haveSubstring "sc_valid_set")
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir64
+
+        let outDir65 = createTempOutDir ()
+
+        try
+            let ir65 =
+                mkMuxMessage
+                    "MUX65B_MSG"
+                    908u
+                    (mkMuxSwitch "MuxSel" 0us 4us)
+                    ([ 0..63 ]
+                     |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i))
+                    []
+
+            match generate ir65 outDir65 defaultConfig with
+            | Ok files ->
+                let utilsH = files.Headers |> List.find (fun f -> f.EndsWith("utils.h"))
+                let content = File.ReadAllText(utilsH)
+                content |> should haveSubstring "sc_valid_set"
+                content |> should haveSubstring "sc_valid_clear"
+                content |> should haveSubstring "sc_valid_test"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir65
+
+    [<Fact>]
+    let ``codegen fails with UnsupportedFeature for 1025-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..1023 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX1025_MSG" 909u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            let result = generate ir outDir defaultConfig
+
+            match result with
+            | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "1024"
+            | _ -> failwith "Expected UnsupportedFeature error"
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``valid bitmask uses uint8_t byte array for 72-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..70 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX72_MSG" 910u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH = files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux72_msg.h")
+                let content = File.ReadAllText(msgH)
+                content |> should haveSubstring "uint8_t valid[9];"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``valid bitmask uses uint8_t byte array for 1024-signal mux message`` () =
+        let switchSig = mkMuxSwitch "MuxSel" 0us 4us
+
+        let branchSignals =
+            [ 0..1022 ]
+            |> List.map (fun i -> mkBranchSignal (sprintf "Branch_%d" i) (uint16 ((i + 1) % 64)) 1us i)
+
+        let ir = mkMuxMessage "MUX1024_MSG" 911u switchSig branchSignals []
+        let outDir = createTempOutDir ()
+
+        try
+            match generate ir outDir defaultConfig with
+            | Ok files ->
+                let msgH =
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "mux1024_msg.h")
+
+                let content = File.ReadAllText(msgH)
+                content |> should haveSubstring "uint8_t valid[128];"
+                content |> should haveSubstring "#define MUX1024_MSG_VALID_BYTES 128"
+            | Error e -> failwithf "Expected Ok, got: %A" e
+        finally
+            cleanupDir outDir
+
+    [<Fact>]
+    let ``non-mux message with 100 signals has no valid field`` () =
         let signals =
-            [ 0..39 ]
+            [ 0..99 ]
             |> List.map (fun i -> mkSignal (sprintf "Plain_%d" i) (uint16 (i % 64)) 1us)
 
         let ir =
             { Messages =
-                [ { Name = "PLAIN40_MSG"
-                    Id = 904u
+                [ { Name = "PLAIN100_MSG"
+                    Id = 912u
                     IsExtended = false
                     Length = 8us
                     Signals = signals
@@ -1651,7 +1807,7 @@ module CodegenTests =
             match generate ir outDir defaultConfig with
             | Ok files ->
                 let msgH =
-                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "plain40_msg.h")
+                    files.Headers |> List.find (fun f -> Path.GetFileName(f) = "plain100_msg.h")
 
                 let content = File.ReadAllText(msgH)
                 content |> should not' (haveSubstring "valid")
