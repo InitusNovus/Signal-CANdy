@@ -14,7 +14,7 @@ bool MUX65_MSG_decode(MUX65_MSG_t* msg, const uint8_t data[], uint8_t dlc) {
     // MuxSel: start=0 len=8 factor=1 offset=0
     raw_MuxSel = get_bits_le(data, 0, 8);
     msg->MuxSel = (float)((double)raw_MuxSel * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDMUXSEL);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_MUXSEL);
     msg->mux_active = (MUX65_MSG_mux_e)((int)raw_MuxSel);
 
     if ((int)raw_MuxSel == 0) {
@@ -22,448 +22,448 @@ bool MUX65_MSG_decode(MUX65_MSG_t* msg, const uint8_t data[], uint8_t dlc) {
     // Branch_0: start=1 len=8 factor=1 offset=0
     raw_Branch_0 = get_bits_le(data, 1, 8);
     msg->Branch_0 = (float)((double)raw_Branch_0 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_0);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_0);
     }
     if ((int)raw_MuxSel == 1) {
     uint64_t raw_Branch_1 = 0;
     // Branch_1: start=2 len=8 factor=1 offset=0
     raw_Branch_1 = get_bits_le(data, 2, 8);
     msg->Branch_1 = (float)((double)raw_Branch_1 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_1);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_1);
     }
     if ((int)raw_MuxSel == 2) {
     uint64_t raw_Branch_2 = 0;
     // Branch_2: start=3 len=8 factor=1 offset=0
     raw_Branch_2 = get_bits_le(data, 3, 8);
     msg->Branch_2 = (float)((double)raw_Branch_2 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_2);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_2);
     }
     if ((int)raw_MuxSel == 3) {
     uint64_t raw_Branch_3 = 0;
     // Branch_3: start=4 len=8 factor=1 offset=0
     raw_Branch_3 = get_bits_le(data, 4, 8);
     msg->Branch_3 = (float)((double)raw_Branch_3 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_3);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_3);
     }
     if ((int)raw_MuxSel == 4) {
     uint64_t raw_Branch_4 = 0;
     // Branch_4: start=5 len=8 factor=1 offset=0
     raw_Branch_4 = get_bits_le(data, 5, 8);
     msg->Branch_4 = (float)((double)raw_Branch_4 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_4);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_4);
     }
     if ((int)raw_MuxSel == 5) {
     uint64_t raw_Branch_5 = 0;
     // Branch_5: start=6 len=8 factor=1 offset=0
     raw_Branch_5 = get_bits_le(data, 6, 8);
     msg->Branch_5 = (float)((double)raw_Branch_5 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_5);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_5);
     }
     if ((int)raw_MuxSel == 6) {
     uint64_t raw_Branch_6 = 0;
     // Branch_6: start=7 len=8 factor=1 offset=0
     raw_Branch_6 = get_bits_le(data, 7, 8);
     msg->Branch_6 = (float)((double)raw_Branch_6 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_6);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_6);
     }
     if ((int)raw_MuxSel == 7) {
     uint64_t raw_Branch_7 = 0;
     // Branch_7: start=8 len=8 factor=1 offset=0
     raw_Branch_7 = get_bits_le(data, 8, 8);
     msg->Branch_7 = (float)((double)raw_Branch_7 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_7);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_7);
     }
     if ((int)raw_MuxSel == 8) {
     uint64_t raw_Branch_8 = 0;
     // Branch_8: start=9 len=8 factor=1 offset=0
     raw_Branch_8 = get_bits_le(data, 9, 8);
     msg->Branch_8 = (float)((double)raw_Branch_8 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_8);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_8);
     }
     if ((int)raw_MuxSel == 9) {
     uint64_t raw_Branch_9 = 0;
     // Branch_9: start=10 len=8 factor=1 offset=0
     raw_Branch_9 = get_bits_le(data, 10, 8);
     msg->Branch_9 = (float)((double)raw_Branch_9 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_9);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_9);
     }
     if ((int)raw_MuxSel == 10) {
     uint64_t raw_Branch_10 = 0;
     // Branch_10: start=11 len=8 factor=1 offset=0
     raw_Branch_10 = get_bits_le(data, 11, 8);
     msg->Branch_10 = (float)((double)raw_Branch_10 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_10);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_10);
     }
     if ((int)raw_MuxSel == 11) {
     uint64_t raw_Branch_11 = 0;
     // Branch_11: start=12 len=8 factor=1 offset=0
     raw_Branch_11 = get_bits_le(data, 12, 8);
     msg->Branch_11 = (float)((double)raw_Branch_11 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_11);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_11);
     }
     if ((int)raw_MuxSel == 12) {
     uint64_t raw_Branch_12 = 0;
     // Branch_12: start=13 len=8 factor=1 offset=0
     raw_Branch_12 = get_bits_le(data, 13, 8);
     msg->Branch_12 = (float)((double)raw_Branch_12 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_12);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_12);
     }
     if ((int)raw_MuxSel == 13) {
     uint64_t raw_Branch_13 = 0;
     // Branch_13: start=14 len=8 factor=1 offset=0
     raw_Branch_13 = get_bits_le(data, 14, 8);
     msg->Branch_13 = (float)((double)raw_Branch_13 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_13);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_13);
     }
     if ((int)raw_MuxSel == 14) {
     uint64_t raw_Branch_14 = 0;
     // Branch_14: start=15 len=8 factor=1 offset=0
     raw_Branch_14 = get_bits_le(data, 15, 8);
     msg->Branch_14 = (float)((double)raw_Branch_14 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_14);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_14);
     }
     if ((int)raw_MuxSel == 15) {
     uint64_t raw_Branch_15 = 0;
     // Branch_15: start=16 len=8 factor=1 offset=0
     raw_Branch_15 = get_bits_le(data, 16, 8);
     msg->Branch_15 = (float)((double)raw_Branch_15 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_15);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_15);
     }
     if ((int)raw_MuxSel == 16) {
     uint64_t raw_Branch_16 = 0;
     // Branch_16: start=17 len=8 factor=1 offset=0
     raw_Branch_16 = get_bits_le(data, 17, 8);
     msg->Branch_16 = (float)((double)raw_Branch_16 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_16);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_16);
     }
     if ((int)raw_MuxSel == 17) {
     uint64_t raw_Branch_17 = 0;
     // Branch_17: start=18 len=8 factor=1 offset=0
     raw_Branch_17 = get_bits_le(data, 18, 8);
     msg->Branch_17 = (float)((double)raw_Branch_17 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_17);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_17);
     }
     if ((int)raw_MuxSel == 18) {
     uint64_t raw_Branch_18 = 0;
     // Branch_18: start=19 len=8 factor=1 offset=0
     raw_Branch_18 = get_bits_le(data, 19, 8);
     msg->Branch_18 = (float)((double)raw_Branch_18 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_18);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_18);
     }
     if ((int)raw_MuxSel == 19) {
     uint64_t raw_Branch_19 = 0;
     // Branch_19: start=20 len=8 factor=1 offset=0
     raw_Branch_19 = get_bits_le(data, 20, 8);
     msg->Branch_19 = (float)((double)raw_Branch_19 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_19);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_19);
     }
     if ((int)raw_MuxSel == 20) {
     uint64_t raw_Branch_20 = 0;
     // Branch_20: start=21 len=8 factor=1 offset=0
     raw_Branch_20 = get_bits_le(data, 21, 8);
     msg->Branch_20 = (float)((double)raw_Branch_20 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_20);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_20);
     }
     if ((int)raw_MuxSel == 21) {
     uint64_t raw_Branch_21 = 0;
     // Branch_21: start=22 len=8 factor=1 offset=0
     raw_Branch_21 = get_bits_le(data, 22, 8);
     msg->Branch_21 = (float)((double)raw_Branch_21 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_21);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_21);
     }
     if ((int)raw_MuxSel == 22) {
     uint64_t raw_Branch_22 = 0;
     // Branch_22: start=23 len=8 factor=1 offset=0
     raw_Branch_22 = get_bits_le(data, 23, 8);
     msg->Branch_22 = (float)((double)raw_Branch_22 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_22);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_22);
     }
     if ((int)raw_MuxSel == 23) {
     uint64_t raw_Branch_23 = 0;
     // Branch_23: start=24 len=8 factor=1 offset=0
     raw_Branch_23 = get_bits_le(data, 24, 8);
     msg->Branch_23 = (float)((double)raw_Branch_23 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_23);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_23);
     }
     if ((int)raw_MuxSel == 24) {
     uint64_t raw_Branch_24 = 0;
     // Branch_24: start=25 len=8 factor=1 offset=0
     raw_Branch_24 = get_bits_le(data, 25, 8);
     msg->Branch_24 = (float)((double)raw_Branch_24 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_24);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_24);
     }
     if ((int)raw_MuxSel == 25) {
     uint64_t raw_Branch_25 = 0;
     // Branch_25: start=26 len=8 factor=1 offset=0
     raw_Branch_25 = get_bits_le(data, 26, 8);
     msg->Branch_25 = (float)((double)raw_Branch_25 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_25);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_25);
     }
     if ((int)raw_MuxSel == 26) {
     uint64_t raw_Branch_26 = 0;
     // Branch_26: start=27 len=8 factor=1 offset=0
     raw_Branch_26 = get_bits_le(data, 27, 8);
     msg->Branch_26 = (float)((double)raw_Branch_26 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_26);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_26);
     }
     if ((int)raw_MuxSel == 27) {
     uint64_t raw_Branch_27 = 0;
     // Branch_27: start=28 len=8 factor=1 offset=0
     raw_Branch_27 = get_bits_le(data, 28, 8);
     msg->Branch_27 = (float)((double)raw_Branch_27 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_27);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_27);
     }
     if ((int)raw_MuxSel == 28) {
     uint64_t raw_Branch_28 = 0;
     // Branch_28: start=29 len=8 factor=1 offset=0
     raw_Branch_28 = get_bits_le(data, 29, 8);
     msg->Branch_28 = (float)((double)raw_Branch_28 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_28);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_28);
     }
     if ((int)raw_MuxSel == 29) {
     uint64_t raw_Branch_29 = 0;
     // Branch_29: start=30 len=8 factor=1 offset=0
     raw_Branch_29 = get_bits_le(data, 30, 8);
     msg->Branch_29 = (float)((double)raw_Branch_29 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_29);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_29);
     }
     if ((int)raw_MuxSel == 30) {
     uint64_t raw_Branch_30 = 0;
     // Branch_30: start=31 len=8 factor=1 offset=0
     raw_Branch_30 = get_bits_le(data, 31, 8);
     msg->Branch_30 = (float)((double)raw_Branch_30 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_30);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_30);
     }
     if ((int)raw_MuxSel == 31) {
     uint64_t raw_Branch_31 = 0;
     // Branch_31: start=32 len=8 factor=1 offset=0
     raw_Branch_31 = get_bits_le(data, 32, 8);
     msg->Branch_31 = (float)((double)raw_Branch_31 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_31);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_31);
     }
     if ((int)raw_MuxSel == 32) {
     uint64_t raw_Branch_32 = 0;
     // Branch_32: start=33 len=8 factor=1 offset=0
     raw_Branch_32 = get_bits_le(data, 33, 8);
     msg->Branch_32 = (float)((double)raw_Branch_32 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_32);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_32);
     }
     if ((int)raw_MuxSel == 33) {
     uint64_t raw_Branch_33 = 0;
     // Branch_33: start=34 len=8 factor=1 offset=0
     raw_Branch_33 = get_bits_le(data, 34, 8);
     msg->Branch_33 = (float)((double)raw_Branch_33 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_33);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_33);
     }
     if ((int)raw_MuxSel == 34) {
     uint64_t raw_Branch_34 = 0;
     // Branch_34: start=35 len=8 factor=1 offset=0
     raw_Branch_34 = get_bits_le(data, 35, 8);
     msg->Branch_34 = (float)((double)raw_Branch_34 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_34);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_34);
     }
     if ((int)raw_MuxSel == 35) {
     uint64_t raw_Branch_35 = 0;
     // Branch_35: start=36 len=8 factor=1 offset=0
     raw_Branch_35 = get_bits_le(data, 36, 8);
     msg->Branch_35 = (float)((double)raw_Branch_35 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_35);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_35);
     }
     if ((int)raw_MuxSel == 36) {
     uint64_t raw_Branch_36 = 0;
     // Branch_36: start=37 len=8 factor=1 offset=0
     raw_Branch_36 = get_bits_le(data, 37, 8);
     msg->Branch_36 = (float)((double)raw_Branch_36 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_36);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_36);
     }
     if ((int)raw_MuxSel == 37) {
     uint64_t raw_Branch_37 = 0;
     // Branch_37: start=38 len=8 factor=1 offset=0
     raw_Branch_37 = get_bits_le(data, 38, 8);
     msg->Branch_37 = (float)((double)raw_Branch_37 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_37);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_37);
     }
     if ((int)raw_MuxSel == 38) {
     uint64_t raw_Branch_38 = 0;
     // Branch_38: start=39 len=8 factor=1 offset=0
     raw_Branch_38 = get_bits_le(data, 39, 8);
     msg->Branch_38 = (float)((double)raw_Branch_38 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_38);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_38);
     }
     if ((int)raw_MuxSel == 39) {
     uint64_t raw_Branch_39 = 0;
     // Branch_39: start=40 len=8 factor=1 offset=0
     raw_Branch_39 = get_bits_le(data, 40, 8);
     msg->Branch_39 = (float)((double)raw_Branch_39 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_39);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_39);
     }
     if ((int)raw_MuxSel == 40) {
     uint64_t raw_Branch_40 = 0;
     // Branch_40: start=41 len=8 factor=1 offset=0
     raw_Branch_40 = get_bits_le(data, 41, 8);
     msg->Branch_40 = (float)((double)raw_Branch_40 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_40);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_40);
     }
     if ((int)raw_MuxSel == 41) {
     uint64_t raw_Branch_41 = 0;
     // Branch_41: start=42 len=8 factor=1 offset=0
     raw_Branch_41 = get_bits_le(data, 42, 8);
     msg->Branch_41 = (float)((double)raw_Branch_41 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_41);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_41);
     }
     if ((int)raw_MuxSel == 42) {
     uint64_t raw_Branch_42 = 0;
     // Branch_42: start=43 len=8 factor=1 offset=0
     raw_Branch_42 = get_bits_le(data, 43, 8);
     msg->Branch_42 = (float)((double)raw_Branch_42 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_42);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_42);
     }
     if ((int)raw_MuxSel == 43) {
     uint64_t raw_Branch_43 = 0;
     // Branch_43: start=44 len=8 factor=1 offset=0
     raw_Branch_43 = get_bits_le(data, 44, 8);
     msg->Branch_43 = (float)((double)raw_Branch_43 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_43);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_43);
     }
     if ((int)raw_MuxSel == 44) {
     uint64_t raw_Branch_44 = 0;
     // Branch_44: start=45 len=8 factor=1 offset=0
     raw_Branch_44 = get_bits_le(data, 45, 8);
     msg->Branch_44 = (float)((double)raw_Branch_44 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_44);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_44);
     }
     if ((int)raw_MuxSel == 45) {
     uint64_t raw_Branch_45 = 0;
     // Branch_45: start=46 len=8 factor=1 offset=0
     raw_Branch_45 = get_bits_le(data, 46, 8);
     msg->Branch_45 = (float)((double)raw_Branch_45 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_45);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_45);
     }
     if ((int)raw_MuxSel == 46) {
     uint64_t raw_Branch_46 = 0;
     // Branch_46: start=47 len=8 factor=1 offset=0
     raw_Branch_46 = get_bits_le(data, 47, 8);
     msg->Branch_46 = (float)((double)raw_Branch_46 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_46);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_46);
     }
     if ((int)raw_MuxSel == 47) {
     uint64_t raw_Branch_47 = 0;
     // Branch_47: start=48 len=8 factor=1 offset=0
     raw_Branch_47 = get_bits_le(data, 48, 8);
     msg->Branch_47 = (float)((double)raw_Branch_47 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_47);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_47);
     }
     if ((int)raw_MuxSel == 48) {
     uint64_t raw_Branch_48 = 0;
     // Branch_48: start=49 len=8 factor=1 offset=0
     raw_Branch_48 = get_bits_le(data, 49, 8);
     msg->Branch_48 = (float)((double)raw_Branch_48 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_48);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_48);
     }
     if ((int)raw_MuxSel == 49) {
     uint64_t raw_Branch_49 = 0;
     // Branch_49: start=50 len=8 factor=1 offset=0
     raw_Branch_49 = get_bits_le(data, 50, 8);
     msg->Branch_49 = (float)((double)raw_Branch_49 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_49);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_49);
     }
     if ((int)raw_MuxSel == 50) {
     uint64_t raw_Branch_50 = 0;
     // Branch_50: start=51 len=8 factor=1 offset=0
     raw_Branch_50 = get_bits_le(data, 51, 8);
     msg->Branch_50 = (float)((double)raw_Branch_50 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_50);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_50);
     }
     if ((int)raw_MuxSel == 51) {
     uint64_t raw_Branch_51 = 0;
     // Branch_51: start=52 len=8 factor=1 offset=0
     raw_Branch_51 = get_bits_le(data, 52, 8);
     msg->Branch_51 = (float)((double)raw_Branch_51 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_51);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_51);
     }
     if ((int)raw_MuxSel == 52) {
     uint64_t raw_Branch_52 = 0;
     // Branch_52: start=53 len=8 factor=1 offset=0
     raw_Branch_52 = get_bits_le(data, 53, 8);
     msg->Branch_52 = (float)((double)raw_Branch_52 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_52);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_52);
     }
     if ((int)raw_MuxSel == 53) {
     uint64_t raw_Branch_53 = 0;
     // Branch_53: start=54 len=8 factor=1 offset=0
     raw_Branch_53 = get_bits_le(data, 54, 8);
     msg->Branch_53 = (float)((double)raw_Branch_53 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_53);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_53);
     }
     if ((int)raw_MuxSel == 54) {
     uint64_t raw_Branch_54 = 0;
     // Branch_54: start=55 len=8 factor=1 offset=0
     raw_Branch_54 = get_bits_le(data, 55, 8);
     msg->Branch_54 = (float)((double)raw_Branch_54 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_54);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_54);
     }
     if ((int)raw_MuxSel == 55) {
     uint64_t raw_Branch_55 = 0;
     // Branch_55: start=56 len=8 factor=1 offset=0
     raw_Branch_55 = get_bits_le(data, 56, 8);
     msg->Branch_55 = (float)((double)raw_Branch_55 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_55);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_55);
     }
     if ((int)raw_MuxSel == 56) {
     uint64_t raw_Branch_56 = 0;
     // Branch_56: start=57 len=8 factor=1 offset=0
     raw_Branch_56 = get_bits_le(data, 57, 8);
     msg->Branch_56 = (float)((double)raw_Branch_56 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_56);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_56);
     }
     if ((int)raw_MuxSel == 57) {
     uint64_t raw_Branch_57 = 0;
     // Branch_57: start=58 len=8 factor=1 offset=0
     raw_Branch_57 = get_bits_le(data, 58, 8);
     msg->Branch_57 = (float)((double)raw_Branch_57 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_57);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_57);
     }
     if ((int)raw_MuxSel == 58) {
     uint64_t raw_Branch_58 = 0;
     // Branch_58: start=59 len=8 factor=1 offset=0
     raw_Branch_58 = get_bits_le(data, 59, 8);
     msg->Branch_58 = (float)((double)raw_Branch_58 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_58);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_58);
     }
     if ((int)raw_MuxSel == 59) {
     uint64_t raw_Branch_59 = 0;
     // Branch_59: start=60 len=8 factor=1 offset=0
     raw_Branch_59 = get_bits_le(data, 60, 8);
     msg->Branch_59 = (float)((double)raw_Branch_59 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_59);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_59);
     }
     if ((int)raw_MuxSel == 60) {
     uint64_t raw_Branch_60 = 0;
     // Branch_60: start=61 len=8 factor=1 offset=0
     raw_Branch_60 = get_bits_le(data, 61, 8);
     msg->Branch_60 = (float)((double)raw_Branch_60 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_60);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_60);
     }
     if ((int)raw_MuxSel == 61) {
     uint64_t raw_Branch_61 = 0;
     // Branch_61: start=62 len=8 factor=1 offset=0
     raw_Branch_61 = get_bits_le(data, 62, 8);
     msg->Branch_61 = (float)((double)raw_Branch_61 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_61);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_61);
     }
     if ((int)raw_MuxSel == 62) {
     uint64_t raw_Branch_62 = 0;
     // Branch_62: start=63 len=8 factor=1 offset=0
     raw_Branch_62 = get_bits_le(data, 63, 8);
     msg->Branch_62 = (float)((double)raw_Branch_62 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_62);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_62);
     }
     if ((int)raw_MuxSel == 63) {
     uint64_t raw_Branch_63 = 0;
     // Branch_63: start=0 len=8 factor=1 offset=0
     raw_Branch_63 = get_bits_le(data, 0, 8);
     msg->Branch_63 = (float)((double)raw_Branch_63 * 1 + 0);
-    sc_valid_set(msg->valid, MUX65_MSG_VALIDBRANCH_63);
+    sc_valid_set(msg->valid, MUX65_MSG_VALID_BRANCH_63);
     }
     return true;
 }
