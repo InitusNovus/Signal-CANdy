@@ -1,0 +1,17 @@
+VERSION ""
+
+NS_ :
+ SG_MUL_VAL_
+BS_:
+
+BO_ 804 QUALITY_NESTED: 8 Vector__XXX
+ SG_ Outer M : 0|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ Inner m1M : 2|2@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ InnerA m1 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ InnerB m2 : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ OuterB m2 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+
+SG_MUL_VAL_ 804 Inner Outer 1-1;
+SG_MUL_VAL_ 804 InnerA Inner 1-1;
+SG_MUL_VAL_ 804 InnerB Inner 2-2;
+SG_MUL_VAL_ 804 OuterB Outer 2-2;

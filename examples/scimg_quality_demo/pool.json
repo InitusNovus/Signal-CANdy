@@ -1,0 +1,11 @@
+{
+  "name": "quality_demo_pool",
+  "version": "1",
+  "signals": [
+    { "name": "Outer", "semanticId": 1, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "Inner", "semanticId": 2, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "InnerA", "semanticId": 3, "storage": "u8", "unit": "", "direction": "rx", "freshnessMs": 200 },
+    { "name": "InnerB", "semanticId": 4, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "OuterB", "semanticId": 5, "storage": "u8", "unit": "", "direction": "rx" }
+  ]
+}

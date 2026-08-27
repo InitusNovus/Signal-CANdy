@@ -1,0 +1,11 @@
+{
+  "version": "1",
+  "bindings": [
+    { "poolSignal": "Outer", "message": "QUALITY_NESTED", "wireSignal": "Outer", "conversion": { "kind": "identity" } },
+    { "poolSignal": "Inner", "message": "QUALITY_NESTED", "wireSignal": "Inner", "conversion": { "kind": "identity" } },
+    { "poolSignal": "InnerA", "message": "QUALITY_NESTED", "wireSignal": "InnerA", "conversion": { "kind": "identity" } },
+    { "poolSignal": "InnerB", "message": "QUALITY_NESTED", "wireSignal": "InnerB", "conversion": { "kind": "identity" } },
+    { "poolSignal": "OuterB", "message": "QUALITY_NESTED", "wireSignal": "OuterB", "conversion": { "kind": "identity" } }
+  ],
+  "txMessages": []
+}
