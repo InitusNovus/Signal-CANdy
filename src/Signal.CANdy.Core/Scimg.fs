@@ -1404,7 +1404,7 @@ module Scimg =
 
                     bytes.[extensionOffset + 6] <- 4uy
                     putU16 bytes (extensionOffset + 8) (uint16 image.NestedMuxRecords.Length)
-                    putU16 bytes (extensionOffset + 10) image.PoolSlotCount
+                    putU16 bytes (extensionOffset + 10) (uint16 image.QualityEntries.Length)
                     putU32 bytes (extensionOffset + 12) (uint32 nestedOffset)
                     putU32 bytes (extensionOffset + 16) (uint32 qualityOffset)
                     putU32 bytes (extensionOffset + 20) (uint32 embeddedTxOffset)

@@ -260,6 +260,20 @@ module ProtectionScimgTests =
         | first, second -> failwithf "Expected deterministic PR01 writes, got %A / %A" first second
 
     [<Fact>]
+    let ``Protection without RXQ writes zero quality count and roundtrips`` () =
+        let image = { protectionImage with QualityEntries = [] }
+
+        let bytes = writeBytes image
+        let extension = extensionOffset bytes
+
+        BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(extension + 10, 2))
+        |> should equal 0us
+
+        match read bytes with
+        | Ok actual -> actual |> should equal image
+        | Error errors -> failwithf "Expected protection-only image read, got %A" errors
+
+    [<Fact>]
     let ``Protection empty plan uses exact absent sentinels`` () =
         let image =
             { protectionImage with
