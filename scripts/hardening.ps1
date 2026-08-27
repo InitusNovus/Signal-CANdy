@@ -3,7 +3,12 @@ param(
     [ValidateSet('Ci', 'Replay', 'Minimize')]
     [string]$Mode = 'Ci',
     [string]$CaseId,
-    [string]$Input
+    # Do not name this parameter $Input: it would shadow PowerShell's
+    # automatic stdin-enumerating variable and block script start for
+    # minutes whenever the caller keeps stdin open (CI hosts, test runners).
+    # The alias preserves the documented -Input command-line surface.
+    [Alias('Input')]
+    [string]$InputPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -41,14 +46,20 @@ try {
     [void][IO.Directory]::CreateDirectory($work)
 
     if ($Mode -ne 'Ci') {
-        if ([string]::IsNullOrWhiteSpace($CaseId) -and [string]::IsNullOrWhiteSpace($Input)) {
+        if ([string]::IsNullOrWhiteSpace($CaseId) -and [string]::IsNullOrWhiteSpace($InputPath)) {
             throw '-CaseId or -Input is required'
         }
-        Invoke-Checked dotnet @('run', '--no-restore', '--project', $project, '--', $Mode.ToLowerInvariant(), '--case-id', $CaseId)
+        # Build once and invoke the compiled driver directly. `dotnet run`'
+        # nested implicit build/apphost spawn is pathologically slow when
+        # launched from PowerShell hosts, which made bounded Replay/Minimize
+        # invocations unusable as gates.
+        Invoke-Checked dotnet @('build', $project, '-c', 'Release', '--no-restore', '--nologo')
+        $driver = Join-Path $root 'tools/Signal.CANdy.Hardening/bin/Release/net8.0/Signal.CANdy.Hardening.dll'
+        Invoke-Checked dotnet @($driver, $Mode.ToLowerInvariant(), '--case-id', $CaseId)
         exit 0
     }
 
-    Invoke-Checked dotnet @('build', $project, '-c', 'Release', '--nologo')
+    Invoke-Checked dotnet @('build', $project, '-c', 'Release', '--no-restore', '--nologo')
     $driver = Join-Path $root 'tools/Signal.CANdy.Hardening/bin/Release/net8.0/Signal.CANdy.Hardening.dll'
     $pack = Join-Path $work 'deterministic.scorp'
     $summary = Join-Path $work 'properties.json'
