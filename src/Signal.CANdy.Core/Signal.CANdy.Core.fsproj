@@ -26,6 +26,7 @@
   <Compile Include="Errors.fs" />
   <Compile Include="Ir.fs" />
   <Compile Include="Pool.fs" />
+  <Compile Include="Wire.fs" />
   <Compile Include="Config.fs" />
   <Compile Include="Dbc.fs" />
   <Compile Include="Codegen.fs" />
