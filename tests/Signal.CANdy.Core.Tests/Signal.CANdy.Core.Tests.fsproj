@@ -11,6 +11,7 @@
     <Compile Include="DbcTests.fs" />
     <Compile Include="PoolTests.fs" />
     <Compile Include="WireTests.fs" />
+    <Compile Include="LinkedTests.fs" />
     <Compile Include="ConfigTests.fs" />
     <Compile Include="CodegenTests.fs" />
     <Compile Include="EdgeCaseTests.fs" />
