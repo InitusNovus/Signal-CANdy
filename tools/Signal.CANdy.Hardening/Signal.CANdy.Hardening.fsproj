@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>Signal.CANdy.Hardening</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Contract.fs" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Signal.CANdy.Core\Signal.CANdy.Core.fsproj" />
+  </ItemGroup>
+</Project>

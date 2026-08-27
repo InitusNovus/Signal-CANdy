@@ -1,0 +1,108 @@
+{
+  "format": "sc.build-budget/v1",
+  "scimg": {
+    "limits": {
+      "imageBytes": 1048576,
+      "rxMessages": 4096,
+      "rxPrograms": 8192,
+      "conversions": 1024,
+      "poolSlots": 8192,
+      "txMessages": 4096,
+      "txPrograms": 8192,
+      "txCounters": 4096,
+      "nestedMuxRecords": 8192,
+      "muxDepth": 4,
+      "rxCounters": 4096,
+      "coverageSpans": 16384,
+      "coverageSpansPerPlan": 2,
+      "symbolUtf8Bytes": 255,
+      "payloadBytes": 64,
+      "freshnessMs": 2147483647,
+      "runtimeStateBytesIlp32": 147472,
+      "runtimeScratchBytes": 64
+    },
+    "recordBytes": {
+      "header": 32,
+      "directory": 32,
+      "directoryEntry": 8,
+      "rxMessage": 8,
+      "program": 16,
+      "conversion": 24,
+      "footer": 4,
+      "extensionHeader": 40,
+      "nestedMux": 36,
+      "quality": 4,
+      "protectionHeader": 48,
+      "protectionPlan": 16,
+      "rxCounter": 16,
+      "coverageSpan": 4,
+      "txHeader": 32,
+      "txMessage": 24,
+      "txCounter": 24
+    }
+  },
+  "cRuntimeTypes": {
+    "ilp32": {
+      "sc_schema_t": 92,
+      "sc_frame_t": 72,
+      "sc_slot_t": 16,
+      "sc_runtime_state_t": 8,
+      "sc_tx_counter_state_t": 12,
+      "sc_tx_token_t": 20,
+      "sc_activation_descriptor_t": 120,
+      "sc_activation_target_t": 60,
+      "sc_activation_storage_t": 16,
+      "sc_activation_slot_t": 20,
+      "sc_activation_token_t": 24,
+      "sc_activation_view_t": 24,
+      "sc_activation_controller_t": 128
+    },
+    "pointer64": {
+      "sc_schema_t": 104,
+      "sc_frame_t": 72,
+      "sc_slot_t": 16,
+      "sc_runtime_state_t": 16,
+      "sc_tx_counter_state_t": 12,
+      "sc_tx_token_t": 32,
+      "sc_activation_descriptor_t": 128,
+      "sc_activation_target_t": 72,
+      "sc_activation_storage_t": 32,
+      "sc_activation_slot_t": 40,
+      "sc_activation_token_t": 24,
+      "sc_activation_view_t": 40,
+      "sc_activation_controller_t": 184
+    }
+  },
+  "cc1aActivation": {
+    "provenance": {
+      "siblingCommit": "d65073319446c40819bd8f1e85c09214978fc92f",
+      "toolchain": "arm-none-eabi-gcc 13.3.1",
+      "origin": "0x08008000",
+      "flashCapacityBytes": 94208,
+      "ramCapacityBytes": 131072,
+      "stackReservedBytes": 1024
+    },
+    "baseline": {
+      "binaryBytes": 68408,
+      "binarySha256": "09e4aad7bb88de29d36b83b0fd8351e5e2cb594c453e96c1ae25a1336f329f83",
+      "textBytes": 67284,
+      "dataBytes": 1116,
+      "bssBytes": 49192,
+      "flashLoadBytes": 68400,
+      "ramBytes": 50308,
+      "stackUsageEntries": 1047,
+      "maxStaticFrameBytes": 344,
+      "dynamicStackEntries": 0
+    },
+    "ceilings": {
+      "binaryBytes": 70456,
+      "textBytes": 69332,
+      "dataBytes": 1116,
+      "bssBytes": 49704,
+      "flashLoadBytes": 70448,
+      "ramBytes": 50820,
+      "maxStaticFrameBytes": 512,
+      "dynamicStackEntries": 0
+    }
+  }
+}

@@ -198,6 +198,52 @@ SC_LOCAL sc_status_t sc_validate_selector(const uint8_t *programs,
     return SC_OK;
 }
 
+SC_LOCAL int sc_is_valid_utf8(const uint8_t *bytes, uint16_t length)
+{
+    uint16_t cursor = 0u;
+    while (cursor < length) {
+        uint8_t first = bytes[cursor++];
+        uint8_t continuation;
+        if (first <= 0x7Fu) {
+            if (first == 0u) return 0;
+            continue;
+        }
+        if (first >= 0xC2u && first <= 0xDFu) {
+            if (cursor >= length) return 0;
+            continuation = bytes[cursor++];
+            if (continuation < 0x80u || continuation > 0xBFu) return 0;
+            continue;
+        }
+        if (first >= 0xE0u && first <= 0xEFu) {
+            uint8_t second;
+            if ((uint16_t)(length - cursor) < 2u) return 0;
+            second = bytes[cursor++];
+            continuation = bytes[cursor++];
+            if (continuation < 0x80u || continuation > 0xBFu ||
+                second < 0x80u || second > 0xBFu ||
+                (first == 0xE0u && second < 0xA0u) ||
+                (first == 0xEDu && second > 0x9Fu)) return 0;
+            continue;
+        }
+        if (first >= 0xF0u && first <= 0xF4u) {
+            uint8_t second;
+            uint8_t third;
+            if ((uint16_t)(length - cursor) < 3u) return 0;
+            second = bytes[cursor++];
+            third = bytes[cursor++];
+            continuation = bytes[cursor++];
+            if (second < 0x80u || second > 0xBFu ||
+                third < 0x80u || third > 0xBFu ||
+                continuation < 0x80u || continuation > 0xBFu ||
+                (first == 0xF0u && second < 0x90u) ||
+                (first == 0xF4u && second > 0x8Fu)) return 0;
+            continue;
+        }
+        return 0;
+    }
+    return 1;
+}
+
 SC_LOCAL sc_status_t sc_validate_symbols(const uint8_t *bytes,
                                          uint32_t offset, uint32_t size,
                                          uint16_t signal_count,
@@ -231,6 +277,9 @@ SC_LOCAL sc_status_t sc_validate_symbols(const uint8_t *bytes,
             if (bytes[cursor + j] == 0u) {
                 return SC_ERR_TABLE;
             }
+        }
+        if (!sc_is_valid_utf8(bytes + cursor, length)) {
+            return SC_ERR_TABLE;
         }
         cursor += length;
     }

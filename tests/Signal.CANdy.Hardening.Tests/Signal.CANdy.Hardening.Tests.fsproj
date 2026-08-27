@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <OutputType>Library</OutputType>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <GenerateProgramFile>false</GenerateProgramFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="TestSupport.fs" />
+    <Compile Include="ContractTests.fs" />
+    <Compile Include="PropertyGateTests.fs" />
+    <Compile Include="CrossOracleTests.fs" />
+    <Compile Include="ResourceGateTests.fs" />
+    <Compile Include="EntrypointGateTests.fs" />
+    <Compile Include="TestProgram.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.8.0" />
+    <PackageReference Include="xunit" Version="2.5.3" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="3.1.3">
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+      <PrivateAssets>all</PrivateAssets>
+    </PackageReference>
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Signal.CANdy.Core\Signal.CANdy.Core.fsproj" />
+    <ProjectReference Include="..\..\tools\Signal.CANdy.Hardening\Signal.CANdy.Hardening.fsproj" />
+  </ItemGroup>
+</Project>

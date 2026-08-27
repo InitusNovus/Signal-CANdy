@@ -172,3 +172,25 @@ jobs:
 
       - name: Check F# formatting (Fantomas)
         run: fantomas --check src/ tests/
+
+  hardening:
+    runs-on: ubuntu-latest
+    env:
+      SC_HARDENING_REQUIRE_SANITIZERS: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install Clang and verify PowerShell
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang
+          pwsh --version
+
+      - name: Run deterministic hardening gates
+        run: pwsh -NoProfile -File scripts/hardening.ps1 -Mode Ci

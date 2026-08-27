@@ -1,0 +1,23 @@
+{
+  "format": "sc.cc1a-build-receipt/v1",
+  "provenance": {
+    "siblingCommit": "d65073319446c40819bd8f1e85c09214978fc92f",
+    "toolchain": "arm-none-eabi-gcc 13.3.1",
+    "origin": "0x08008000",
+    "flashCapacityBytes": 94208,
+    "ramCapacityBytes": 131072,
+    "stackReservedBytes": 1024
+  },
+  "observed": {
+    "binaryBytes": 68408,
+    "binarySha256": "09e4aad7bb88de29d36b83b0fd8351e5e2cb594c453e96c1ae25a1336f329f83",
+    "textBytes": 67284,
+    "dataBytes": 1116,
+    "bssBytes": 49192,
+    "flashLoadBytes": 68400,
+    "ramBytes": 50308,
+    "stackUsageEntries": 1047,
+    "maxStaticFrameBytes": 344,
+    "dynamicStackEntries": 0
+  }
+}

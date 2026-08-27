@@ -1,0 +1,10 @@
+{
+  "format": "sc.scimg-regression/v1",
+  "id": "invalid-utf8-symbol",
+  "sourceCaseId": "legacy-rx/field/sym.name.malformedUtf8/0127/12ce69eb8462c1d1",
+  "sha256": "535530a73d6bd8be42686136ebbd5600fa88b2435b9f55200fac6a9856bfb273",
+  "expected": {
+    "fsharp": "reject:table",
+    "c": "reject:table"
+  }
+}
