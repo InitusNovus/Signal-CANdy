@@ -55,7 +55,11 @@ module ScimgQualityTests =
           QualityEntries =
             [ ({ FreshnessMs = 0u }: ImageQualityEntry)
               ({ FreshnessMs = 0u }: ImageQualityEntry)
-              ({ FreshnessMs = 200u }: ImageQualityEntry) ] }
+              ({ FreshnessMs = 200u }: ImageQualityEntry) ]
+          RxProtectionPlans = []
+          TxProtectionPlans = []
+          RxCounters = []
+          CoverageSpans = [] }
 
     let private bytesFixture () =
         match write qualityImage with
@@ -184,7 +188,11 @@ module ScimgQualityTests =
           TxCounters = []
           TxTemplates = [||]
           NestedMuxRecords = []
-          QualityEntries = [] }
+          QualityEntries = []
+          RxProtectionPlans = []
+          TxProtectionPlans = []
+          RxCounters = []
+          CoverageSpans = [] }
 
     let private txOnlyImage: RuntimeImage =
         { Messages = []
@@ -212,7 +220,11 @@ module ScimgQualityTests =
                 InitialValue = 0u } ]
           TxTemplates = Array.zeroCreate 8
           NestedMuxRecords = []
-          QualityEntries = [] }
+          QualityEntries = []
+          RxProtectionPlans = []
+          TxProtectionPlans = []
+          RxCounters = []
+          CoverageSpans = [] }
 
     [<Fact>]
     let ``Quality legacy RX bytes remain frozen when feature is absent`` () =

@@ -17,6 +17,27 @@ module Binding =
           WireSignalName: string
           Conversion: Conversion }
 
+    type CrcAlgorithm =
+        | Crc8SaeJ1850
+        | Crc16CcittFalse
+
+    type CrcBinding =
+        { WireSignalName: string
+          Algorithm: CrcAlgorithm
+          ByteStart: uint8
+          ByteEndInclusive: uint8
+          DataId: uint16 option }
+
+    type CounterBinding =
+        { WireSignalName: string
+          Modulus: uint32
+          Increment: uint32 }
+
+    type RxMessageBinding =
+        { MessageName: string
+          Crc: CrcBinding option
+          Counter: CounterBinding option }
+
     /// Explicit stateful counter profile for one transmitted message.
     type TxCounterBinding =
         { WireSignalName: string
@@ -24,15 +45,17 @@ module Binding =
           Increment: uint32
           InitialValue: uint32 }
 
-    /// Explicit logical identifier and optional counter for one transmitted message.
+    /// Explicit logical identifier and optional protection for one transmitted message.
     type TxMessageBinding =
         { MessageName: string
           LogicalMessageId: uint32
+          Crc: CrcBinding option
           Counter: TxCounterBinding option }
 
     /// Bindings are deliberately separate from both source models.
     type BindingSet =
         { Bindings: SignalBinding list
+          RxMessages: RxMessageBinding list
           TxMessages: TxMessageBinding list }
 
     /// Validate conversion contracts. Direction-aware duplicate checks happen in the linker.
@@ -54,20 +77,35 @@ module Binding =
         else
             Error conversionErrors
 
-    let private counterProfileError messageName (counter: TxCounterBinding) =
-        if counter.Modulus = 1u then
-            Some(InvalidValue(sprintf "TX message '%s' counter modulus must be zero or at least two." messageName))
-        elif counter.Increment = 0u then
-            Some(InvalidValue(sprintf "TX message '%s' counter increment must be non-zero." messageName))
-        elif counter.Modulus <> 0u && counter.Increment >= counter.Modulus then
-            Some(InvalidValue(sprintf "TX message '%s' counter increment must be less than modulus." messageName))
-        elif counter.Modulus <> 0u && counter.InitialValue >= counter.Modulus then
-            Some(InvalidValue(sprintf "TX message '%s' counter initial value must be less than modulus." messageName))
+    let private counterValuesError messageName modulus increment initialValue =
+        if modulus = 1u then
+            Some(InvalidValue(sprintf "Message '%s' counter modulus must be zero or at least two." messageName))
+        elif increment = 0u then
+            Some(InvalidValue(sprintf "Message '%s' counter increment must be non-zero." messageName))
+        elif modulus <> 0u && increment >= modulus then
+            Some(InvalidValue(sprintf "Message '%s' counter increment must be less than modulus." messageName))
+        elif modulus <> 0u && initialValue |> Option.exists (fun value -> value >= modulus) then
+            Some(InvalidValue(sprintf "Message '%s' counter initial value must be less than modulus." messageName))
         else
             None
 
+    let private counterProfileError messageName (counter: TxCounterBinding) =
+        counterValuesError messageName counter.Modulus counter.Increment (Some counter.InitialValue)
+
+    let private rxCounterProfileError messageName (counter: CounterBinding) =
+        counterValuesError messageName counter.Modulus counter.Increment None
+
     /// Validate message-level TX identities and counter profiles.
     let validateSet (bindingSet: BindingSet) : Result<BindingSet, ValidationError list> =
+        let duplicateRxErrors =
+            bindingSet.RxMessages
+            |> List.groupBy (fun message -> message.MessageName)
+            |> List.choose (fun (name, values) ->
+                if values.Length > 1 then
+                    Some(InvalidValue(sprintf "RX message '%s' is declared more than once." name))
+                else
+                    None)
+
         let duplicateMessageErrors =
             bindingSet.TxMessages
             |> List.groupBy (fun message -> message.MessageName)
@@ -87,8 +125,23 @@ module Binding =
                     None)
 
         let counterErrors =
-            bindingSet.TxMessages
-            |> List.choose (fun message -> message.Counter |> Option.bind (counterProfileError message.MessageName))
+            (bindingSet.TxMessages
+             |> List.choose (fun message -> message.Counter |> Option.bind (counterProfileError message.MessageName)))
+            @ (bindingSet.RxMessages
+               |> List.choose (fun message ->
+                   message.Counter |> Option.bind (rxCounterProfileError message.MessageName)))
+
+        let emptyRxErrors =
+            bindingSet.RxMessages
+            |> List.choose (fun message ->
+                if message.Crc.IsNone && message.Counter.IsNone then
+                    Some(
+                        InvalidValue(
+                            sprintf "RX message '%s' must declare CRC or counter protection." message.MessageName
+                        )
+                    )
+                else
+                    None)
 
         let bindingErrors =
             match validate bindingSet.Bindings with
@@ -96,7 +149,12 @@ module Binding =
             | Error errors -> errors
 
         let errors =
-            bindingErrors @ duplicateMessageErrors @ duplicateIdErrors @ counterErrors
+            bindingErrors
+            @ duplicateRxErrors
+            @ duplicateMessageErrors
+            @ duplicateIdErrors
+            @ counterErrors
+            @ emptyRxErrors
 
         if errors.IsEmpty then Ok bindingSet else Error errors
 
@@ -239,6 +297,47 @@ module Binding =
             return! parseArray "Binding set key 'bindings'" parseBinding value
         }
 
+    let private optionalUInt16 (context: string) (name: string) (properties: JsonProperty list) =
+        match tryProperty name properties with
+        | None -> Ok None
+        | Some value ->
+            match value.TryGetUInt16() with
+            | true, number -> Ok(Some number)
+            | false, _ -> Error(sprintf "%s key '%s' must be a uint16" context name)
+
+    let private parseCrc owner index (element: JsonElement) =
+        let context = sprintf "%s[%d].crc" owner index
+
+        result {
+            let! properties = objectProperties context element
+            do! ensureAllowedProperties context [ "wireSignal"; "algorithm"; "byteRange"; "dataId" ] properties
+            let! wireSignal = requiredString context "wireSignal" properties
+            let! algorithmName = requiredString context "algorithm" properties
+            let! rangeElement = requiredProperty context "byteRange" properties
+            let rangeContext = context + ".byteRange"
+            let! rangeProperties = objectProperties rangeContext rangeElement
+            do! ensureAllowedProperties rangeContext [ "start"; "end" ] rangeProperties
+            let! byteStart = requiredUInt32 rangeContext "start" rangeProperties
+            let! byteEnd = requiredUInt32 rangeContext "end" rangeProperties
+            let! dataId = optionalUInt16 context "dataId" properties
+
+            let! algorithm =
+                match algorithmName with
+                | "crc8-sae-j1850" -> Ok Crc8SaeJ1850
+                | "crc16-ccitt-false" -> Ok Crc16CcittFalse
+                | _ -> Error(sprintf "%s has unknown algorithm '%s'" context algorithmName)
+
+            if byteStart > 255u || byteEnd > 255u || byteStart > byteEnd then
+                return! Error(sprintf "%s byte range is invalid" context)
+            else
+                return
+                    { WireSignalName = wireSignal
+                      Algorithm = algorithm
+                      ByteStart = uint8 byteStart
+                      ByteEndInclusive = uint8 byteEnd
+                      DataId = dataId }
+        }
+
     let private parseCounter index (element: JsonElement) =
         let context = sprintf "txMessages[%d].counter" index
 
@@ -264,16 +363,71 @@ module Binding =
             | None -> return counter
         }
 
+    let private parseRxCounter index (element: JsonElement) =
+        let context = sprintf "rxMessages[%d].counter" index
+
+        result {
+            let! properties = objectProperties context element
+            do! ensureAllowedProperties context [ "wireSignal"; "modulus"; "increment" ] properties
+            let! wireSignal = requiredString context "wireSignal" properties
+            let! modulus = requiredUInt32 context "modulus" properties
+            let! increment = requiredUInt32 context "increment" properties
+
+            let counter =
+                { WireSignalName = wireSignal
+                  Modulus = modulus
+                  Increment = increment }
+
+            match rxCounterProfileError context counter with
+            | Some(InvalidValue details) -> return! Error details
+            | Some _ -> return! Error(sprintf "%s has an invalid profile" context)
+            | None -> return counter
+        }
+
+    let private parseRxMessage index (element: JsonElement) =
+        let context = sprintf "rxMessages[%d]" index
+
+        result {
+            let! properties = objectProperties context element
+            do! ensureAllowedProperties context [ "message"; "crc"; "counter" ] properties
+            let! message = requiredString context "message" properties
+
+            let! crc =
+                match tryProperty "crc" properties with
+                | None -> Ok None
+                | Some value -> parseCrc "rxMessages" index value |> Result.map Some
+
+            let! counter =
+                match tryProperty "counter" properties with
+                | None -> Ok None
+                | Some value -> parseRxCounter index value |> Result.map Some
+
+            return
+                { MessageName = message
+                  Crc = crc
+                  Counter = counter }
+        }
+
+    let private parseRxMessages (properties: JsonProperty list) =
+        match tryProperty "rxMessages" properties with
+        | None -> Ok []
+        | Some value -> parseArray "Binding set key 'rxMessages'" parseRxMessage value
+
     let private parseTxMessage index (element: JsonElement) =
         let context = sprintf "txMessages[%d]" index
 
         result {
             let! properties = objectProperties context element
 
-            do! ensureAllowedProperties context [ "message"; "logicalMessageId"; "counter" ] properties
+            do! ensureAllowedProperties context [ "message"; "logicalMessageId"; "crc"; "counter" ] properties
 
             let! message = requiredString context "message" properties
             let! logicalId = requiredUInt32 context "logicalMessageId" properties
+
+            let! crc =
+                match tryProperty "crc" properties with
+                | None -> Ok None
+                | Some value -> parseCrc "txMessages" index value |> Result.map Some
 
             let! counter =
                 match tryProperty "counter" properties with
@@ -283,6 +437,7 @@ module Binding =
             return
                 { MessageName = message
                   LogicalMessageId = logicalId
+                  Crc = crc
                   Counter = counter }
         }
 
@@ -303,17 +458,25 @@ module Binding =
             let parsed =
                 result {
                     let! properties = objectProperties "Binding set" document.RootElement
-                    do! ensureAllowedProperties "Binding set" [ "version"; "bindings"; "txMessages" ] properties
+
+                    do!
+                        ensureAllowedProperties
+                            "Binding set"
+                            [ "version"; "bindings"; "rxMessages"; "txMessages" ]
+                            properties
+
                     let! version = requiredString "Binding set" "version" properties
 
                     if version <> "1" then
                         return! Error(sprintf "Binding set has unsupported version '%s'" version)
                     else
                         let! bindings = parseBindings properties
+                        let! rxMessages = parseRxMessages properties
                         let! txMessages = parseTxMessages properties
 
                         return
                             { Bindings = bindings
+                              RxMessages = rxMessages
                               TxMessages = txMessages }
                 }
 

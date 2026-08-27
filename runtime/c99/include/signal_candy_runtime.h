@@ -10,6 +10,7 @@ extern "C" {
 
 #define SC_FRAME_EXTENDED UINT8_C(0x01)
 #define SC_FRAME_FD UINT8_C(0x02)
+#define SC_FEATURE_PROTECTION UINT16_C(0x0004)
 
 #define SC_SLOT_VALID UINT32_C(0x01)
 #define SC_SLOT_UPDATED UINT32_C(0x02)
@@ -36,7 +37,9 @@ typedef enum sc_status {
     SC_ERR_VALUE = -14,
     SC_ERR_BUSY = -15,
     SC_ERR_TOKEN = -16,
-    SC_ERR_TIME = -17
+    SC_ERR_TIME = -17,
+    SC_ERR_FRAME_CRC = -18,
+    SC_ERR_COUNTER = -19
 } sc_status_t;
 
 /** A normalized CAN/CAN-FD frame. */
@@ -97,10 +100,19 @@ sc_status_t sc_runtime_state_init(const sc_schema_t *schema,
 sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
                       sc_slot_t *pool, size_t pool_count);
 
+sc_status_t sc_decode_state(const sc_schema_t *schema,
+                            sc_runtime_state_t *state,
+                            const sc_frame_t *frame, sc_slot_t *pool,
+                            size_t pool_count);
+
 sc_status_t sc_decode_at(const sc_schema_t *schema,
                          sc_runtime_state_t *state, uint32_t now_ms,
                          const sc_frame_t *frame, sc_slot_t *pool,
                          size_t pool_count);
+
+sc_status_t sc_rx_counter_resync(const sc_schema_t *schema,
+                                 sc_runtime_state_t *state,
+                                 uint32_t encoded_can_id, uint8_t flags);
 
 sc_status_t sc_expire(const sc_schema_t *schema,
                       sc_runtime_state_t *state, uint32_t now_ms,

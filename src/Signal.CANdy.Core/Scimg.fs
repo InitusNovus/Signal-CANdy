@@ -50,6 +50,21 @@ module Scimg =
     [<Literal>]
     let private NestedMuxRecordSize = 36
 
+    [<Literal>]
+    let private ProtectionHeaderSize = 48
+
+    [<Literal>]
+    let private ProtectionPlanSize = 16
+
+    [<Literal>]
+    let private RxCounterSize = 16
+
+    [<Literal>]
+    let private CoverageSpanSize = 4
+
+    [<Literal>]
+    let private MaxCoverageSpans = 16384
+
     let private magic =
         [| 0x53uy; 0x43uy; 0x49uy; 0x4Duy; 0x47uy; 0x30uy; 0x31uy; 0uy |]
 
@@ -102,6 +117,27 @@ module Scimg =
 
     type ImageQualityEntry = { FreshnessMs: uint32 }
 
+    type ImageProtectionPlan =
+        { HasCrc: bool
+          HasCounter: bool
+          Algorithm: uint8
+          CrcWidthBytes: uint8
+          CrcBigEndian: bool
+          CrcStartBit: uint16
+          SpanIndex: uint16
+          SpanCount: uint8
+          DataId: uint16 option
+          CounterIndex: uint16 }
+
+    type ImageRxCounter =
+        { StartBit: uint16
+          LengthBits: uint16
+          BigEndian: bool
+          Modulus: uint32
+          Increment: uint32 }
+
+    type ImageCoverageSpan = { ByteOffset: uint8; ByteCount: uint8 }
+
     type RuntimeImage =
         { Messages: ImageMessage list
           Programs: ImageProgram list
@@ -114,7 +150,11 @@ module Scimg =
           TxCounters: ImageTxCounter list
           TxTemplates: byte array
           NestedMuxRecords: ImageNestedMuxRecord list
-          QualityEntries: ImageQualityEntry list }
+          QualityEntries: ImageQualityEntry list
+          RxProtectionPlans: ImageProtectionPlan list
+          TxProtectionPlans: ImageProtectionPlan list
+          RxCounters: ImageRxCounter list
+          CoverageSpans: ImageCoverageSpan list }
 
     let private identityConversion =
         { IsAffine = false
@@ -505,6 +545,103 @@ module Scimg =
                     else
                         []
 
+                let hasProtection =
+                    schema.Messages |> List.exists (fun message -> message.Protection.IsSome)
+                    || sortedTx |> List.exists (fun message -> message.Crc.IsSome)
+
+                let rxProtectionPlans = ResizeArray<ImageProtectionPlan>()
+                let txProtectionPlans = ResizeArray<ImageProtectionPlan>()
+                let rxCounters = ResizeArray<ImageRxCounter>()
+                let coverageSpans = ResizeArray<ImageCoverageSpan>()
+
+                let addProtectionPlan
+                    (crc: LinkedCrc option)
+                    (counter: (uint16 * uint16 * bool * uint32 * uint32) option)
+                    isTx
+                    =
+                    let spanIndex =
+                        if crc.IsSome then
+                            uint16 coverageSpans.Count
+                        else
+                            UInt16.MaxValue
+
+                    match crc with
+                    | Some value ->
+                        for span in value.CoverageSpans do
+                            coverageSpans.Add(
+                                { ByteOffset = span.ByteOffset
+                                  ByteCount = span.ByteCount }
+                            )
+                    | None -> ()
+
+                    let counterIndex =
+                        match counter with
+                        | None -> UInt16.MaxValue
+                        | Some(startBit, length, bigEndian, modulus, increment) when isTx ->
+                            sortedTx
+                            |> List.take (txProtectionPlans.Count + 1)
+                            |> List.sumBy (fun message -> if message.Counter.IsSome then 1 else 0)
+                            |> fun count -> uint16 (count - 1)
+                        | Some(startBit, length, bigEndian, modulus, increment) ->
+                            let index = uint16 rxCounters.Count
+
+                            rxCounters.Add(
+                                { StartBit = startBit
+                                  LengthBits = length
+                                  BigEndian = bigEndian
+                                  Modulus = modulus
+                                  Increment = increment }
+                            )
+
+                            index
+
+                    { HasCrc = crc.IsSome
+                      HasCounter = counter.IsSome
+                      Algorithm =
+                        crc
+                        |> Option.map (fun value ->
+                            if value.Algorithm = LinkedCrcAlgorithm.Crc8SaeJ1850 then
+                                1uy
+                            else
+                                2uy)
+                        |> Option.defaultValue 0uy
+                      CrcWidthBytes =
+                        crc
+                        |> Option.map (fun value -> uint8 (value.LengthBits / 8us))
+                        |> Option.defaultValue 0uy
+                      CrcBigEndian = crc |> Option.exists _.BigEndian
+                      CrcStartBit = crc |> Option.map _.StartBit |> Option.defaultValue UInt16.MaxValue
+                      SpanIndex = spanIndex
+                      SpanCount =
+                        crc
+                        |> Option.map (fun value -> uint8 value.CoverageSpans.Length)
+                        |> Option.defaultValue 0uy
+                      DataId = crc |> Option.bind _.DataId
+                      CounterIndex = counterIndex }
+
+                if hasProtection then
+                    schema.Messages
+                    |> List.sortBy (fun message -> encodedCanId message.Id message.IsExtended)
+                    |> List.iter (fun message ->
+                        let crc = message.Protection |> Option.bind _.Crc
+
+                        let counter =
+                            message.Protection
+                            |> Option.bind _.Counter
+                            |> Option.map (fun value ->
+                                value.StartBit, value.Length, value.ByteOrder = Big, value.Modulus, value.Increment)
+
+                        rxProtectionPlans.Add(addProtectionPlan crc counter false))
+
+                    sortedTx
+                    |> List.iter (fun message ->
+                        let counter =
+                            message.Counter
+                            |> Option.map (fun value ->
+                                value.StartBit, value.Length, value.ByteOrder = Big, value.Modulus, value.Increment)
+
+                        txProtectionPlans.Add(addProtectionPlan message.Crc counter true))
+
                 Ok
                     { Messages = messages |> Seq.toList
                       Programs = programs |> Seq.toList
@@ -517,7 +654,11 @@ module Scimg =
                       TxCounters = txCounters |> Seq.toList
                       TxTemplates = templates.ToArray()
                       NestedMuxRecords = nestedMuxRecords |> Seq.toList
-                      QualityEntries = qualityEntries }
+                      QualityEntries = qualityEntries
+                      RxProtectionPlans = rxProtectionPlans |> Seq.toList
+                      TxProtectionPlans = txProtectionPlans |> Seq.toList
+                      RxCounters = rxCounters |> Seq.toList
+                      CoverageSpans = coverageSpans |> Seq.toList }
 
     let private messageRangeErrors messages programCount allowEmpty =
         let mutable expectedIndex = 0
@@ -613,6 +754,131 @@ module Scimg =
         let rxPrograms = image.Programs |> List.toArray
         let txPrograms = image.TxPrograms |> List.toArray
         let hasRxq = not image.NestedMuxRecords.IsEmpty || not image.QualityEntries.IsEmpty
+
+        let protectionErrors =
+            [ let hasProtection =
+                  not image.RxProtectionPlans.IsEmpty || not image.TxProtectionPlans.IsEmpty
+
+              if hasProtection then
+                  if
+                      image.RxProtectionPlans.Length <> image.Messages.Length
+                      || image.TxProtectionPlans.Length <> image.TxMessages.Length
+                  then
+                      ImageTable
+              elif not image.RxCounters.IsEmpty || not image.CoverageSpans.IsEmpty then
+                  ImageTable
+
+              if image.RxCounters.Length > MaxMessages then
+                  ImageLimit "RX counter count exceeds 4096"
+
+              if image.CoverageSpans.Length > MaxCoverageSpans then
+                  ImageLimit "coverage span count exceeds 16384"
+
+              let mutable expectedRxCounter = 0
+              let mutable expectedSpan = 0
+              let allPlans = image.RxProtectionPlans @ image.TxProtectionPlans
+
+              for planIndex in 0 .. allPlans.Length - 1 do
+                  let plan = allPlans.[planIndex]
+
+                  if plan.HasCrc then
+                      let expectedWidth =
+                          if plan.Algorithm = 1uy then 1uy
+                          elif plan.Algorithm = 2uy then 2uy
+                          else 0uy
+
+                      if
+                          expectedWidth = 0uy
+                          || plan.CrcWidthBytes <> expectedWidth
+                          || plan.CrcStartBit = UInt16.MaxValue
+                          || plan.CrcStartBit % 8us <> 0us
+                          || plan.SpanCount < 1uy
+                          || plan.SpanCount > 2uy
+                          || int plan.SpanIndex <> expectedSpan
+                      then
+                          ImageTable
+
+                      expectedSpan <- expectedSpan + int plan.SpanCount
+
+                      if expectedSpan > image.CoverageSpans.Length then
+                          ImageTable
+                  elif
+                      plan.Algorithm <> 0uy
+                      || plan.CrcWidthBytes <> 0uy
+                      || plan.CrcBigEndian
+                      || plan.CrcStartBit <> UInt16.MaxValue
+                      || plan.SpanIndex <> UInt16.MaxValue
+                      || plan.SpanCount <> 0uy
+                      || plan.DataId.IsSome
+                  then
+                      ImageTable
+
+                  if plan.HasCounter then
+                      if planIndex < image.RxProtectionPlans.Length then
+                          if int plan.CounterIndex <> expectedRxCounter then
+                              ImageTable
+
+                          expectedRxCounter <- expectedRxCounter + 1
+                      else
+                          let txIndex = planIndex - image.RxProtectionPlans.Length
+
+                          if
+                              txIndex >= image.TxMessages.Length
+                              || plan.CounterIndex <> image.TxMessages.[txIndex].CounterIndex
+                          then
+                              ImageTable
+                  elif plan.CounterIndex <> UInt16.MaxValue then
+                      ImageTable
+
+              if
+                  expectedRxCounter <> image.RxCounters.Length
+                  || expectedSpan <> image.CoverageSpans.Length
+              then
+                  ImageTable
+
+              for span in image.CoverageSpans do
+                  if span.ByteCount = 0uy then
+                      ImageTable
+
+              for plan in allPlans do
+                  if
+                      plan.HasCrc
+                      && int plan.SpanIndex + int plan.SpanCount <= image.CoverageSpans.Length
+                  then
+                      let spans =
+                          image.CoverageSpans
+                          |> List.skip (int plan.SpanIndex)
+                          |> List.take (int plan.SpanCount)
+
+                      let mutable previousEnd = -1
+                      let crcByte = int plan.CrcStartBit / 8
+                      let crcEnd = crcByte + int plan.CrcWidthBytes
+
+                      for span in spans do
+                          let spanEnd = int span.ByteOffset + int span.ByteCount
+
+                          if
+                              int span.ByteOffset < previousEnd
+                              || spanEnd > 64
+                              || (int span.ByteOffset < crcEnd && spanEnd > crcByte)
+                          then
+                              ImageTable
+
+                          previousEnd <- spanEnd
+
+              for counter in image.RxCounters do
+                  if
+                      counter.LengthBits < 1us
+                      || counter.LengthBits > 32us
+                      || counter.Increment = 0u
+                      || counter.Modulus = 1u
+                      || (counter.Modulus = 0u && counter.LengthBits <> 32us)
+                      || (counter.Modulus <> 0u && counter.Increment >= counter.Modulus)
+                      || (counter.LengthBits < 32us
+                          && counter.Modulus <> 0u
+                          && uint64 counter.Modulus > (1UL <<< int counter.LengthBits))
+                  then
+                      ImageTable ]
 
         let nestedErrors =
             [ if image.NestedMuxRecords.Length > MaxPrograms then
@@ -773,6 +1039,7 @@ module Scimg =
 
           yield! conversionErrors
           yield! nestedErrors
+          yield! protectionErrors
           yield! messageRangeErrors image.Messages image.Programs.Length false
           yield! programErrors slotCount conversions.Length image.Programs
 
@@ -1008,6 +1275,11 @@ module Scimg =
             let symSize = symbols.Length
             let hasTx = not image.TxMessages.IsEmpty
             let hasRxq = not image.NestedMuxRecords.IsEmpty || not image.QualityEntries.IsEmpty
+
+            let hasProtection =
+                not image.RxProtectionPlans.IsEmpty || not image.TxProtectionPlans.IsEmpty
+
+            let hasExtension = hasRxq || hasProtection
             let legacyEnd = symOffset + symSize
 
             let txUnalignedSize =
@@ -1021,22 +1293,37 @@ module Scimg =
                     0
 
             let txSize = if hasTx then align4 txUnalignedSize else 0
-            let extensionOffset = if hasRxq then align4 legacyEnd else 0
+            let extensionOffset = if hasExtension then align4 legacyEnd else 0
             let nestedOffset = ExtensionHeaderSize
 
             let qualityOffset =
                 nestedOffset + image.NestedMuxRecords.Length * NestedMuxRecordSize
 
-            let embeddedTxOffset = qualityOffset + image.QualityEntries.Length * 4
-            let extensionSize = if hasRxq then embeddedTxOffset + txSize else 0
+            let profileOffset = qualityOffset + image.QualityEntries.Length * 4
+
+            let profileSize =
+                if hasProtection then
+                    ProtectionHeaderSize
+                    + image.RxProtectionPlans.Length * ProtectionPlanSize
+                    + image.TxProtectionPlans.Length * ProtectionPlanSize
+                    + image.RxCounters.Length * RxCounterSize
+                    + image.CoverageSpans.Length * CoverageSpanSize
+                else
+                    0
+
+            let embeddedTxOffset = profileOffset + profileSize
+            let extensionSize = if hasExtension then embeddedTxOffset + txSize else 0
 
             let txOffset =
-                if hasRxq && hasTx then extensionOffset + embeddedTxOffset
-                elif hasTx then align4 legacyEnd
-                else 0
+                if hasExtension && hasTx then
+                    extensionOffset + embeddedTxOffset
+                elif hasTx then
+                    align4 legacyEnd
+                else
+                    0
 
             let contentEnd =
-                if hasRxq then extensionOffset + extensionSize
+                if hasExtension then extensionOffset + extensionSize
                 elif hasTx then txOffset + txSize
                 else legacyEnd
 
@@ -1048,25 +1335,32 @@ module Scimg =
                 let bytes = Array.zeroCreate<byte> totalSize
                 Array.Copy(magic, bytes, magic.Length)
                 putU16 bytes 8 1us
-                putU16 bytes 10 ((if hasTx then 1us else 0us) ||| (if hasRxq then 2us else 0us))
+
+                putU16
+                    bytes
+                    10
+                    ((if hasTx then 1us else 0us)
+                     ||| (if hasRxq then 2us else 0us)
+                     ||| (if hasProtection then 4us else 0us))
+
                 putU32 bytes 12 (uint32 totalSize)
                 putU16 bytes 16 (uint16 image.Messages.Length)
                 putU16 bytes 18 (uint16 image.Programs.Length)
                 putU16 bytes 20 (uint16 image.Conversions.Length)
 
-                putU16 bytes 22 (if hasTx || hasRxq then image.PoolSlotCount else 0us)
+                putU16 bytes 22 (if hasTx || hasExtension then image.PoolSlotCount else 0us)
 
                 putU32
                     bytes
                     24
-                    (if hasRxq then uint32 extensionOffset
+                    (if hasExtension then uint32 extensionOffset
                      elif hasTx then uint32 txOffset
                      else 0u)
 
                 putU32
                     bytes
                     28
-                    (if hasRxq then uint32 extensionSize
+                    (if hasExtension then uint32 extensionSize
                      elif hasTx then uint32 txSize
                      else 0u)
 
@@ -1097,15 +1391,16 @@ module Scimg =
 
                 Array.Copy(symbols, 0, bytes, symOffset, symbols.Length)
 
-                if hasRxq then
+                if hasExtension then
                     putU32 bytes extensionOffset 0x31305845u
 
                     putU16
                         bytes
                         (extensionOffset + 4)
-                        (2us
+                        ((if hasRxq then 2us else 0us)
                          ||| (if image.NestedMuxRecords.IsEmpty then 0us else 1us)
-                         ||| (if hasTx then 4us else 0us))
+                         ||| (if hasTx then 4us else 0us)
+                         ||| (if hasProtection then 8us else 0us))
 
                     bytes.[extensionOffset + 6] <- 4uy
                     putU16 bytes (extensionOffset + 8) (uint16 image.NestedMuxRecords.Length)
@@ -1114,6 +1409,8 @@ module Scimg =
                     putU32 bytes (extensionOffset + 16) (uint32 qualityOffset)
                     putU32 bytes (extensionOffset + 20) (uint32 embeddedTxOffset)
                     putU32 bytes (extensionOffset + 24) (uint32 txSize)
+                    putU32 bytes (extensionOffset + 28) (if hasProtection then uint32 profileOffset else 0u)
+                    putU32 bytes (extensionOffset + 32) (uint32 profileSize)
 
                     image.NestedMuxRecords
                     |> List.iteri (fun index record ->
@@ -1137,6 +1434,65 @@ module Scimg =
                     image.QualityEntries
                     |> List.iteri (fun index entry ->
                         putU32 bytes (extensionOffset + qualityOffset + index * 4) entry.FreshnessMs)
+
+                    if hasProtection then
+                        let profile = extensionOffset + profileOffset
+                        let rxPlanOffset = ProtectionHeaderSize
+
+                        let txPlanOffset =
+                            rxPlanOffset + image.RxProtectionPlans.Length * ProtectionPlanSize
+
+                        let rxCounterOffset =
+                            txPlanOffset + image.TxProtectionPlans.Length * ProtectionPlanSize
+
+                        let spanOffset = rxCounterOffset + image.RxCounters.Length * RxCounterSize
+                        putU32 bytes profile 0x31305250u
+                        putU16 bytes (profile + 4) (uint16 image.RxProtectionPlans.Length)
+                        putU16 bytes (profile + 6) (uint16 image.TxProtectionPlans.Length)
+                        putU16 bytes (profile + 8) (uint16 image.RxCounters.Length)
+                        putU16 bytes (profile + 10) (uint16 image.CoverageSpans.Length)
+                        putU32 bytes (profile + 12) (uint32 rxPlanOffset)
+                        putU32 bytes (profile + 16) (uint32 txPlanOffset)
+                        putU32 bytes (profile + 20) (uint32 rxCounterOffset)
+                        putU32 bytes (profile + 24) (uint32 spanOffset)
+                        putU32 bytes (profile + 28) (uint32 profileSize)
+
+                        let writePlan offset (plan: ImageProtectionPlan) =
+                            bytes.[offset] <-
+                                (if plan.HasCrc then 1uy else 0uy) ||| (if plan.HasCounter then 2uy else 0uy)
+
+                            bytes.[offset + 1] <- plan.Algorithm
+                            bytes.[offset + 2] <- plan.CrcWidthBytes
+                            bytes.[offset + 3] <- if plan.CrcBigEndian then 1uy else 0uy
+                            putU16 bytes (offset + 4) plan.CrcStartBit
+                            putU16 bytes (offset + 6) plan.SpanIndex
+                            bytes.[offset + 8] <- plan.SpanCount
+                            bytes.[offset + 9] <- if plan.DataId.IsSome then 2uy else 0uy
+                            putU16 bytes (offset + 10) plan.CounterIndex
+                            putU16 bytes (offset + 12) (plan.DataId |> Option.defaultValue 0us)
+
+                        image.RxProtectionPlans
+                        |> List.iteri (fun index plan ->
+                            writePlan (profile + rxPlanOffset + index * ProtectionPlanSize) plan)
+
+                        image.TxProtectionPlans
+                        |> List.iteri (fun index plan ->
+                            writePlan (profile + txPlanOffset + index * ProtectionPlanSize) plan)
+
+                        image.RxCounters
+                        |> List.iteri (fun index counter ->
+                            let offset = profile + rxCounterOffset + index * RxCounterSize
+                            putU16 bytes offset counter.StartBit
+                            putU16 bytes (offset + 2) counter.LengthBits
+                            bytes.[offset + 4] <- if counter.BigEndian then 1uy else 0uy
+                            putU32 bytes (offset + 8) counter.Modulus
+                            putU32 bytes (offset + 12) counter.Increment)
+
+                        image.CoverageSpans
+                        |> List.iteri (fun index span ->
+                            let offset = profile + spanOffset + index * CoverageSpanSize
+                            bytes.[offset] <- span.ByteOffset
+                            bytes.[offset + 1] <- span.ByteCount)
 
                 if hasTx then
                     putU32 bytes txOffset 0x31305854u
@@ -1411,13 +1767,115 @@ module Scimg =
                 else
                     Ok(messages, programs, counters, bytes.[txOffset + templateOffset .. txOffset + templateEnd - 1])
 
-    let private parseExtension (bytes: byte array) offset size poolSlotCount programCount hasTx =
+    let private parseProtection (bytes: byte array) offset size (messageCount: int) (txMessages: ImageTxMessage list) =
+        if
+            size < ProtectionHeaderSize
+            || getU32 bytes offset <> 0x31305250u
+            || not (allZero bytes (offset + 32) 16)
+        then
+            Error[ImageTable]
+        else
+            let rxCount = int (getU16 bytes (offset + 4))
+            let txCount = int (getU16 bytes (offset + 6))
+            let counterCount = int (getU16 bytes (offset + 8))
+            let spanCount = int (getU16 bytes (offset + 10))
+            let rxOffset = int (getU32 bytes (offset + 12))
+            let txOffset = int (getU32 bytes (offset + 16))
+            let counterOffset = int (getU32 bytes (offset + 20))
+            let spanOffset = int (getU32 bytes (offset + 24))
+            let endOffset = int (getU32 bytes (offset + 28))
+            let expectedTx = ProtectionHeaderSize + rxCount * ProtectionPlanSize
+            let expectedCounter = expectedTx + txCount * ProtectionPlanSize
+            let expectedSpan = expectedCounter + counterCount * RxCounterSize
+            let expectedEnd = expectedSpan + spanCount * CoverageSpanSize
+
+            if
+                rxCount <> messageCount
+                || txCount <> txMessages.Length
+                || counterCount > MaxMessages
+                || spanCount > MaxCoverageSpans
+                || rxOffset <> ProtectionHeaderSize
+                || txOffset <> expectedTx
+                || counterOffset <> expectedCounter
+                || spanOffset <> expectedSpan
+                || endOffset <> expectedEnd
+                || endOffset <> size
+            then
+                Error[ImageTable]
+            else
+                let mutable failed = false
+
+                let parsePlan entry =
+                    let flags = bytes.[entry]
+                    let dataIdCount = bytes.[entry + 9]
+
+                    if
+                        flags > 3uy
+                        || bytes.[entry + 3] > 1uy
+                        || (dataIdCount <> 0uy && dataIdCount <> 2uy)
+                        || (dataIdCount = 0uy && getU16 bytes (entry + 12) <> 0us)
+                        || getU16 bytes (entry + 14) <> 0us
+                    then
+                        failed <- true
+
+                    { HasCrc = (flags &&& 1uy) <> 0uy
+                      HasCounter = (flags &&& 2uy) <> 0uy
+                      Algorithm = bytes.[entry + 1]
+                      CrcWidthBytes = bytes.[entry + 2]
+                      CrcBigEndian = bytes.[entry + 3] = 1uy
+                      CrcStartBit = getU16 bytes (entry + 4)
+                      SpanIndex = getU16 bytes (entry + 6)
+                      SpanCount = bytes.[entry + 8]
+                      DataId =
+                        if dataIdCount = 2uy then
+                            Some(getU16 bytes (entry + 12))
+                        else
+                            None
+                      CounterIndex = getU16 bytes (entry + 10) }
+
+                let rxPlans =
+                    [ for index in 0 .. rxCount - 1 -> parsePlan (offset + rxOffset + index * ProtectionPlanSize) ]
+
+                let txPlans =
+                    [ for index in 0 .. txCount - 1 -> parsePlan (offset + txOffset + index * ProtectionPlanSize) ]
+
+                let counters =
+                    [ for index in 0 .. counterCount - 1 do
+                          let entry = offset + counterOffset + index * RxCounterSize
+
+                          if bytes.[entry + 4] > 1uy || not (allZero bytes (entry + 5) 3) then
+                              failed <- true
+
+                          yield
+                              { StartBit = getU16 bytes entry
+                                LengthBits = getU16 bytes (entry + 2)
+                                BigEndian = bytes.[entry + 4] = 1uy
+                                Modulus = getU32 bytes (entry + 8)
+                                Increment = getU32 bytes (entry + 12) } ]
+
+                let spans =
+                    [ for index in 0 .. spanCount - 1 do
+                          let entry = offset + spanOffset + index * CoverageSpanSize
+
+                          if not (allZero bytes (entry + 2) 2) then
+                              failed <- true
+
+                          yield
+                              { ByteOffset = bytes.[entry]
+                                ByteCount = bytes.[entry + 1] } ]
+
+                if failed then
+                    Error[ImageTable]
+                else
+                    Ok(rxPlans, txPlans, counters, spans)
+
+    let private parseExtension (bytes: byte array) offset size poolSlotCount programCount hasTx hasRxq hasProtection =
         if size < ExtensionHeaderSize || getU32 bytes offset <> 0x31305845u then
             Error[ImageTable]
         elif
             bytes.[offset + 6] <> 4uy
             || bytes.[offset + 7] <> 0uy
-            || not (allZero bytes (offset + 28) 12)
+            || not (allZero bytes (offset + 36) 4)
         then
             Error[ImageTable]
         else
@@ -1428,20 +1886,28 @@ module Scimg =
             let qualityOffset = int (getU32 bytes (offset + 16))
             let txOffset = int (getU32 bytes (offset + 20))
             let txSize = int (getU32 bytes (offset + 24))
+            let profileOffset = int (getU32 bytes (offset + 28))
+            let profileSize = int (getU32 bytes (offset + 32))
 
             let expectedFlags =
-                2us ||| (if nestedCount > 0 then 1us else 0us) ||| (if hasTx then 4us else 0us)
+                (if hasRxq then 2us else 0us)
+                ||| (if nestedCount > 0 then 1us else 0us)
+                ||| (if hasTx then 4us else 0us)
+                ||| (if hasProtection then 8us else 0us)
 
             let expectedQuality = ExtensionHeaderSize + nestedCount * NestedMuxRecordSize
-            let expectedTx = expectedQuality + qualityCount * 4
+            let expectedProfile = expectedQuality + qualityCount * 4
+            let expectedTx = expectedProfile + profileSize
 
             if
-                (flags &&& ~~~7us) <> 0us
+                (flags &&& ~~~15us) <> 0us
                 || flags <> expectedFlags
                 || nestedCount > MaxPrograms
-                || qualityCount <> poolSlotCount
+                || qualityCount <> (if hasRxq then poolSlotCount else 0)
                 || nestedOffset <> ExtensionHeaderSize
                 || qualityOffset <> expectedQuality
+                || profileOffset <> (if hasProtection then expectedProfile else 0)
+                || profileSize <> (if hasProtection then txOffset - expectedProfile else 0)
                 || txOffset <> expectedTx
                 || txOffset > size
                 || txSize <> size - txOffset
@@ -1499,7 +1965,7 @@ module Scimg =
                 if failed then
                     Error[ImageTable]
                 else
-                    Ok(nested, quality, offset + txOffset, txSize)
+                    Ok(nested, quality, offset + profileOffset, profileSize, offset + txOffset, txSize)
 
     let read (bytes: byte array) : Result<RuntimeImage, ValidationError list> =
         if isNull bytes || bytes.Length < HeaderSize + DirectorySize + 4 then
@@ -1516,33 +1982,39 @@ module Scimg =
                 Error[ImageSize]
             elif totalSize > MaxImageSize then
                 Error[ImageLimit "total_size exceeds 1 MiB"]
-            elif (flags &&& ~~~3us) <> 0us then
+            elif (flags &&& ~~~7us) <> 0us then
                 Error[ImageFeature]
             else
                 let hasTx = (flags &&& 1us) <> 0us
                 let hasRxq = (flags &&& 2us) <> 0us
+                let hasProtection = (flags &&& 4us) <> 0us
+                let hasExtension = hasRxq || hasProtection
                 let messageCount = int (getU16 bytes 16)
                 let programCount = int (getU16 bytes 18)
                 let conversionCount = int (getU16 bytes 20)
 
                 let poolSlotCount =
-                    if hasTx || hasRxq then
+                    if hasTx || hasExtension then
                         int (getU16 bytes 22)
                     else
                         programCount
 
                 let containerOffset =
-                    if hasTx || hasRxq then
+                    if hasTx || hasExtension then
                         int (getU32 bytes 24)
                     else
                         totalSize - 4
 
-                let containerSize = if hasTx || hasRxq then int (getU32 bytes 28) else 0
+                let containerSize = if hasTx || hasExtension then int (getU32 bytes 28) else 0
                 let crcOffset = totalSize - 4
 
-                if not hasTx && not hasRxq && (getU16 bytes 22 <> 0us || not (allZero bytes 24 8)) then
+                if
+                    not hasTx
+                    && not hasExtension
+                    && (getU16 bytes 22 <> 0us || not (allZero bytes 24 8))
+                then
                     Error[ImageTable]
-                elif (hasTx || hasRxq) && poolSlotCount = 0 then
+                elif (hasTx || hasExtension) && poolSlotCount = 0 then
                     Error[ImageTable]
                 elif
                     messageCount > MaxMessages
@@ -1553,21 +2025,21 @@ module Scimg =
                     Error[ImageLimit "count exceeds v1 limits"]
                 elif conversionCount = 0 then
                     Error[ImageTable]
-                elif (hasTx || hasRxq) && containerOffset % 4 <> 0 then
+                elif (hasTx || hasExtension) && containerOffset % 4 <> 0 then
                     Error[ImageAlign]
                 elif
-                    (hasTx || hasRxq)
+                    (hasTx || hasExtension)
                     && (containerOffset < HeaderSize + DirectorySize
                         || containerOffset > crcOffset
                         || containerSize > crcOffset - containerOffset)
                 then
                     Error[ImageBounds]
-                elif hasRxq && containerOffset + containerSize <> crcOffset then
+                elif hasExtension && containerOffset + containerSize <> crcOffset then
                     Error[ImageBounds]
-                elif not hasRxq && hasTx && crcOffset - (containerOffset + containerSize) > 3 then
+                elif not hasExtension && hasTx && crcOffset - (containerOffset + containerSize) > 3 then
                     Error[ImageBounds]
                 elif
-                    not hasRxq
+                    not hasExtension
                     && hasTx
                     && not (
                         allZero bytes (containerOffset + containerSize) (crcOffset - containerOffset - containerSize)
@@ -1595,7 +2067,7 @@ module Scimg =
                                 | Error errors -> Error errors
                                 | Ok(signalNames, messageNames) ->
                                     let extensionResult =
-                                        if hasRxq then
+                                        if hasExtension then
                                             parseExtension
                                                 bytes
                                                 containerOffset
@@ -1603,12 +2075,14 @@ module Scimg =
                                                 poolSlotCount
                                                 programCount
                                                 hasTx
+                                                hasRxq
+                                                hasProtection
                                         else
-                                            Ok([], [], containerOffset, containerSize)
+                                            Ok([], [], containerOffset, 0, containerOffset, containerSize)
 
                                     match extensionResult with
                                     | Error errors -> Error errors
-                                    | Ok(nestedMuxRecords, qualityEntries, txOffset, txSize) ->
+                                    | Ok(nestedMuxRecords, qualityEntries, profileOffset, profileSize, txOffset, txSize) ->
                                         let txResult =
                                             if hasTx then
                                                 parseTx bytes txOffset txSize
@@ -1618,23 +2092,41 @@ module Scimg =
                                         match txResult with
                                         | Error errors -> Error errors
                                         | Ok(txMessages, txPrograms, txCounters, txTemplates) ->
-                                            let image =
-                                                { Messages = messages
-                                                  Programs = programs
-                                                  Conversions = conversions
-                                                  PoolSlotCount = uint16 poolSlotCount
-                                                  SignalNames = signalNames
-                                                  MessageNames = messageNames
-                                                  TxMessages = txMessages
-                                                  TxPrograms = txPrograms
-                                                  TxCounters = txCounters
-                                                  TxTemplates = txTemplates
-                                                  NestedMuxRecords = nestedMuxRecords
-                                                  QualityEntries = qualityEntries }
+                                            let protectionResult =
+                                                if hasProtection then
+                                                    parseProtection
+                                                        bytes
+                                                        profileOffset
+                                                        profileSize
+                                                        messageCount
+                                                        txMessages
+                                                else
+                                                    Ok([], [], [], [])
 
-                                            let errors = validateRuntimeImage image
+                                            match protectionResult with
+                                            | Error errors -> Error errors
+                                            | Ok(rxProtectionPlans, txProtectionPlans, rxCounters, coverageSpans) ->
+                                                let image =
+                                                    { Messages = messages
+                                                      Programs = programs
+                                                      Conversions = conversions
+                                                      PoolSlotCount = uint16 poolSlotCount
+                                                      SignalNames = signalNames
+                                                      MessageNames = messageNames
+                                                      TxMessages = txMessages
+                                                      TxPrograms = txPrograms
+                                                      TxCounters = txCounters
+                                                      TxTemplates = txTemplates
+                                                      NestedMuxRecords = nestedMuxRecords
+                                                      QualityEntries = qualityEntries
+                                                      RxProtectionPlans = rxProtectionPlans
+                                                      TxProtectionPlans = txProtectionPlans
+                                                      RxCounters = rxCounters
+                                                      CoverageSpans = coverageSpans }
 
-                                            if errors.IsEmpty then Ok image else Error errors
+                                                let errors = validateRuntimeImage image
+
+                                                if errors.IsEmpty then Ok image else Error errors
 
     let inspect (bytes: byte array) : Result<string, ValidationError list> =
         match read bytes with

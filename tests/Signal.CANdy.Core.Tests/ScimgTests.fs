@@ -90,6 +90,7 @@ module ScimgTests =
                 MessageName = "ExtendedFrame"
                 WireSignalName = "RawSigned"
                 Conversion = Identity } ]
+          RxMessages = []
           TxMessages = [] }
 
     let private linkedFixture () =
@@ -239,6 +240,7 @@ module ScimgTests =
                     MessageName = "MuxFrame"
                     WireSignalName = "Muxed"
                     Conversion = Identity } ]
+              RxMessages = []
               TxMessages = [] }
 
         match link branchPool branchWire branchBindings with

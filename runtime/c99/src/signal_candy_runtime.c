@@ -10,6 +10,7 @@
 #define SC_SCHEMA_TAG UINT32_C(0x53435231)
 #define SC_FEATURE_TX UINT16_C(0x0001)
 #define SC_FEATURE_RXQ UINT16_C(0x0002)
+#define SC_FEATURE_PROTECTION UINT16_C(0x0004)
 #define SC_EX_MAGIC UINT32_C(0x31305845)
 #define SC_EX_HEADER_SIZE UINT32_C(40)
 #define SC_NMX_SIZE UINT32_C(36)
@@ -18,6 +19,12 @@
 #define SC_TX_MESSAGE_SIZE UINT32_C(24)
 #define SC_PROGRAM_SIZE UINT32_C(16)
 #define SC_COUNTER_SIZE UINT32_C(24)
+#define SC_PR_MAGIC UINT32_C(0x31305250)
+#define SC_PR_HEADER_SIZE UINT32_C(48)
+#define SC_PR_PLAN_SIZE UINT32_C(16)
+#define SC_RX_COUNTER_SIZE UINT32_C(16)
+#define SC_SPAN_SIZE UINT32_C(4)
+#define SC_SPAN_LIMIT UINT16_C(16384)
 #define SC_LOCAL static
 
 struct sc_schema {
@@ -29,6 +36,9 @@ struct sc_schema {
     uint32_t extension_offset;
     uint32_t nested_offset;
     uint32_t quality_offset;
+    uint32_t protection_offset;
+    uint32_t rx_counter_offset;
+    uint32_t span_offset;
     uint32_t tx_offset;
     uint32_t tx_message_offset;
     uint32_t tx_program_offset;
@@ -41,9 +51,12 @@ struct sc_schema {
     uint16_t tx_message_count;
     uint16_t tx_program_count;
     uint16_t counter_count;
+    uint16_t rx_counter_count;
+    uint16_t span_count;
     uint16_t nested_count;
     uint8_t required_scratch;
     uint8_t has_rxq;
+    uint8_t has_protection;
     uint32_t tag;
 };
 
@@ -221,7 +234,7 @@ SC_LOCAL sc_status_t sc_validate_symbols(const uint8_t *bytes,
         }
         cursor += length;
     }
-    if (end - cursor > 3u || !sc_bytes_are_zero(bytes, cursor, end)) {
+    if (!sc_bytes_are_zero(bytes, cursor, end)) {
         return SC_ERR_TABLE;
     }
     return SC_OK;
@@ -255,10 +268,15 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     uint16_t tx_program_count = 0u;
     uint16_t counter_count = 0u;
     uint16_t nested_count = 0u;
+    uint16_t rx_counter_count = 0u;
+    uint16_t span_count = 0u;
     uint32_t extension_offset = 0u;
     uint32_t extension_size = 0u;
     uint32_t nested_offset = 0u;
     uint32_t quality_offset = 0u;
+    uint32_t protection_offset = 0u;
+    uint32_t rx_counter_offset = 0u;
+    uint32_t span_offset = 0u;
     uint32_t tx_offset = 0u;
     uint32_t tx_size = 0u;
     uint32_t tx_message_offset = 0u;
@@ -292,7 +310,8 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         return SC_ERR_VERSION;
     }
     feature_flags = sc_read_u16(bytes + 10);
-    if ((feature_flags & (uint16_t)~(SC_FEATURE_TX | SC_FEATURE_RXQ)) != 0u) {
+    if ((feature_flags & (uint16_t)~(SC_FEATURE_TX | SC_FEATURE_RXQ |
+                                    SC_FEATURE_PROTECTION)) != 0u) {
         return SC_ERR_FEATURE;
     }
 
@@ -309,7 +328,7 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         return conversion_count == 0u ? SC_ERR_TABLE : SC_ERR_LIMIT;
     }
 
-    if ((feature_flags & SC_FEATURE_RXQ) != 0u) {
+    if ((feature_flags & (SC_FEATURE_RXQ | SC_FEATURE_PROTECTION)) != 0u) {
         pool_slot_count = sc_read_u16(bytes + 22);
         extension_offset = sc_read_u32(bytes + 24);
         extension_size = sc_read_u32(bytes + 28);
@@ -390,19 +409,22 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         return SC_ERR_CRC;
     }
 
-    if ((feature_flags & SC_FEATURE_RXQ) != 0u) {
+    if ((feature_flags & (SC_FEATURE_RXQ | SC_FEATURE_PROTECTION)) != 0u) {
         const uint8_t *extension = bytes + extension_offset;
         uint16_t extension_flags;
         uint16_t quality_count;
         uint32_t relative_nested;
         uint32_t relative_quality;
         uint32_t relative_tx;
+        uint32_t relative_protection;
+        uint32_t protection_size;
+        uint32_t expected_protection;
         uint16_t expected_flags;
 
         if (extension_size < SC_EX_HEADER_SIZE ||
             sc_read_u32(extension) != SC_EX_MAGIC || extension[6] != 4u ||
             extension[7] != 0u ||
-            !sc_bytes_are_zero(extension, 28u, 40u)) {
+            !sc_bytes_are_zero(extension, 36u, 40u)) {
             return SC_ERR_TABLE;
         }
         extension_flags = sc_read_u16(extension + 4u);
@@ -412,22 +434,32 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         relative_quality = sc_read_u32(extension + 16u);
         relative_tx = sc_read_u32(extension + 20u);
         tx_size = sc_read_u32(extension + 24u);
-        expected_flags = (uint16_t)(2u | (nested_count != 0u ? 1u : 0u) |
-            ((feature_flags & SC_FEATURE_TX) != 0u ? 4u : 0u));
+        relative_protection = sc_read_u32(extension + 28u);
+        protection_size = sc_read_u32(extension + 32u);
+        expected_flags = (uint16_t)(((feature_flags & SC_FEATURE_RXQ) != 0u ? 2u : 0u) |
+            (nested_count != 0u ? 1u : 0u) |
+            ((feature_flags & SC_FEATURE_TX) != 0u ? 4u : 0u) |
+            ((feature_flags & SC_FEATURE_PROTECTION) != 0u ? 8u : 0u));
+        expected_protection = relative_quality + (uint32_t)quality_count * 4u;
 
         if (extension_flags != expected_flags ||
-            (extension_flags & (uint16_t)~7u) != 0u ||
-            nested_count > SC_SIGNAL_LIMIT || quality_count != pool_slot_count ||
+            (extension_flags & (uint16_t)~15u) != 0u ||
+            nested_count > SC_SIGNAL_LIMIT ||
+            quality_count != ((feature_flags & SC_FEATURE_RXQ) != 0u ? pool_slot_count : 0u) ||
             relative_nested != SC_EX_HEADER_SIZE ||
             relative_quality != SC_EX_HEADER_SIZE +
                 (uint32_t)nested_count * SC_NMX_SIZE ||
-            relative_tx != relative_quality + (uint32_t)quality_count * 4u ||
+            relative_protection != ((feature_flags & SC_FEATURE_PROTECTION) != 0u ? expected_protection : 0u) ||
+            relative_tx < expected_protection ||
+            protection_size != ((feature_flags & SC_FEATURE_PROTECTION) != 0u ? relative_tx - expected_protection : 0u) ||
+            relative_tx != expected_protection + protection_size ||
             relative_tx > extension_size || tx_size != extension_size - relative_tx ||
             (((feature_flags & SC_FEATURE_TX) != 0u) != (tx_size != 0u))) {
             return SC_ERR_TABLE;
         }
         nested_offset = extension_offset + relative_nested;
         quality_offset = extension_offset + relative_quality;
+        protection_offset = extension_offset + relative_protection;
         tx_offset = extension_offset + relative_tx;
 
         for (i = 0u; i < nested_count; ++i) {
@@ -526,6 +558,131 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
                 return SC_ERR_TABLE;
             }
         }
+
+        if ((feature_flags & SC_FEATURE_PROTECTION) != 0u) {
+            const uint8_t *profile = bytes + protection_offset;
+            uint16_t rx_plan_count;
+            uint16_t tx_plan_count;
+            uint32_t rx_plan_offset;
+            uint32_t tx_plan_offset;
+            uint32_t counter_relative;
+            uint32_t span_relative;
+            uint32_t end_relative;
+            uint32_t expected_span = 0u;
+            uint16_t expected_rx_counter = 0u;
+            uint32_t plan_count;
+            uint32_t p;
+
+            if (protection_size < SC_PR_HEADER_SIZE ||
+                sc_read_u32(profile) != SC_PR_MAGIC ||
+                !sc_bytes_are_zero(profile, 32u, 48u)) {
+                return SC_ERR_TABLE;
+            }
+            rx_plan_count = sc_read_u16(profile + 4u);
+            tx_plan_count = sc_read_u16(profile + 6u);
+            rx_counter_count = sc_read_u16(profile + 8u);
+            span_count = sc_read_u16(profile + 10u);
+            rx_plan_offset = sc_read_u32(profile + 12u);
+            tx_plan_offset = sc_read_u32(profile + 16u);
+            counter_relative = sc_read_u32(profile + 20u);
+            span_relative = sc_read_u32(profile + 24u);
+            end_relative = sc_read_u32(profile + 28u);
+            if (rx_plan_count != message_count ||
+                rx_counter_count > SC_MESSAGE_LIMIT ||
+                span_count > SC_SPAN_LIMIT ||
+                rx_plan_offset != SC_PR_HEADER_SIZE ||
+                tx_plan_offset != rx_plan_offset +
+                    (uint32_t)rx_plan_count * SC_PR_PLAN_SIZE ||
+                counter_relative != tx_plan_offset +
+                    (uint32_t)tx_plan_count * SC_PR_PLAN_SIZE ||
+                span_relative != counter_relative +
+                    (uint32_t)rx_counter_count * SC_RX_COUNTER_SIZE ||
+                end_relative != span_relative +
+                    (uint32_t)span_count * SC_SPAN_SIZE ||
+                end_relative != protection_size) {
+                return SC_ERR_TABLE;
+            }
+            rx_counter_offset = protection_offset + counter_relative;
+            span_offset = protection_offset + span_relative;
+            plan_count = (uint32_t)rx_plan_count + tx_plan_count;
+            for (p = 0u; p < plan_count; ++p) {
+                const uint8_t *plan = profile + SC_PR_HEADER_SIZE +
+                    p * SC_PR_PLAN_SIZE;
+                uint8_t plan_flags = plan[0];
+                int has_crc = (plan_flags & 1u) != 0u;
+                int has_counter = (plan_flags & 2u) != 0u;
+                if (plan_flags > 3u || plan[3] > 1u ||
+                    (plan[9] != 0u && plan[9] != 2u) ||
+                    (plan[9] == 0u && sc_read_u16(plan + 12u) != 0u) ||
+                    sc_read_u16(plan + 14u) != 0u) {
+                    return SC_ERR_TABLE;
+                }
+                if (has_crc) {
+                    uint8_t expected_width = plan[1] == 1u ? 1u :
+                        (plan[1] == 2u ? 2u : 0u);
+                    uint16_t first_span = sc_read_u16(plan + 6u);
+                    uint8_t count = plan[8];
+                    uint8_t s;
+                    uint16_t previous_end = 0u;
+                    uint16_t crc_byte = (uint16_t)(sc_read_u16(plan + 4u) / 8u);
+                    if (expected_width == 0u || plan[2] != expected_width ||
+                        sc_read_u16(plan + 4u) == UINT16_C(0xFFFF) ||
+                        (sc_read_u16(plan + 4u) & 7u) != 0u || count == 0u ||
+                        count > 2u || first_span != expected_span ||
+                        (uint32_t)first_span + count > span_count) {
+                        return SC_ERR_TABLE;
+                    }
+                    for (s = 0u; s < count; ++s) {
+                        const uint8_t *span = bytes + span_offset +
+                            (size_t)(first_span + s) * SC_SPAN_SIZE;
+                        uint16_t begin = span[0];
+                        uint16_t end = (uint16_t)(begin + span[1]);
+                        if (span[1] == 0u || !sc_bytes_are_zero(span, 2u, 4u) ||
+                            (s != 0u && begin < previous_end) || end > 64u ||
+                            (begin < (uint16_t)(crc_byte + expected_width) &&
+                             end > crc_byte)) {
+                            return SC_ERR_TABLE;
+                        }
+                        previous_end = end;
+                    }
+                    expected_span += count;
+                } else if (plan[1] != 0u || plan[2] != 0u || plan[3] != 0u ||
+                           sc_read_u16(plan + 4u) != UINT16_C(0xFFFF) ||
+                           sc_read_u16(plan + 6u) != UINT16_C(0xFFFF) ||
+                           plan[8] != 0u || plan[9] != 0u ||
+                           sc_read_u16(plan + 12u) != 0u) {
+                    return SC_ERR_TABLE;
+                }
+                if (p < rx_plan_count) {
+                    if (has_counter) {
+                        if (sc_read_u16(plan + 10u) != expected_rx_counter++) {
+                            return SC_ERR_TABLE;
+                        }
+                    } else if (sc_read_u16(plan + 10u) != UINT16_C(0xFFFF)) {
+                        return SC_ERR_TABLE;
+                    }
+                }
+            }
+            if (expected_span != span_count ||
+                expected_rx_counter != rx_counter_count) {
+                return SC_ERR_TABLE;
+            }
+            for (i = 0u; i < rx_counter_count; ++i) {
+                const uint8_t *counter = bytes + rx_counter_offset +
+                    (size_t)i * SC_RX_COUNTER_SIZE;
+                uint16_t length = sc_read_u16(counter + 2u);
+                uint32_t modulus = sc_read_u32(counter + 8u);
+                uint32_t increment = sc_read_u32(counter + 12u);
+                if (length == 0u || length > 32u || counter[4] > 1u ||
+                    !sc_bytes_are_zero(counter, 5u, 8u) || increment == 0u ||
+                    modulus == 1u || (modulus == 0u && length != 32u) ||
+                    (modulus != 0u && increment >= modulus) ||
+                    (length < 32u && modulus != 0u &&
+                     (uint64_t)modulus > (UINT64_C(1) << length))) {
+                    return SC_ERR_TABLE;
+                }
+            }
+        }
     }
 
     expected_program = 0u;
@@ -619,6 +776,10 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
             counter_count > SC_MESSAGE_LIMIT) {
             return SC_ERR_LIMIT;
         }
+        if ((feature_flags & SC_FEATURE_PROTECTION) != 0u &&
+            sc_read_u16(bytes + protection_offset + 6u) != tx_message_count) {
+            return SC_ERR_TABLE;
+        }
 
         tx_message_offset = sc_read_u32(bytes + tx_offset + 12u);
         tx_program_offset = sc_read_u32(bytes + tx_offset + 16u);
@@ -687,6 +848,33 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
             }
             if (count == 0u && counter_index == UINT16_C(0xFFFF)) {
                 return SC_ERR_TABLE;
+            }
+            if ((feature_flags & SC_FEATURE_PROTECTION) != 0u) {
+                const uint8_t *plan = bytes + protection_offset + SC_PR_HEADER_SIZE +
+                    (size_t)message_count * SC_PR_PLAN_SIZE +
+                    (size_t)i * SC_PR_PLAN_SIZE;
+                int plan_counter = (plan[0] & 2u) != 0u;
+                if (plan_counter != (counter_index != UINT16_C(0xFFFF)) ||
+                    (plan_counter && sc_read_u16(plan + 10u) != counter_index)) {
+                    return SC_ERR_TABLE;
+                }
+                if ((plan[0] & 1u) != 0u) {
+                    uint16_t crc_start = sc_read_u16(plan + 4u);
+                    uint16_t first_span = sc_read_u16(plan + 6u);
+                    uint8_t span_items = plan[8];
+                    uint8_t s;
+                    if ((uint32_t)crc_start + (uint32_t)plan[2] * 8u >
+                        (uint32_t)payload_length * 8u) {
+                        return SC_ERR_BOUNDS;
+                    }
+                    for (s = 0u; s < span_items; ++s) {
+                        const uint8_t *span = bytes + span_offset +
+                            (size_t)(first_span + s) * SC_SPAN_SIZE;
+                        if ((uint16_t)span[0] + span[1] > payload_length) {
+                            return SC_ERR_BOUNDS;
+                        }
+                    }
+                }
             }
             if (counter_index != UINT16_C(0xFFFF)) {
                 uint16_t owner_count = 0u;
@@ -801,6 +989,9 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     parsed.extension_offset = extension_offset;
     parsed.nested_offset = nested_offset;
     parsed.quality_offset = quality_offset;
+    parsed.protection_offset = protection_offset;
+    parsed.rx_counter_offset = rx_counter_offset;
+    parsed.span_offset = span_offset;
     parsed.tx_offset = tx_offset;
     parsed.tx_message_offset = tx_message_offset;
     parsed.tx_program_offset = tx_program_offset;
@@ -813,9 +1004,12 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     parsed.tx_message_count = tx_message_count;
     parsed.tx_program_count = tx_program_count;
     parsed.counter_count = counter_count;
+    parsed.rx_counter_count = rx_counter_count;
+    parsed.span_count = span_count;
     parsed.nested_count = nested_count;
     parsed.required_scratch = required_scratch;
     parsed.has_rxq = (feature_flags & SC_FEATURE_RXQ) != 0u;
+    parsed.has_protection = (feature_flags & SC_FEATURE_PROTECTION) != 0u;
     parsed.tag = SC_SCHEMA_TAG;
     *schema = parsed;
     return SC_OK;
@@ -842,17 +1036,29 @@ SC_LOCAL size_t sc_counter_state_end(const sc_schema_t *schema)
            (size_t)schema->counter_count * sizeof(sc_tx_counter_state_t);
 }
 
+SC_LOCAL size_t sc_rx_state_offset(const sc_schema_t *schema)
+{
+    size_t offset = sc_counter_state_end(schema);
+    if (schema->has_rxq != 0u) {
+        offset += 8u + (size_t)schema->pool_slot_count * 8u;
+    }
+    return offset;
+}
+
 size_t sc_schema_required_state_bytes(const sc_schema_t *schema)
 {
-    size_t counter_end;
+    size_t end;
     if (!sc_schema_is_open(schema)) {
         return 0u;
     }
-    counter_end = sc_counter_state_end(schema);
-    if (schema->has_rxq != 0u) {
-        return counter_end + 8u + (size_t)schema->pool_slot_count * 8u;
+    end = sc_rx_state_offset(schema);
+    if (schema->rx_counter_count != 0u) {
+        return end + (size_t)schema->rx_counter_count * 8u;
     }
-    return schema->counter_count == 0u ? 0u : counter_end;
+    if (schema->has_rxq != 0u || schema->counter_count != 0u) {
+        return end;
+    }
+    return 0u;
 }
 
 size_t sc_schema_required_scratch_bytes(const sc_schema_t *schema)
@@ -1039,6 +1245,90 @@ SC_LOCAL int sc_program_active(const sc_schema_t *schema,
     return 1;
 }
 
+SC_LOCAL uint8_t sc_crc8_step(uint8_t crc, uint8_t value)
+{
+    unsigned bit;
+    crc ^= value;
+    for (bit = 0u; bit < 8u; ++bit) {
+        crc = (uint8_t)((crc & UINT8_C(0x80)) != 0u
+            ? (uint8_t)(crc << 1) ^ UINT8_C(0x1D)
+            : (uint8_t)(crc << 1));
+    }
+    return crc;
+}
+
+SC_LOCAL uint16_t sc_crc16_step(uint16_t crc, uint8_t value)
+{
+    unsigned bit;
+    crc ^= (uint16_t)((uint16_t)value << 8);
+    for (bit = 0u; bit < 8u; ++bit) {
+        crc = (uint16_t)((crc & UINT16_C(0x8000)) != 0u
+            ? (uint16_t)(crc << 1) ^ UINT16_C(0x1021)
+            : (uint16_t)(crc << 1));
+    }
+    return crc;
+}
+
+SC_LOCAL sc_status_t sc_check_frame_crc(const sc_schema_t *schema,
+                                        const uint8_t *plan,
+                                        const sc_frame_t *frame)
+{
+    uint16_t first_span;
+    uint8_t span_items;
+    uint8_t algorithm;
+    uint16_t data_id;
+    uint64_t received;
+    uint8_t s;
+    uint8_t crc8 = UINT8_C(0xFF);
+    uint16_t crc16 = UINT16_C(0xFFFF);
+
+    if ((plan[0] & 1u) == 0u) {
+        return SC_OK;
+    }
+    if ((uint32_t)sc_read_u16(plan + 4u) + (uint32_t)plan[2] * 8u >
+        (uint32_t)frame->len * 8u) {
+        return SC_ERR_FRAME_CRC;
+    }
+    algorithm = plan[1];
+    data_id = sc_read_u16(plan + 12u);
+    if (plan[9] == 2u) {
+        crc8 = sc_crc8_step(crc8, (uint8_t)(data_id >> 8));
+        crc8 = sc_crc8_step(crc8, (uint8_t)data_id);
+        crc16 = sc_crc16_step(crc16, (uint8_t)(data_id >> 8));
+        crc16 = sc_crc16_step(crc16, (uint8_t)data_id);
+    }
+    first_span = sc_read_u16(plan + 6u);
+    span_items = plan[8];
+    for (s = 0u; s < span_items; ++s) {
+        const uint8_t *span = schema->image + schema->span_offset +
+            (size_t)(first_span + s) * SC_SPAN_SIZE;
+        uint16_t end = (uint16_t)span[0] + span[1];
+        uint16_t b;
+        if (end > frame->len) {
+            return SC_ERR_FRAME_CRC;
+        }
+        for (b = span[0]; b < end; ++b) {
+            crc8 = sc_crc8_step(crc8, frame->data[b]);
+            crc16 = sc_crc16_step(crc16, frame->data[b]);
+        }
+    }
+    received = sc_extract_bits(frame->data, sc_read_u16(plan + 4u),
+                               (uint16_t)plan[2] * 8u, plan[3]);
+    if (algorithm == 1u) {
+        return (uint8_t)received == (uint8_t)(crc8 ^ UINT8_C(0xFF))
+            ? SC_OK : SC_ERR_FRAME_CRC;
+    }
+    return (uint16_t)received == crc16 ? SC_OK : SC_ERR_FRAME_CRC;
+}
+
+SC_LOCAL uint8_t *sc_rx_counter_state(const sc_schema_t *schema,
+                                      sc_runtime_state_t *state,
+                                      uint16_t index)
+{
+    return (uint8_t *)(void *)state + sc_rx_state_offset(schema) +
+           (size_t)index * 8u;
+}
+
 SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
                                     sc_runtime_state_t *state,
                                     uint32_t now_ms, int timestamped,
@@ -1048,8 +1338,12 @@ SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
     const uint8_t *message = NULL;
     uint32_t wanted_id;
     uint16_t i;
+    uint16_t message_index = 0u;
     uint16_t program_count;
     uint16_t program_index;
+    uint16_t rx_counter_index = UINT16_C(0xFFFF);
+    uint32_t next_counter = 0u;
+    int update_counter = 0;
 
     if (schema == NULL || frame == NULL || pool == NULL) {
         return SC_ERR_NULL;
@@ -1063,15 +1357,8 @@ SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
     if (frame->len > 64u) {
         return SC_ERR_BOUNDS;
     }
-    if (timestamped != 0) {
-        sc_status_t status;
-        if (schema->has_rxq == 0u) {
-            return SC_ERR_FEATURE;
-        }
-        status = sc_accept_time(schema, state, now_ms);
-        if (status != SC_OK) {
-            return status;
-        }
+    if (timestamped != 0 && schema->has_rxq == 0u) {
+        return SC_ERR_FEATURE;
     }
 
     wanted_id = frame->id;
@@ -1084,6 +1371,7 @@ SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
         uint32_t candidate_id = sc_read_u32(candidate);
         if (candidate_id == wanted_id) {
             message = candidate;
+            message_index = i;
             break;
         }
         if (candidate_id > wanted_id) {
@@ -1092,6 +1380,62 @@ SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
     }
     if (message == NULL) {
         return SC_OK_NO_MATCH;
+    }
+
+    if (schema->has_protection != 0u) {
+        const uint8_t *plan = schema->image + schema->protection_offset +
+            SC_PR_HEADER_SIZE + (size_t)message_index * SC_PR_PLAN_SIZE;
+        sc_status_t crc_status = sc_check_frame_crc(schema, plan, frame);
+        if (crc_status != SC_OK) {
+            return crc_status;
+        }
+        if ((plan[0] & 2u) != 0u) {
+            const uint8_t *counter;
+            uint8_t *counter_state;
+            uint32_t expected;
+            uint32_t initialized;
+            uint32_t actual;
+            uint32_t modulus;
+            uint32_t increment;
+            if (state == NULL || state->schema != schema ||
+                state->counter_count != schema->counter_count) {
+                return SC_ERR_STATE;
+            }
+            rx_counter_index = sc_read_u16(plan + 10u);
+            counter = schema->image + schema->rx_counter_offset +
+                (size_t)rx_counter_index * SC_RX_COUNTER_SIZE;
+            counter_state = sc_rx_counter_state(schema, state,
+                                                rx_counter_index);
+            memcpy(&expected, counter_state, sizeof(expected));
+            memcpy(&initialized, counter_state + 4u, sizeof(initialized));
+            if ((uint32_t)sc_read_u16(counter) + sc_read_u16(counter + 2u) >
+                (uint32_t)frame->len * 8u) {
+                return SC_ERR_COUNTER;
+            }
+            actual = (uint32_t)sc_extract_bits(frame->data,
+                sc_read_u16(counter), sc_read_u16(counter + 2u), counter[4]);
+            if (initialized != 0u && actual != expected) {
+                return SC_ERR_COUNTER;
+            }
+            modulus = sc_read_u32(counter + 8u);
+            increment = sc_read_u32(counter + 12u);
+            next_counter = modulus == 0u ? actual + increment :
+                (uint32_t)(((uint64_t)actual + increment) % modulus);
+            update_counter = 1;
+        }
+    }
+    if (timestamped != 0) {
+        sc_status_t status = sc_accept_time(schema, state, now_ms);
+        if (status != SC_OK) {
+            return status;
+        }
+    }
+    if (update_counter != 0) {
+        uint8_t *counter_state = sc_rx_counter_state(schema, state,
+                                                     rx_counter_index);
+        uint32_t initialized = 1u;
+        memcpy(counter_state, &next_counter, sizeof(next_counter));
+        memcpy(counter_state + 4u, &initialized, sizeof(initialized));
     }
 
     program_count = sc_read_u16(message + 4);
@@ -1178,12 +1522,68 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
     return sc_decode_impl(schema, NULL, 0u, 0, frame, pool, pool_count);
 }
 
+sc_status_t sc_decode_state(const sc_schema_t *schema,
+                            sc_runtime_state_t *state,
+                            const sc_frame_t *frame, sc_slot_t *pool,
+                            size_t pool_count)
+{
+    return sc_decode_impl(schema, state, 0u, 0, frame, pool, pool_count);
+}
+
 sc_status_t sc_decode_at(const sc_schema_t *schema,
                          sc_runtime_state_t *state, uint32_t now_ms,
                          const sc_frame_t *frame, sc_slot_t *pool,
                          size_t pool_count)
 {
     return sc_decode_impl(schema, state, now_ms, 1, frame, pool, pool_count);
+}
+
+sc_status_t sc_rx_counter_resync(const sc_schema_t *schema,
+                                 sc_runtime_state_t *state,
+                                 uint32_t encoded_can_id, uint8_t flags)
+{
+    uint32_t wanted;
+    uint16_t i;
+    if (schema == NULL) {
+        return SC_ERR_NULL;
+    }
+    if (!sc_schema_is_open(schema) || state == NULL ||
+        state->schema != schema || state->counter_count != schema->counter_count) {
+        return SC_ERR_STATE;
+    }
+    if ((flags & (uint8_t)~SC_FRAME_EXTENDED) != 0u) {
+        return SC_ERR_VALUE;
+    }
+    wanted = encoded_can_id | ((flags & SC_FRAME_EXTENDED) != 0u
+        ? UINT32_C(0x80000000) : 0u);
+    for (i = 0u; i < schema->message_count; ++i) {
+        const uint8_t *message = schema->image + schema->msg_offset +
+            (size_t)i * 8u;
+        uint32_t candidate = sc_read_u32(message);
+        if (candidate == wanted) {
+            const uint8_t *plan;
+            uint16_t counter_index;
+            uint8_t *counter_state;
+            uint32_t zero = 0u;
+            if (schema->has_protection == 0u) {
+                return SC_OK_NO_MATCH;
+            }
+            plan = schema->image + schema->protection_offset +
+                SC_PR_HEADER_SIZE + (size_t)i * SC_PR_PLAN_SIZE;
+            if ((plan[0] & 2u) == 0u) {
+                return SC_OK_NO_MATCH;
+            }
+            counter_index = sc_read_u16(plan + 10u);
+            counter_state = sc_rx_counter_state(schema, state, counter_index);
+            memcpy(counter_state, &zero, sizeof(zero));
+            memcpy(counter_state + 4u, &zero, sizeof(zero));
+            return SC_OK;
+        }
+        if (candidate > wanted) {
+            break;
+        }
+    }
+    return SC_OK_NO_MATCH;
 }
 
 sc_status_t sc_expire(const sc_schema_t *schema,
@@ -1292,6 +1692,47 @@ SC_LOCAL void sc_insert_bits(uint8_t *data, uint16_t start_bit,
             data[bit_index / 8u] &= (uint8_t)~mask;
         }
     }
+}
+
+SC_LOCAL sc_status_t sc_insert_frame_crc(const sc_schema_t *schema,
+                                         const uint8_t *plan,
+                                         uint8_t *payload,
+                                         uint8_t payload_length)
+{
+    uint16_t first_span;
+    uint8_t span_items;
+    uint16_t data_id = sc_read_u16(plan + 12u);
+    uint8_t crc8 = UINT8_C(0xFF);
+    uint16_t crc16 = UINT16_C(0xFFFF);
+    uint8_t s;
+    if ((plan[0] & 1u) == 0u) {
+        return SC_OK;
+    }
+    if (plan[9] == 2u) {
+        crc8 = sc_crc8_step(crc8, (uint8_t)(data_id >> 8));
+        crc8 = sc_crc8_step(crc8, (uint8_t)data_id);
+        crc16 = sc_crc16_step(crc16, (uint8_t)(data_id >> 8));
+        crc16 = sc_crc16_step(crc16, (uint8_t)data_id);
+    }
+    first_span = sc_read_u16(plan + 6u);
+    span_items = plan[8];
+    for (s = 0u; s < span_items; ++s) {
+        const uint8_t *span = schema->image + schema->span_offset +
+            (size_t)(first_span + s) * SC_SPAN_SIZE;
+        uint16_t end = (uint16_t)span[0] + span[1];
+        uint16_t b;
+        if (end > payload_length) {
+            return SC_ERR_BOUNDS;
+        }
+        for (b = span[0]; b < end; ++b) {
+            crc8 = sc_crc8_step(crc8, payload[b]);
+            crc16 = sc_crc16_step(crc16, payload[b]);
+        }
+    }
+    sc_insert_bits(payload, sc_read_u16(plan + 4u),
+                   (uint16_t)plan[2] * 8u, plan[3],
+                   plan[1] == 1u ? (uint8_t)(crc8 ^ UINT8_C(0xFF)) : crc16);
+    return SC_OK;
 }
 
 SC_LOCAL sc_status_t sc_encode_program_raw(const sc_schema_t *schema,
@@ -1417,6 +1858,7 @@ sc_status_t sc_encode_prepare(const sc_schema_t *schema,
     uint8_t *work;
     sc_frame_t prepared;
     uint16_t i;
+    uint16_t tx_message_index = 0u;
 
     if (schema == NULL || pool == NULL || frame == NULL || token == NULL) {
         return SC_ERR_NULL;
@@ -1430,6 +1872,7 @@ sc_status_t sc_encode_prepare(const sc_schema_t *schema,
         uint32_t id = sc_read_u32(candidate);
         if (id == logical_message_id) {
             message = candidate;
+            tx_message_index = i;
             break;
         }
         if (id > logical_message_id) {
@@ -1512,6 +1955,16 @@ sc_status_t sc_encode_prepare(const sc_schema_t *schema,
     if (counter != NULL) {
         sc_insert_bits(work, sc_read_u16(counter), sc_read_u16(counter + 2),
                        counter[4], counter_value);
+    }
+    if (schema->has_protection != 0u) {
+        const uint8_t *plan = schema->image + schema->protection_offset +
+            SC_PR_HEADER_SIZE + (size_t)schema->message_count * SC_PR_PLAN_SIZE +
+            (size_t)tx_message_index * SC_PR_PLAN_SIZE;
+        sc_status_t status = sc_insert_frame_crc(schema, plan, work,
+                                                 payload_length);
+        if (status != SC_OK) {
+            return status;
+        }
     }
 
     memset(&prepared, 0, sizeof(prepared));

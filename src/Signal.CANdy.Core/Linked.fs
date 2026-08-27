@@ -29,13 +29,42 @@ module Linked =
           IsMuxSelector: bool
           MuxPath: LinkedMuxPredicate list }
 
+    type CoverageSpan = { ByteOffset: uint8; ByteCount: uint8 }
+
+    [<RequireQualifiedAccess>]
+    type LinkedCrcAlgorithm =
+        | Crc8SaeJ1850
+        | Crc16CcittFalse
+
+    type LinkedCrc =
+        { WireSignalName: string
+          Algorithm: LinkedCrcAlgorithm
+          StartBit: uint16
+          LengthBits: uint16
+          BigEndian: bool
+          CoverageSpans: CoverageSpan list
+          DataId: uint16 option }
+
+    type LinkedRxCounter =
+        { WireSignalName: string
+          StartBit: uint16
+          Length: uint16
+          ByteOrder: ByteOrder
+          Modulus: uint32
+          Increment: uint32 }
+
+    type LinkedProtection =
+        { Crc: LinkedCrc option
+          Counter: LinkedRxCounter option }
+
     /// A linked receive message with all source names resolved.
     type LinkedMessage =
         { Name: string
           Id: uint32
           IsExtended: bool
           Length: uint16
-          Plans: DecodePlan list }
+          Plans: DecodePlan list
+          Protection: LinkedProtection option }
 
     /// Stable pool ABI metadata in pool-definition order.
     type PoolSlot =
@@ -99,6 +128,7 @@ module Linked =
           IsExtended: bool
           Length: uint16
           Plans: EncodePlan list
+          Crc: LinkedCrc option
           Counter: LinkedTxCounter option }
 
     /// Runtime-image linker input after references are resolved.
@@ -483,6 +513,142 @@ module Linked =
                               right.WireSignalName
                       ) ]
 
+    let private profileFieldError kind (signal: WireSignal) maxLength =
+        if signal.IsSigned then
+            Some(InvalidValue(sprintf "%s signal '%s' must be unsigned." kind signal.Name))
+        elif signal.Mux <> Unconditional then
+            Some(InvalidValue(sprintf "%s signal '%s' must be unconditional." kind signal.Name))
+        elif signal.Factor <> 1.0 || signal.Offset <> 0.0 then
+            Some(InvalidValue(sprintf "%s signal '%s' must use identity scaling." kind signal.Name))
+        elif signal.LengthBits < 1us || signal.LengthBits > maxLength then
+            Some(InvalidValue(sprintf "%s signal '%s' has an invalid width." kind signal.Name))
+        else
+            None
+
+    let private resolveCrc (wireMessage: WireMessage) (bindings: SignalBinding list) plans (profile: CrcBinding) =
+        match findWireSignal wireMessage profile.WireSignalName with
+        | None ->
+            Error(
+                InvalidValue(
+                    sprintf "CRC signal '%s' was not found in message '%s'." profile.WireSignalName wireMessage.Name
+                )
+            )
+        | Some signal ->
+            let width =
+                if profile.Algorithm = Binding.Crc8SaeJ1850 then
+                    8us
+                else
+                    16us
+
+            let first = uint32 profile.ByteStart
+            let last = uint32 profile.ByteEndInclusive
+            let crcByte = uint32 signal.StartBit / 8u
+            let crcBytes = uint32 signal.LengthBits / 8u
+
+            let poolBound =
+                bindings
+                |> List.exists (fun binding ->
+                    binding.MessageName = wireMessage.Name && binding.WireSignalName = signal.Name)
+
+            let overlaps =
+                plans
+                |> List.exists (fun (start, length) -> rangesOverlap signal.StartBit signal.LengthBits start length)
+
+            match profileFieldError "CRC" signal 16us with
+            | Some error -> Error error
+            | None when signal.LengthBits <> width || signal.StartBit % 8us <> 0us ->
+                Error(
+                    InvalidValue(sprintf "CRC signal '%s' width or alignment does not match its algorithm." signal.Name)
+                )
+            | None when first > last || last >= uint32 wireMessage.LengthBytes ->
+                Error(InvalidValue(sprintf "CRC byte range for '%s' is outside the payload." signal.Name))
+            | None when crcByte < first || crcByte + crcBytes - 1u > last ->
+                Error(InvalidValue(sprintf "CRC signal '%s' must be inside its byte range." signal.Name))
+            | None when poolBound || overlaps ->
+                Error(InvalidValue(sprintf "CRC signal '%s' overlaps an ordinary plan." signal.Name))
+            | None ->
+                let spans: CoverageSpan list =
+                    [ if crcByte > first then
+                          yield
+                              { ByteOffset = uint8 first
+                                ByteCount = uint8 (crcByte - first) }
+                      let after = crcByte + crcBytes
+
+                      if after <= last then
+                          yield
+                              { ByteOffset = uint8 after
+                                ByteCount = uint8 (last - after + 1u) } ]
+
+                Ok(
+                    { WireSignalName = signal.Name
+                      Algorithm =
+                        (if profile.Algorithm = Binding.Crc8SaeJ1850 then
+                             LinkedCrcAlgorithm.Crc8SaeJ1850
+                         else
+                             LinkedCrcAlgorithm.Crc16CcittFalse)
+                      StartBit = signal.StartBit
+                      LengthBits = signal.LengthBits
+                      BigEndian = signal.ByteOrder = Big
+                      CoverageSpans = spans
+                      DataId = profile.DataId }
+                    : LinkedCrc
+                )
+
+    let private resolveRxCounter
+        (wireMessage: WireMessage)
+        (bindings: SignalBinding list)
+        plans
+        (counter: CounterBinding)
+        =
+        match findWireSignal wireMessage counter.WireSignalName with
+        | None ->
+            Error(
+                InvalidValue(
+                    sprintf "Counter signal '%s' was not found in message '%s'." counter.WireSignalName wireMessage.Name
+                )
+            )
+        | Some signal ->
+            let poolBound =
+                bindings
+                |> List.exists (fun binding ->
+                    binding.MessageName = wireMessage.Name && binding.WireSignalName = signal.Name)
+
+            let overlaps =
+                plans
+                |> List.exists (fun (start, length) -> rangesOverlap signal.StartBit signal.LengthBits start length)
+
+            let fits =
+                counter.Modulus = 0u && signal.LengthBits = 32us
+                || counter.Modulus <> 0u
+                   && (signal.LengthBits = 32us
+                       || uint64 counter.Modulus <= (1UL <<< int signal.LengthBits))
+
+            match profileFieldError "Counter" signal 32us with
+            | Some error -> Error error
+            | None when poolBound || overlaps ->
+                Error(InvalidValue(sprintf "Counter signal '%s' overlaps an ordinary plan." signal.Name))
+            | None when not fits ->
+                Error(InvalidValue(sprintf "Counter profile for '%s' does not fit its wire width." signal.Name))
+            | None ->
+                Ok
+                    { WireSignalName = signal.Name
+                      StartBit = signal.StartBit
+                      Length = signal.LengthBits
+                      ByteOrder = signal.ByteOrder
+                      Modulus = counter.Modulus
+                      Increment = counter.Increment }
+
+    let private counterCovered (crc: LinkedCrc) startBit length =
+        let firstByte = uint32 startBit / 8u
+        let lastByte = (uint32 startBit + uint32 length - 1u) / 8u
+
+        [ firstByte..lastByte ]
+        |> List.forall (fun byte ->
+            crc.CoverageSpans
+            |> List.exists (fun span ->
+                byte >= uint32 span.ByteOffset
+                && byte < uint32 span.ByteOffset + uint32 span.ByteCount))
+
     let private resolveCounter
         (wireMessage: WireMessage)
         (bindings: SignalBinding list)
@@ -653,15 +819,46 @@ module Linked =
 
                     match resolveDecodeMux message.Name (entries |> List.map snd) with
                     | Ok plans ->
+                        let declaration =
+                            bindingSet.RxMessages
+                            |> List.tryFind (fun declaration -> declaration.MessageName = message.Name)
+
+                        let ranges = plans |> List.map (fun plan -> plan.StartBit, plan.Length)
+
+                        let crc, crcErrors =
+                            match declaration |> Option.bind _.Crc with
+                            | None -> None, []
+                            | Some profile ->
+                                match resolveCrc message bindingSet.Bindings ranges profile with
+                                | Ok value -> Some value, []
+                                | Error error -> None, [ error ]
+
+                        let counter, counterErrors =
+                            match declaration |> Option.bind _.Counter with
+                            | None -> None, []
+                            | Some profile ->
+                                match resolveRxCounter message bindingSet.Bindings ranges profile with
+                                | Ok value -> Some value, []
+                                | Error error -> None, [ error ]
+
+                        let coverageErrors =
+                            match crc, counter with
+                            | Some crc, Some counter when not (counterCovered crc counter.StartBit counter.Length) ->
+                                [ InvalidValue(
+                                      sprintf "Counter signal '%s' is outside CRC coverage." counter.WireSignalName
+                                  ) ]
+                            | _ -> []
+
                         Some(
                             { Name = message.Name
                               Id = message.CanId
                               IsExtended = message.IsExtended
                               Length = message.LengthBytes
-                              Plans = plans }
+                              Plans = plans
+                              Protection = declaration |> Option.map (fun _ -> { Crc = crc; Counter = counter }) }
                             : LinkedMessage
                         ),
-                        []
+                        crcErrors @ counterErrors @ coverageErrors
                     | Error errors -> None, errors)
                 |> List.unzip
 
@@ -690,15 +887,39 @@ module Linked =
                                 | Ok value -> Some value, []
                                 | Error error -> None, [ error ]
 
+                        let ranges = resolvedPlans |> List.map (fun plan -> plan.StartBit, plan.Length)
+
+                        let crc, crcErrors =
+                            match declaration.Crc with
+                            | None -> None, []
+                            | Some profile ->
+                                match resolveCrc message bindingSet.Bindings ranges profile with
+                                | Ok value -> Some value, []
+                                | Error error -> None, [ error ]
+
+                        let coverageErrors =
+                            match crc, counter with
+                            | Some crc, Some counter when not (counterCovered crc counter.StartBit counter.Length) ->
+                                [ InvalidValue(
+                                      sprintf "Counter signal '%s' is outside CRC coverage." counter.WireSignalName
+                                  ) ]
+                            | _ -> []
+
                         let emptyErrors =
-                            if resolvedPlans.IsEmpty && counter.IsNone then
-                                [ InvalidValue(sprintf "TX message '%s' has no signal or counter." message.Name) ]
+                            if resolvedPlans.IsEmpty && counter.IsNone && crc.IsNone then
+                                [ InvalidValue(sprintf "TX message '%s' has no signal, counter, or CRC." message.Name) ]
                             else
                                 []
 
                         let overlapErrors = txPlanOverlapErrors message.Name resolvedPlans
 
-                        let errors = muxErrors @ counterErrors @ emptyErrors @ overlapErrors
+                        let errors =
+                            muxErrors
+                            @ counterErrors
+                            @ crcErrors
+                            @ coverageErrors
+                            @ emptyErrors
+                            @ overlapErrors
 
                         if errors.IsEmpty then
                             Some
@@ -708,14 +929,31 @@ module Linked =
                                   IsExtended = message.IsExtended
                                   Length = message.LengthBytes
                                   Plans = resolvedPlans
+                                  Crc = crc
                                   Counter = counter },
                             []
                         else
                             None, errors)
                 |> List.unzip
 
+            let rxDeclarationErrors =
+                bindingSet.RxMessages
+                |> List.choose (fun declaration ->
+                    if
+                        rxEntries
+                        |> List.exists (fun (message, _) -> message.Name = declaration.MessageName)
+                    then
+                        None
+                    else
+                        Some(
+                            InvalidValue(
+                                sprintf "RX message '%s' has no ordinary bound signal." declaration.MessageName
+                            )
+                        ))
+
             let errors =
                 resolutionErrors
+                @ rxDeclarationErrors
                 @ duplicateRxErrors
                 @ freshnessWriterErrors
                 @ duplicateTxErrors

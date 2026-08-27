@@ -63,6 +63,7 @@ module LinkedTests =
                     MessageName = "VehicleStatus"
                     WireSignalName = "RawSpeed"
                     Conversion = Affine(0.5, 2.0) } ]
+              RxMessages = []
               TxMessages = [] }
 
         match link pool wire bindings with
@@ -85,6 +86,7 @@ module LinkedTests =
                     MessageName = "VehicleStatus"
                     WireSignalName = "MissingWire"
                     Conversion = Identity } ]
+              RxMessages = []
               TxMessages = [] }
 
         match link pool wire bindings with

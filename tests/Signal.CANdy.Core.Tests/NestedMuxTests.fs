@@ -210,6 +210,7 @@ SG_MUL_VAL_ 804 Leaf S4 2-2;"""
                         MessageName = "NestedFrame"
                         WireSignalName = name
                         Conversion = Identity } ]
+              RxMessages = []
               TxMessages = [] }
 
         match link pool wire bindings with
