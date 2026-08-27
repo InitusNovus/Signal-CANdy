@@ -23,8 +23,9 @@
 
 - 추적 이슈: #17 — `[RFC] Shared semantic IR and pool-bound runtime schema images`
 - 설계 원자료: `Plans/Runtime_Schema_Architecture.md`
-- 현 상태: 대화에서 도출된 배경, staged IR, Pool/Application Contract, Wire Model, explicit Binding, Host compiler, runtime image, allocation-free C99 runtime, validation, hot-swap, testing, MVP 및 미결정점을 손실 최소화 우선으로 기록함
-- 문서 성격: accepted specification이 아니라 후속 구현 에이전트가 정제할 exhaustive design handoff
+- v1 결정 기록: `Plans/Runtime_Schema_Decisions.md` (D-01~D-25, RFC §31 전 그룹 DECIDED/DEFERRED)
+- 현 상태: 첫 vertical slice(RFC §34 1~7단계: 결정 → Pool Contract → Wire IR → Binding/Linked → .scimg → C99 RX runtime → differential test) 구현 진행 중
+- 문서 성격: `Runtime_Schema_Architecture.md`는 exhaustive design handoff, `Runtime_Schema_Decisions.md`는 그 결정 계약
 - 다음 판단 과제:
   - terminology와 staged IR 경계 확정
   - 기존 `Ir.fs` 및 AOT C backend migration/compatibility 정책 확정
