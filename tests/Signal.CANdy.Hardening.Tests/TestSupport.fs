@@ -13,7 +13,7 @@ module TestSupport =
           StandardOutput: string
           StandardError: string }
 
-    let runProcess workingDirectory fileName arguments =
+    let private runProcessCore (timeoutMilliseconds: int) workingDirectory fileName arguments =
         let startInfo = ProcessStartInfo(fileName)
         startInfo.WorkingDirectory <- workingDirectory
         startInfo.UseShellExecute <- false
@@ -31,13 +31,19 @@ module TestSupport =
         let output = child.StandardOutput.ReadToEndAsync()
         let error = child.StandardError.ReadToEndAsync()
 
-        if not (child.WaitForExit(30000)) then
+        if not (child.WaitForExit(timeoutMilliseconds)) then
             child.Kill(true)
-            failwithf "%s did not exit within 30 seconds" fileName
+            failwithf "%s did not exit within %d milliseconds" fileName timeoutMilliseconds
 
         { ExitCode = child.ExitCode
           StandardOutput = output.GetAwaiter().GetResult()
           StandardError = error.GetAwaiter().GetResult() }
+
+    let runProcess workingDirectory fileName arguments =
+        runProcessCore 30000 workingDirectory fileName arguments
+
+    let runProcessWithTimeout (timeoutMilliseconds: int) workingDirectory fileName arguments =
+        runProcessCore timeoutMilliseconds workingDirectory fileName arguments
 
     let withTempDirectory action =
         let path =

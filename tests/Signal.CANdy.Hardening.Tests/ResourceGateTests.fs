@@ -128,7 +128,9 @@ module ResourceGateTests =
 
         let activation = root.GetProperty("cc1aActivation")
         let provenance = activation.GetProperty("provenance")
-        Assert.Equal("d65073319446c40819bd8f1e85c09214978fc92f", provenance.GetProperty("siblingCommit").GetString())
+
+        Assert.Equal("80ccaa2bcdc68a1b74407571b72d18702e97fa52", provenance.GetProperty("siblingCommit").GetString())
+
         Assert.Equal("arm-none-eabi-gcc 13.3.1", provenance.GetProperty("toolchain").GetString())
         Assert.Equal("0x08008000", provenance.GetProperty("origin").GetString())
         Assert.Equal(94208, provenance.GetProperty("flashCapacityBytes").GetInt32())
@@ -136,17 +138,17 @@ module ResourceGateTests =
         Assert.Equal(1024, provenance.GetProperty("stackReservedBytes").GetInt32())
 
         let baseline = activation.GetProperty("baseline")
-        Assert.Equal(68408, baseline.GetProperty("binaryBytes").GetInt32())
+        Assert.Equal(68648, baseline.GetProperty("binaryBytes").GetInt32())
 
         Assert.Equal(
-            "09e4aad7bb88de29d36b83b0fd8351e5e2cb594c453e96c1ae25a1336f329f83",
+            "29d7c601b6e95c2782fbc172be1069672e594883d41d52011b9f989c107cbf18",
             baseline.GetProperty("binarySha256").GetString()
         )
 
-        Assert.Equal(67284, baseline.GetProperty("textBytes").GetInt32())
+        Assert.Equal(67524, baseline.GetProperty("textBytes").GetInt32())
         Assert.Equal(1116, baseline.GetProperty("dataBytes").GetInt32())
         Assert.Equal(49192, baseline.GetProperty("bssBytes").GetInt32())
-        Assert.Equal(68400, baseline.GetProperty("flashLoadBytes").GetInt32())
+        Assert.Equal(68640, baseline.GetProperty("flashLoadBytes").GetInt32())
         Assert.Equal(50308, baseline.GetProperty("ramBytes").GetInt32())
         Assert.Equal(1047, baseline.GetProperty("stackUsageEntries").GetInt32())
         Assert.Equal(344, baseline.GetProperty("maxStaticFrameBytes").GetInt32())
@@ -162,10 +164,10 @@ module ResourceGateTests =
         let root = receipt.RootElement
         Assert.Equal("sc.cc1a-build-receipt/v1", root.GetProperty("format").GetString())
         let observed = root.GetProperty("observed")
-        Assert.Equal(68408, observed.GetProperty("binaryBytes").GetInt32())
+        Assert.Equal(68648, observed.GetProperty("binaryBytes").GetInt32())
 
         Assert.Equal(
-            "09e4aad7bb88de29d36b83b0fd8351e5e2cb594c453e96c1ae25a1336f329f83",
+            "29d7c601b6e95c2782fbc172be1069672e594883d41d52011b9f989c107cbf18",
             observed.GetProperty("binarySha256").GetString()
         )
 

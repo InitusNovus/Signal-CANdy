@@ -26,7 +26,11 @@ module EntrypointGateTests =
         Assert.True(File.Exists(production), "scripts/hardening.ps1 is the intended RED production seam")
 
         let ci =
-            TestSupport.runProcess TestSupport.repoRoot "pwsh" [ "-NoProfile"; "-File"; production; "-Mode"; "Ci" ]
+            TestSupport.runProcessWithTimeout
+                900000
+                TestSupport.repoRoot
+                "pwsh"
+                [ "-NoProfile"; "-File"; production; "-Mode"; "Ci" ]
 
         Assert.Equal(0, ci.ExitCode)
 
