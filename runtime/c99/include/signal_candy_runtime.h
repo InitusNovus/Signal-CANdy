@@ -117,10 +117,11 @@ size_t sc_schema_required_scratch_bytes(const sc_schema_t *schema);
  * be in 0..64. A program outside the supplied payload is skipped without
  * changing its slot. A matching decoded signal sets valid and updated; changed
  * is set only when a previously valid slot receives different raw bits.
- * Identity conversions retain sign-extended or unsigned integer bits. Affine
- * conversions store IEEE-754 double bits. The v1 descriptor has no f32 storage
- * discriminator; integer and double slots are the executable v1 encodings (the
- * conformance harness therefore exercises those two forms).
+ * Representation follows each program's storage field. Integer storage keeps
+ * the sign-extended or unsigned raw integer. F64 stores the IEEE-754 double
+ * bits of the physical value, including integer-to-double conversion for an
+ * identity conversion. F32 stores the narrowed IEEE-754 float bits in the low
+ * 32 bits with the upper 32 bits zero.
  *
  * Calls for one schema/pool are single-writer. Synchronization against readers
  * and protection from torn reads are the caller's responsibility.

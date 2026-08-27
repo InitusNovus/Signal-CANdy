@@ -5,13 +5,13 @@
 #include <string.h>
 
 #define IMAGE_CAPACITY 512u
-#define IMAGE_TOTAL_SIZE 276u
+#define IMAGE_TOTAL_SIZE 316u
 #define MSG_OFFSET 64u
 #define PRG_OFFSET 88u
-#define CNV_OFFSET 184u
-#define SYM_OFFSET 232u
-#define CRC_OFFSET 272u
-#define SLOT_COUNT 6u
+#define CNV_OFFSET 216u
+#define SYM_OFFSET 264u
+#define CRC_OFFSET 312u
+#define SLOT_COUNT 8u
 
 typedef union {
     void *pointer_alignment;
@@ -56,6 +56,13 @@ static uint64_t double_bits(double value)
     return bits;
 }
 
+static uint32_t float_bits(float value)
+{
+    uint32_t bits;
+    memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
 static uint32_t fixture_crc32(const uint8_t *bytes, size_t count)
 {
     uint32_t crc = UINT32_C(0xFFFFFFFF);
@@ -87,15 +94,15 @@ static void put_message(uint8_t *entry, uint32_t can_id,
 }
 
 static void put_program(uint8_t *entry, uint16_t start_bit,
-                        uint16_t length_bits, uint8_t byte_order,
-                        uint8_t is_signed, uint16_t conversion_index,
+                        uint16_t length_bits, uint8_t order_flags,
+                        uint8_t storage, uint16_t conversion_index,
                         uint16_t slot_index, uint16_t selector_slot,
                         uint32_t expected_value)
 {
     put_u16(entry, start_bit);
     put_u16(entry + 2, length_bits);
-    entry[4] = byte_order;
-    entry[5] = is_signed;
+    entry[4] = order_flags;
+    entry[5] = storage;
     put_u16(entry + 6, conversion_index);
     put_u16(entry + 8, slot_index);
     put_u16(entry + 10, selector_slot);
@@ -113,7 +120,9 @@ static void append_name(uint8_t *image, size_t *cursor, const char *name)
 
 static void build_fixture(uint8_t *image)
 {
-    const char *signal_names[SLOT_COUNT] = {"s0", "s1", "s2", "s3", "s4", "s5"};
+    const char *signal_names[SLOT_COUNT] = {
+        "s0", "s1", "s2", "s3", "s4", "s5", "s6", "s7"
+    };
     const char *message_names[3] = {"m0", "m1", "m2"};
     size_t cursor;
     unsigned i;
@@ -129,27 +138,31 @@ static void build_fixture(uint8_t *image)
     put_u32(image + 32, MSG_OFFSET);
     put_u32(image + 36, 24u);
     put_u32(image + 40, PRG_OFFSET);
-    put_u32(image + 44, 96u);
+    put_u32(image + 44, 128u);
     put_u32(image + 48, CNV_OFFSET);
     put_u32(image + 52, 48u);
     put_u32(image + 56, SYM_OFFSET);
-    put_u32(image + 60, 40u);
+    put_u32(image + 60, 48u);
 
-    put_message(image + MSG_OFFSET, UINT32_C(0x100), 2u, 0u);
-    put_message(image + MSG_OFFSET + 8u, UINT32_C(0x200), 3u, 2u);
-    put_message(image + MSG_OFFSET + 16u, UINT32_C(0x9CF00000), 1u, 5u);
+    put_message(image + MSG_OFFSET, UINT32_C(0x100), 4u, 0u);
+    put_message(image + MSG_OFFSET + 8u, UINT32_C(0x200), 3u, 4u);
+    put_message(image + MSG_OFFSET + 16u, UINT32_C(0x9CF00000), 1u, 7u);
 
-    put_program(image + PRG_OFFSET, 0u, 16u, 0u, 0u, 0u, 0u,
+    put_program(image + PRG_OFFSET, 0u, 16u, 0u, 1u, 0u, 0u,
                 UINT16_C(0xFFFF), UINT32_C(0xFFFFFFFF));
-    put_program(image + PRG_OFFSET + 16u, 16u, 16u, 0u, 0u, 1u, 1u,
+    put_program(image + PRG_OFFSET + 16u, 16u, 16u, 0u, 9u, 1u, 1u,
                 UINT16_C(0xFFFF), UINT32_C(0xFFFFFFFF));
-    put_program(image + PRG_OFFSET + 32u, 0u, 8u, 0u, 0u, 0u, 2u,
+    put_program(image + PRG_OFFSET + 32u, 32u, 8u, 0u, 9u, 0u, 6u,
                 UINT16_C(0xFFFF), UINT32_C(0xFFFFFFFF));
-    put_program(image + PRG_OFFSET + 48u, 8u, 8u, 0u, 0u, 0u, 3u,
+    put_program(image + PRG_OFFSET + 48u, 40u, 8u, 0u, 8u, 1u, 7u,
+                UINT16_C(0xFFFF), UINT32_C(0xFFFFFFFF));
+    put_program(image + PRG_OFFSET + 64u, 0u, 8u, 0u, 0u, 0u, 2u,
+                UINT16_C(0xFFFF), UINT32_C(0xFFFFFFFF));
+    put_program(image + PRG_OFFSET + 80u, 8u, 8u, 0u, 0u, 0u, 3u,
                 2u, 1u);
-    put_program(image + PRG_OFFSET + 64u, 8u, 8u, 0u, 0u, 0u, 4u,
+    put_program(image + PRG_OFFSET + 96u, 8u, 8u, 0u, 0u, 0u, 4u,
                 2u, 2u);
-    put_program(image + PRG_OFFSET + 80u, 4u, 12u, 1u, 1u, 0u, 5u,
+    put_program(image + PRG_OFFSET + 112u, 4u, 12u, 3u, 5u, 0u, 5u,
                 UINT16_C(0xFFFF), UINT32_C(0xFFFFFFFF));
 
     image[CNV_OFFSET] = 0u;
@@ -225,14 +238,20 @@ int main(void)
     memset(pool, 0, sizeof(pool));
     memset(&frame, 0, sizeof(frame));
     frame.id = UINT32_C(0x100);
-    frame.len = 4u;
+    frame.len = 6u;
     frame.data[0] = 0x34u;
     frame.data[1] = 0x12u;
     frame.data[2] = 10u;
+    frame.data[4] = 100u;
+    frame.data[5] = 8u;
     report("standard little identity and affine initial",
            sc_decode(schema, &frame, pool, SLOT_COUNT) == SC_OK &&
            pool[0].raw == UINT64_C(0x1234) && pool[0].flags == 3u &&
            pool[1].raw == double_bits(3.0) && pool[1].flags == 3u);
+    report("identity conversion with f64 storage",
+           pool[6].raw == double_bits(100.0) && pool[6].flags == 3u);
+    report("affine conversion with f32 storage",
+           pool[7].raw == (uint64_t)float_bits(2.0f) && pool[7].flags == 3u);
 
     report("same standard values clear changed",
            sc_decode(schema, &frame, pool, SLOT_COUNT) == SC_OK &&
@@ -311,7 +330,7 @@ int main(void)
 
     memset(&frame, 0, sizeof(frame));
     frame.id = UINT32_C(0x100);
-    frame.len = 4u;
+    frame.len = 6u;
     report("pool too small",
            sc_decode(schema, &frame, pool, SLOT_COUNT - 1u) == SC_ERR_POOL);
 
@@ -345,6 +364,18 @@ int main(void)
     fix_crc(mutation);
     report("program out of range",
            sc_schema_open(other, mutation, IMAGE_TOTAL_SIZE) == SC_ERR_BOUNDS);
+
+    memcpy(mutation, image, IMAGE_TOTAL_SIZE);
+    put_u16(mutation + PRG_OFFSET + 6u, 1u);
+    fix_crc(mutation);
+    report("affine conversion with integer storage rejected",
+           sc_schema_open(other, mutation, IMAGE_TOTAL_SIZE) == SC_ERR_TABLE);
+
+    memcpy(mutation, image, IMAGE_TOTAL_SIZE);
+    mutation[PRG_OFFSET + 4u] = 4u;
+    fix_crc(mutation);
+    report("invalid order flags rejected",
+           sc_schema_open(other, mutation, IMAGE_TOTAL_SIZE) == SC_ERR_TABLE);
 
     passed = sc_schema_open(NULL, image, IMAGE_TOTAL_SIZE) == SC_ERR_NULL &&
              sc_schema_open(other, NULL, IMAGE_TOTAL_SIZE) == SC_ERR_NULL &&

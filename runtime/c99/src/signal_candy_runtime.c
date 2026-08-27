@@ -224,8 +224,8 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         const uint8_t *entry = bytes + offsets[1] + (size_t)i * 16u;
         uint16_t start_bit = sc_read_u16(entry);
         uint16_t length_bits = sc_read_u16(entry + 2);
-        uint8_t byte_order = entry[4];
-        uint8_t is_signed = entry[5];
+        uint8_t order_flags = entry[4];
+        uint8_t storage = entry[5];
         uint16_t conversion_index = sc_read_u16(entry + 6);
         uint16_t slot_index = sc_read_u16(entry + 8);
         uint16_t selector_slot = sc_read_u16(entry + 10);
@@ -236,12 +236,15 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
             (uint32_t)start_bit + length_bits > 512u) {
             return SC_ERR_BOUNDS;
         }
-        if (byte_order > 1u || is_signed > 1u) {
+        if (order_flags > 3u || storage > 9u) {
             return SC_ERR_TABLE;
         }
         if (conversion_index >= conversion_count ||
             slot_index >= signal_count) {
             return SC_ERR_BOUNDS;
+        }
+        if (storage <= 7u && conversion_index != 0u) {
+            return SC_ERR_TABLE;
         }
         if (unconditional !=
             (expected_value == UINT32_C(0xFFFFFFFF))) {
@@ -399,6 +402,8 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
                                  (size_t)(program_index + i) * 16u;
         uint16_t start_bit = sc_read_u16(program);
         uint16_t length_bits = sc_read_u16(program + 2);
+        uint8_t order_flags = program[4];
+        uint8_t storage = program[5];
         uint16_t conversion_index = sc_read_u16(program + 6);
         uint16_t slot_index = sc_read_u16(program + 8);
         uint16_t selector_slot = sc_read_u16(program + 10);
@@ -416,30 +421,40 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
             continue;
         }
 
-        value = sc_extract_bits(frame->data, start_bit, length_bits, program[4]);
-        if (program[5] != 0u) {
+        value = sc_extract_bits(frame->data, start_bit, length_bits,
+                                (uint8_t)(order_flags & 1u));
+        if ((order_flags & 2u) != 0u) {
             value = sc_sign_extend(value, length_bits);
         }
 
-        {
+        if (storage >= 8u) {
             const uint8_t *conversion = schema->image + schema->cnv_offset +
                                         (size_t)conversion_index * 24u;
+            double numeric;
+            double physical;
+
+            if ((order_flags & 2u) != 0u) {
+                numeric = (double)(int64_t)value;
+            } else {
+                numeric = (double)value;
+            }
+            physical = numeric;
             if (conversion[0] != 0u) {
                 uint64_t factor_bits = sc_read_u64(conversion + 8);
                 uint64_t offset_bits = sc_read_u64(conversion + 16);
                 double factor;
                 double offset;
-                double numeric;
-                double physical;
 
                 memcpy(&factor, &factor_bits, sizeof(factor));
                 memcpy(&offset, &offset_bits, sizeof(offset));
-                if (program[5] != 0u) {
-                    numeric = (double)(int64_t)value;
-                } else {
-                    numeric = (double)value;
-                }
                 physical = numeric * factor + offset;
+            }
+            if (storage == 8u) {
+                float narrowed = (float)physical;
+                uint32_t narrowed_bits;
+                memcpy(&narrowed_bits, &narrowed, sizeof(narrowed_bits));
+                value = narrowed_bits;
+            } else {
                 memcpy(&value, &physical, sizeof(value));
             }
         }
