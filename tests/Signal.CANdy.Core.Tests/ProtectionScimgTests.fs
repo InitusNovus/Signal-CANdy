@@ -64,9 +64,7 @@ module ProtectionScimgTests =
                 InitialValue = 0u } ]
           TxTemplates = Array.zeroCreate 8
           NestedMuxRecords = []
-          QualityEntries =
-            [ { FreshnessMs = 100u }
-              { FreshnessMs = 0u } ]
+          QualityEntries = [ { FreshnessMs = 100u }; { FreshnessMs = 0u } ]
           RxProtectionPlans =
             [ { HasCrc = true
                 HasCounter = true
@@ -95,9 +93,7 @@ module ProtectionScimgTests =
                 BigEndian = false
                 Modulus = 16u
                 Increment = 1u } ]
-          CoverageSpans =
-            [ { ByteOffset = 0uy; ByteCount = 6uy }
-              { ByteOffset = 0uy; ByteCount = 7uy } ] }
+          CoverageSpans = [ { ByteOffset = 0uy; ByteCount = 6uy }; { ByteOffset = 0uy; ByteCount = 7uy } ] }
 
     let private legacyRxImage: RuntimeImage =
         { Messages =
@@ -153,7 +149,8 @@ module ProtectionScimgTests =
           CoverageSpans = [] }
 
     let private legacyRxqImage: RuntimeImage =
-        { legacyRxImage with QualityEntries = [ { FreshnessMs = 25u } ] }
+        { legacyRxImage with
+            QualityEntries = [ { FreshnessMs = 25u } ] }
 
     let private writeBytes image =
         match write image with
@@ -198,8 +195,7 @@ module ProtectionScimgTests =
         | Ok first, Ok second ->
             second |> should equal first
 
-            BinaryPrimitives.ReadUInt16LittleEndian(first.AsSpan(10, 2))
-            |> should equal 7us
+            BinaryPrimitives.ReadUInt16LittleEndian(first.AsSpan(10, 2)) |> should equal 7us
 
             let extension = extensionOffset first
 
@@ -261,7 +257,9 @@ module ProtectionScimgTests =
 
     [<Fact>]
     let ``Protection without RXQ writes zero quality count and roundtrips`` () =
-        let image = { protectionImage with QualityEntries = [] }
+        let image =
+            { protectionImage with
+                QualityEntries = [] }
 
         let bytes = writeBytes image
         let extension = extensionOffset bytes
@@ -280,7 +278,9 @@ module ProtectionScimgTests =
                 RxProtectionPlans = [ emptyPlan ]
                 RxCounters = []
                 CoverageSpans = protectionImage.CoverageSpans |> List.skip 1
-                TxProtectionPlans = [ { protectionImage.TxProtectionPlans.Head with SpanIndex = 0us } ] }
+                TxProtectionPlans =
+                    [ { protectionImage.TxProtectionPlans.Head with
+                          SpanIndex = 0us } ] }
 
         let bytes = writeBytes image
         let plan = protectionOffset bytes + 48
@@ -316,8 +316,7 @@ module ProtectionScimgTests =
         writeBytes legacyRxImage |> should equal frozenRx
         writeBytes legacyTxImage |> should equal frozenTx
 
-        writeBytes legacyRxqImage
-        |> should equal frozenRxq
+        writeBytes legacyRxqImage |> should equal frozenRxq
 
     [<Fact>]
     let ``Protection reader rejects unknown main and EX01 flags`` () =

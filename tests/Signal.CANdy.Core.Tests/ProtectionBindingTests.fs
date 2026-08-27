@@ -18,9 +18,7 @@ module ProtectionBindingTests =
 
     let private containsError (fragment: string) result =
         match result with
-        | Error errors ->
-            errors
-            |> List.exists (fun error -> (sprintf "%A" error).Contains(fragment))
+        | Error errors -> errors |> List.exists (fun error -> (sprintf "%A" error).Contains(fragment))
         | Ok _ -> false
 
     let private signal name start length byteOrder isSigned factor offset mux : WireSignal =
@@ -101,8 +99,7 @@ module ProtectionBindingTests =
 """
 
     let private validPool () =
-        pool [ poolSignal "RxValue" Rx
-               poolSignal "TxValue" Tx ]
+        pool [ poolSignal "RxValue" Rx; poolSignal "TxValue" Tx ]
 
     let private validWire () =
         { Messages =
@@ -146,8 +143,7 @@ module ProtectionBindingTests =
 
         bindingSet.RxMessages |> should be Empty
 
-        bindingSet.TxMessages.Head.Crc
-        |> should equal None
+        bindingSet.TxMessages.Head.Crc |> should equal None
 
     [<Theory>]
     [<InlineData("CRC8-SAE-J1850")>]
@@ -160,9 +156,7 @@ module ProtectionBindingTests =
                 """{ "version": "1", "bindings": [], "rxMessages": [ { "message": "Rx", "crc": { "wireSignal": "Crc", "algorithm": "%s", "byteRange": { "start": 0, "end": 7 } } } ], "txMessages": [] }"""
                 algorithm
 
-        parseBindingSet json
-        |> containsError "algorithm"
-        |> should equal true
+        parseBindingSet json |> containsError "algorithm" |> should equal true
 
     [<Theory>]
     [<InlineData("{ \"message\": \"Rx\", \"crc\": { \"wireSignal\": \"Crc\", \"algorithm\": \"crc8-sae-j1850\", \"byteRange\": { \"start\": 0, \"end\": 7 } }, \"extra\": 1 }")>]
@@ -173,9 +167,7 @@ module ProtectionBindingTests =
         let json =
             sprintf """{ "version": "1", "bindings": [], "rxMessages": [ %s ], "txMessages": [] }""" profile
 
-        parseBindingSet json
-        |> containsError "extra"
-        |> should equal true
+        parseBindingSet json |> containsError "extra" |> should equal true
 
     [<Fact>]
     let ``Protection parser rejects unknown TX CRC keys`` () =
@@ -200,9 +192,7 @@ module ProtectionBindingTests =
 }
 """
 
-        parseBindingSet json
-        |> containsError "extra"
-        |> should equal true
+        parseBindingSet json |> containsError "extra" |> should equal true
 
     [<Fact>]
     let ``Protection parser rejects duplicate RX declarations`` () =
@@ -219,9 +209,7 @@ module ProtectionBindingTests =
 }
 """
 
-        parseBindingSet json
-        |> containsError "Rx"
-        |> should equal true
+        parseBindingSet json |> containsError "Rx" |> should equal true
 
     [<Fact>]
     let ``Protection parser rejects duplicate TX profile declarations`` () =
@@ -231,18 +219,14 @@ module ProtectionBindingTests =
         let json =
             sprintf """{ "version": "1", "bindings": [], "rxMessages": [], "txMessages": [ %s, %s ] }""" profile profile
 
-        parseBindingSet json
-        |> containsError "Tx"
-        |> should equal true
+        parseBindingSet json |> containsError "Tx" |> should equal true
 
     [<Fact>]
     let ``Protection parser rejects RX declaration without CRC or counter`` () =
         let json =
             """{ "version": "1", "bindings": [], "rxMessages": [ { "message": "Rx" } ], "txMessages": [] }"""
 
-        parseBindingSet json
-        |> Result.isError
-        |> should equal true
+        parseBindingSet json |> Result.isError |> should equal true
 
     [<Fact>]
     let ``Protection linker precomputes CRC spans and profile fields`` () =
@@ -256,21 +240,18 @@ module ProtectionBindingTests =
 
             let rxCrc = rx.Crc.Value
 
-            rxCrc.Algorithm
-            |> should equal LinkedCrcAlgorithm.Crc16CcittFalse
+            rxCrc.Algorithm |> should equal LinkedCrcAlgorithm.Crc16CcittFalse
 
             rxCrc.StartBit |> should equal 48us
             rxCrc.LengthBits |> should equal 16us
             rxCrc.DataId |> should equal (Some 0x1234us)
 
-            rxCrc.CoverageSpans
-            |> should equal [ { ByteOffset = 0uy; ByteCount = 6uy } ]
+            rxCrc.CoverageSpans |> should equal [ { ByteOffset = 0uy; ByteCount = 6uy } ]
 
             let tx = schema.TxMessages.Head
             tx.Counter.Value.StartBit |> should equal 0us
 
-            tx.Crc.Value.Algorithm
-            |> should equal LinkedCrcAlgorithm.Crc8SaeJ1850
+            tx.Crc.Value.Algorithm |> should equal LinkedCrcAlgorithm.Crc8SaeJ1850
 
             tx.Crc.Value.CoverageSpans
             |> should equal [ { ByteOffset = 0uy; ByteCount = 7uy } ]
@@ -285,9 +266,7 @@ module ProtectionBindingTests =
                     wire.Messages
                     |> List.map (fun item ->
                         { item with
-                            Signals =
-                                item.Signals
-                                |> List.filter (fun item -> item.Name = "Value") }) }
+                            Signals = item.Signals |> List.filter (fun item -> item.Name = "Value") }) }
 
         link (validPool ()) withoutFields (parse validJson)
         |> containsError "Crc16"
@@ -310,10 +289,7 @@ module ProtectionBindingTests =
                 isSigned
                 factor
                 offset
-                (if muxValue = 0 then
-                     Unconditional
-                 else
-                     Branch muxValue)
+                (if muxValue = 0 then Unconditional else Branch muxValue)
 
         let invalidWire =
             { wire with
@@ -323,8 +299,7 @@ module ProtectionBindingTests =
                         if item.Name = "RxFrame" then
                             { item with
                                 Signals =
-                                    (item.Signals
-                                     |> List.filter (fun item -> item.Name <> "Crc16"))
+                                    (item.Signals |> List.filter (fun item -> item.Name <> "Crc16"))
                                     @ [ invalidCrc ] }
                         else
                             item) }
@@ -350,10 +325,7 @@ module ProtectionBindingTests =
                 isSigned
                 factor
                 offset
-                (if muxValue = 0 then
-                     Unconditional
-                 else
-                     Branch muxValue)
+                (if muxValue = 0 then Unconditional else Branch muxValue)
 
         let invalidWire =
             { wire with
@@ -362,8 +334,7 @@ module ProtectionBindingTests =
                     |> List.map (fun item ->
                         { item with
                             Signals =
-                                (item.Signals
-                                 |> List.filter (fun signal -> signal.Name <> "Alive"))
+                                (item.Signals |> List.filter (fun signal -> signal.Name <> "Alive"))
                                 @ [ invalidCounter ] }) }
 
         link (validPool ()) invalidWire (parse validJson)
@@ -388,8 +359,7 @@ module ProtectionBindingTests =
                             if item.Name = "RxFrame" then
                                 { item with
                                     Signals =
-                                        (item.Signals
-                                         |> List.filter (fun signal -> signal.Name <> "Crc16"))
+                                        (item.Signals |> List.filter (fun signal -> signal.Name <> "Crc16"))
                                         @ [ invalidCrc ] }
                             else
                                 item) }
