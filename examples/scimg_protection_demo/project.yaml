@@ -1,0 +1,14 @@
+format: sc.project/v1
+name: scimg-protection-demo
+pool:
+  definition: pool.json
+wireSources:
+  - name: protection
+    type: dbc
+    path: protection_demo.dbc
+binding: binding.json
+target: cc1a-test-1.runtime.json
+outputs:
+  image: build/protection_demo.scimg
+  header: build/scimg_protection_demo.h
+  inspect: build/protection_demo.inspect.json
