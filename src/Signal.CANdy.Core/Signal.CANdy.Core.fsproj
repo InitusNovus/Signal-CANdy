@@ -25,6 +25,7 @@
   <EmbeddedResource Include="..\..\templates\*.scriban" Link="templates\%(Filename)%(Extension)" />
   <Compile Include="Errors.fs" />
   <Compile Include="Ir.fs" />
+  <Compile Include="Pool.fs" />
   <Compile Include="Config.fs" />
   <Compile Include="Dbc.fs" />
   <Compile Include="Codegen.fs" />

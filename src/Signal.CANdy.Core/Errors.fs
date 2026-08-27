@@ -24,6 +24,11 @@ module Errors =
         | InvalidModulus of messageName: string * modulus: int
         | CrcWidthMismatch of messageName: string * crcWidth: int * signalBits: int
         | MessageNotFound of messageName: string
+        | DuplicateSemanticId of id: uint32 * name: string
+        | DuplicateName of name: string
+        | InvalidRange of name: string
+        | DefaultOutOfRange of name: string
+        | InvalidJson of details: string
 
     /// Unified error type for the full generate-from-paths pipeline.
     /// Preserves the original error category so consumers can distinguish
