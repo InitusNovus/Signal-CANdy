@@ -1,0 +1,377 @@
+{
+  "format": "sc.inspect/v1",
+  "image": {
+    "sha256": "sha256:6b1a5bdf3255bff17e12195bea2fd4703ae6427e06f2e701d7fde231e05312f2",
+    "formatVersion": 1,
+    "featureFlags": 7,
+    "imageFeatures": [
+      "tx",
+      "rxq",
+      "protection"
+    ],
+    "totalBytes": 444,
+    "crc32": "0x7DB9E52E",
+    "crcValid": true
+  },
+  "runtime": {
+    "abi": "ilp32",
+    "imageMajor": 1,
+    "imageMinor": 0,
+    "requiredFeatures": [
+      "rx",
+      "tx",
+      "rx-quality",
+      "crc8-sae-j1850",
+      "crc16-ccitt-false",
+      "rx-counter",
+      "tx-counter"
+    ],
+    "stateBytes": 60,
+    "scratchBytes": 8
+  },
+  "resources": {
+    "imageBytes": 444,
+    "runtimeStateBytes": 60,
+    "runtimeScratchBytes": 8,
+    "rxMessages": 1,
+    "rxPrograms": 1,
+    "txMessages": 1,
+    "txPrograms": 2,
+    "poolSlots": 3,
+    "conversions": 1,
+    "nestedMuxRecords": 0,
+    "muxDepth": 0,
+    "qualityEntries": 3,
+    "protectionPlans": 2,
+    "txCounters": 1,
+    "rxCounters": 1,
+    "coverageSpans": 2,
+    "txTemplateBytes": 8
+  },
+  "regions": {
+    "header": {
+      "start": 0,
+      "end": 32
+    },
+    "directory": {
+      "start": 32,
+      "end": 64
+    },
+    "rxMessages": {
+      "start": 64,
+      "end": 72
+    },
+    "rxPrograms": {
+      "start": 72,
+      "end": 88
+    },
+    "conversions": {
+      "start": 88,
+      "end": 112
+    },
+    "symbols": {
+      "start": 112,
+      "end": 164
+    },
+    "extensionHeader": {
+      "start": 164,
+      "end": 204
+    },
+    "nestedMuxRecords": {
+      "start": 204,
+      "end": 204
+    },
+    "qualityEntries": {
+      "start": 204,
+      "end": 216
+    },
+    "protectionHeader": {
+      "start": 216,
+      "end": 264
+    },
+    "rxProtectionPlans": {
+      "start": 264,
+      "end": 280
+    },
+    "txProtectionPlans": {
+      "start": 280,
+      "end": 296
+    },
+    "rxCounters": {
+      "start": 296,
+      "end": 312
+    },
+    "coverageSpans": {
+      "start": 312,
+      "end": 320
+    },
+    "txHeader": {
+      "start": 320,
+      "end": 352
+    },
+    "txMessages": {
+      "start": 352,
+      "end": 376
+    },
+    "txPrograms": {
+      "start": 376,
+      "end": 408
+    },
+    "txCounters": {
+      "start": 408,
+      "end": 432
+    },
+    "txTemplates": {
+      "start": 432,
+      "end": 440
+    },
+    "footer": {
+      "start": 440,
+      "end": 444
+    }
+  },
+  "poolSlots": [
+    {
+      "index": 0,
+      "name": "RxValue",
+      "symbolRange": {
+        "start": 116,
+        "end": 125
+      },
+      "freshnessMs": 30,
+      "qualityRange": {
+        "start": 204,
+        "end": 208
+      }
+    },
+    {
+      "index": 1,
+      "name": "TxValue",
+      "symbolRange": {
+        "start": 125,
+        "end": 134
+      },
+      "freshnessMs": 0,
+      "qualityRange": {
+        "start": 208,
+        "end": 212
+      }
+    },
+    {
+      "index": 2,
+      "name": "MarkerA5",
+      "symbolRange": {
+        "start": 134,
+        "end": 144
+      },
+      "freshnessMs": 0,
+      "qualityRange": {
+        "start": 212,
+        "end": 216
+      }
+    }
+  ],
+  "conversions": [
+    {
+      "index": 0,
+      "range": {
+        "start": 88,
+        "end": 112
+      },
+      "kind": "identity",
+      "factor": "f64:3ff0000000000000",
+      "offset": "f64:0000000000000000"
+    }
+  ],
+  "rxMessages": [
+    {
+      "index": 0,
+      "range": {
+        "start": 64,
+        "end": 72
+      },
+      "name": "ACTIVATION_B_RX",
+      "symbolRange": {
+        "start": 144,
+        "end": 161
+      },
+      "canId": 822,
+      "extended": false,
+      "programIndex": 0,
+      "programCount": 1,
+      "protectionIndex": 0
+    }
+  ],
+  "rxPrograms": [
+    {
+      "index": 0,
+      "range": {
+        "start": 72,
+        "end": 88
+      },
+      "startBit": 8,
+      "lengthBits": 16,
+      "byteOrder": "little",
+      "signed": false,
+      "storage": "u16",
+      "conversionIndex": 0,
+      "slotIndex": 0,
+      "mux": null,
+      "nestedMuxIndex": null
+    }
+  ],
+  "nestedMuxRecords": [],
+  "rxProtectionPlans": [
+    {
+      "index": 0,
+      "range": {
+        "start": 264,
+        "end": 280
+      },
+      "crc": {
+        "algorithm": "crc16-ccitt-false",
+        "startBit": 48,
+        "lengthBits": 16,
+        "byteOrder": "little",
+        "dataId": null,
+        "coverageSpanIndex": 0,
+        "coverageSpanCount": 1
+      },
+      "counterIndex": 0
+    }
+  ],
+  "txProtectionPlans": [
+    {
+      "index": 0,
+      "range": {
+        "start": 280,
+        "end": 296
+      },
+      "crc": {
+        "algorithm": "crc8-sae-j1850",
+        "startBit": 56,
+        "lengthBits": 8,
+        "byteOrder": "little",
+        "dataId": null,
+        "coverageSpanIndex": 1,
+        "coverageSpanCount": 1
+      },
+      "counterIndex": 0
+    }
+  ],
+  "rxCounters": [
+    {
+      "index": 0,
+      "range": {
+        "start": 296,
+        "end": 312
+      },
+      "startBit": 0,
+      "lengthBits": 4,
+      "byteOrder": "little",
+      "modulus": 16,
+      "increment": 1
+    }
+  ],
+  "coverageSpans": [
+    {
+      "index": 0,
+      "range": {
+        "start": 312,
+        "end": 316
+      },
+      "byteStart": 0,
+      "byteEnd": 6
+    },
+    {
+      "index": 1,
+      "range": {
+        "start": 316,
+        "end": 320
+      },
+      "byteStart": 0,
+      "byteEnd": 7
+    }
+  ],
+  "txMessages": [
+    {
+      "index": 0,
+      "range": {
+        "start": 352,
+        "end": 376
+      },
+      "logicalMessageId": 33,
+      "canId": 821,
+      "extended": false,
+      "payloadBytes": 8,
+      "frameKind": "classic",
+      "programIndex": 0,
+      "programCount": 2,
+      "counterIndex": 0,
+      "templateRange": {
+        "start": 432,
+        "end": 440
+      },
+      "protectionIndex": 0
+    }
+  ],
+  "txPrograms": [
+    {
+      "index": 0,
+      "range": {
+        "start": 376,
+        "end": 392
+      },
+      "startBit": 8,
+      "lengthBits": 16,
+      "byteOrder": "little",
+      "signed": false,
+      "storage": "u16",
+      "conversionIndex": 0,
+      "slotIndex": 1,
+      "mux": null,
+      "nestedMuxIndex": null
+    },
+    {
+      "index": 1,
+      "range": {
+        "start": 392,
+        "end": 408
+      },
+      "startBit": 24,
+      "lengthBits": 8,
+      "byteOrder": "little",
+      "signed": false,
+      "storage": "u8",
+      "conversionIndex": 0,
+      "slotIndex": 2,
+      "mux": null,
+      "nestedMuxIndex": null
+    }
+  ],
+  "txCounters": [
+    {
+      "index": 0,
+      "range": {
+        "start": 408,
+        "end": 432
+      },
+      "startBit": 0,
+      "lengthBits": 4,
+      "byteOrder": "little",
+      "modulus": 16,
+      "increment": 1,
+      "initialValue": 9
+    }
+  ],
+  "txTemplates": [
+    {
+      "messageIndex": 0,
+      "range": {
+        "start": 432,
+        "end": 440
+      },
+      "bytes": "0000000000000000"
+    }
+  ]
+}

@@ -12,4 +12,5 @@ outputs:
   image: build/schema_b.scimg
   header: build/scimg_activation_b.h
   inspect: build/schema_b.inspect.json
+  map: build/schema_b.map.json
   activation: build/schema_b.activation.json

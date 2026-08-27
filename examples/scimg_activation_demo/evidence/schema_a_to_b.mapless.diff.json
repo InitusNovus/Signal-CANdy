@@ -1,0 +1,131 @@
+{
+  "format": "sc.diff/v1",
+  "before": {
+    "imageSha256": "sha256:9197bf85693f823f3623f9562a2a892468dc461a1c7cdaf4f60a6dc91cad6d1e",
+    "poolAbiHash": null
+  },
+  "after": {
+    "imageSha256": "sha256:6b1a5bdf3255bff17e12195bea2fd4703ae6427e06f2e701d7fde231e05312f2",
+    "poolAbiHash": null
+  },
+  "activation": {
+    "class": "unknown-without-map",
+    "reasons": [
+      {
+        "token": "source-map-missing",
+        "subject": null
+      }
+    ]
+  },
+  "resources": [
+    {
+      "resource": "imageBytes",
+      "before": 444,
+      "after": 444,
+      "delta": 0
+    },
+    {
+      "resource": "runtimeStateBytes",
+      "before": 60,
+      "after": 60,
+      "delta": 0
+    },
+    {
+      "resource": "runtimeScratchBytes",
+      "before": 8,
+      "after": 8,
+      "delta": 0
+    },
+    {
+      "resource": "rxMessages",
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    {
+      "resource": "rxPrograms",
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    {
+      "resource": "txMessages",
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    {
+      "resource": "txPrograms",
+      "before": 2,
+      "after": 2,
+      "delta": 0
+    },
+    {
+      "resource": "poolSlots",
+      "before": 3,
+      "after": 3,
+      "delta": 0
+    },
+    {
+      "resource": "conversions",
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    {
+      "resource": "nestedMuxRecords",
+      "before": 0,
+      "after": 0,
+      "delta": 0
+    },
+    {
+      "resource": "muxDepth",
+      "before": 0,
+      "after": 0,
+      "delta": 0
+    },
+    {
+      "resource": "qualityEntries",
+      "before": 3,
+      "after": 3,
+      "delta": 0
+    },
+    {
+      "resource": "protectionPlans",
+      "before": 2,
+      "after": 2,
+      "delta": 0
+    },
+    {
+      "resource": "txCounters",
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    {
+      "resource": "rxCounters",
+      "before": 1,
+      "after": 1,
+      "delta": 0
+    },
+    {
+      "resource": "coverageSpans",
+      "before": 2,
+      "after": 2,
+      "delta": 0
+    },
+    {
+      "resource": "txTemplateBytes",
+      "before": 8,
+      "after": 8,
+      "delta": 0
+    },
+    {
+      "resource": "payloadBytes",
+      "before": null,
+      "after": null,
+      "delta": null
+    }
+  ],
+  "changes": []
+}

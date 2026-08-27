@@ -1,0 +1,362 @@
+{
+  "format": "sc.map/v1",
+  "imageSha256": "sha256:9197bf85693f823f3623f9562a2a892468dc461a1c7cdaf4f60a6dc91cad6d1e",
+  "poolAbiHash": "sha256:3cff36849f7b67cae1fa24a1ec6711993e1a4e2c477e613f3701fa41e005e947",
+  "target": {
+    "format": "sc.runtime-capabilities/v1",
+    "runtimeImageMajor": 1,
+    "runtimeImageMinor": 0,
+    "runtimeAbi": "ilp32",
+    "features": [
+      "rx",
+      "tx",
+      "rx-quality",
+      "crc8-sae-j1850",
+      "crc16-ccitt-false",
+      "rx-counter",
+      "tx-counter"
+    ],
+    "poolAbiHash": "sha256:3cff36849f7b67cae1fa24a1ec6711993e1a4e2c477e613f3701fa41e005e947",
+    "limits": {
+      "maxImageBytes": 444,
+      "maxRuntimeStateBytes": 60,
+      "maxRuntimeScratchBytes": 8,
+      "maxRxMessages": 1,
+      "maxRxPrograms": 1,
+      "maxTxMessages": 1,
+      "maxTxPrograms": 2,
+      "maxPoolSlots": 3,
+      "maxConversions": 1,
+      "maxNestedMuxRecords": 0,
+      "maxMuxDepth": 0,
+      "maxQualityEntries": 3,
+      "maxProtectionPlans": 2,
+      "maxTxCounters": 1,
+      "maxRxCounters": 1,
+      "maxCoverageSpans": 2,
+      "maxTxTemplateBytes": 8,
+      "maxPayloadBytes": 8
+    }
+  },
+  "requirements": {
+    "runtimeImageMajor": 1,
+    "runtimeImageMinor": 0,
+    "features": [
+      "rx",
+      "tx",
+      "rx-quality",
+      "crc8-sae-j1850",
+      "crc16-ccitt-false",
+      "rx-counter",
+      "tx-counter"
+    ],
+    "imageBytes": 444,
+    "runtimeStateBytes": 60,
+    "runtimeScratchBytes": 8,
+    "rxMessages": 1,
+    "rxPrograms": 1,
+    "txMessages": 1,
+    "txPrograms": 2,
+    "poolSlots": 3,
+    "conversions": 1,
+    "nestedMuxRecords": 0,
+    "muxDepth": 0,
+    "qualityEntries": 3,
+    "protectionPlans": 2,
+    "txCounters": 1,
+    "rxCounters": 1,
+    "coverageSpans": 2,
+    "txTemplateBytes": 8,
+    "payloadBytes": 8
+  },
+  "sources": [
+    {
+      "key": "schema-a",
+      "path": "schema_a.dbc",
+      "type": "dbc"
+    }
+  ],
+  "tables": {
+    "header": {
+      "start": 0,
+      "end": 32
+    },
+    "directory": {
+      "start": 32,
+      "end": 64
+    },
+    "rxMessages": {
+      "start": 64,
+      "end": 72
+    },
+    "rxPrograms": {
+      "start": 72,
+      "end": 88
+    },
+    "conversions": {
+      "start": 88,
+      "end": 112
+    },
+    "symbols": {
+      "start": 112,
+      "end": 164
+    },
+    "extensionHeader": {
+      "start": 164,
+      "end": 204
+    },
+    "nestedMuxRecords": {
+      "start": 204,
+      "end": 204
+    },
+    "qualityEntries": {
+      "start": 204,
+      "end": 216
+    },
+    "protectionHeader": {
+      "start": 216,
+      "end": 264
+    },
+    "rxProtectionPlans": {
+      "start": 264,
+      "end": 280
+    },
+    "txProtectionPlans": {
+      "start": 280,
+      "end": 296
+    },
+    "rxCounters": {
+      "start": 296,
+      "end": 312
+    },
+    "coverageSpans": {
+      "start": 312,
+      "end": 320
+    },
+    "txHeader": {
+      "start": 320,
+      "end": 352
+    },
+    "txMessages": {
+      "start": 352,
+      "end": 376
+    },
+    "txPrograms": {
+      "start": 376,
+      "end": 408
+    },
+    "txCounters": {
+      "start": 408,
+      "end": 432
+    },
+    "txTemplates": {
+      "start": 432,
+      "end": 440
+    },
+    "footer": {
+      "start": 440,
+      "end": 444
+    }
+  },
+  "poolSlots": [
+    {
+      "key": "pool:1",
+      "semanticId": 1,
+      "name": "RxValue",
+      "storage": "u16",
+      "unit": "",
+      "direction": "rx",
+      "min": null,
+      "max": null,
+      "default": null,
+      "freshnessMs": 30,
+      "imageIndex": 0,
+      "symbolRange": {
+        "start": 116,
+        "end": 125
+      }
+    },
+    {
+      "key": "pool:2",
+      "semanticId": 2,
+      "name": "TxValue",
+      "storage": "u16",
+      "unit": "",
+      "direction": "tx",
+      "min": null,
+      "max": null,
+      "default": "f64:40b2340000000000",
+      "freshnessMs": 0,
+      "imageIndex": 1,
+      "symbolRange": {
+        "start": 125,
+        "end": 134
+      }
+    },
+    {
+      "key": "pool:3",
+      "semanticId": 3,
+      "name": "MarkerA5",
+      "storage": "u8",
+      "unit": "",
+      "direction": "tx",
+      "min": null,
+      "max": null,
+      "default": "f64:4064a00000000000",
+      "freshnessMs": 0,
+      "imageIndex": 2,
+      "symbolRange": {
+        "start": 134,
+        "end": 144
+      }
+    }
+  ],
+  "conversions": [
+    {
+      "key": "conversion:f64:3ff0000000000000:f64:0000000000000000:0",
+      "factor": "f64:3ff0000000000000",
+      "offset": "f64:0000000000000000",
+      "imageIndex": 0,
+      "range": {
+        "start": 88,
+        "end": 112
+      }
+    }
+  ],
+  "rxMessages": [
+    {
+      "key": "rx:1",
+      "source": "schema-a",
+      "sourcePath": "schema_a.dbc",
+      "name": "ACTIVATION_A_RX",
+      "canId": 806,
+      "extended": false,
+      "payloadBytes": 8,
+      "imageIndex": 0,
+      "range": {
+        "start": 64,
+        "end": 72
+      }
+    }
+  ],
+  "rxPrograms": [
+    {
+      "key": "rx:1/pool:1",
+      "imageIndex": 0,
+      "range": {
+        "start": 72,
+        "end": 88
+      }
+    }
+  ],
+  "nestedMuxRecords": [],
+  "rxProtectionPlans": [
+    {
+      "key": "rx:1",
+      "imageIndex": 0,
+      "range": {
+        "start": 264,
+        "end": 280
+      }
+    }
+  ],
+  "txProtectionPlans": [
+    {
+      "key": "tx:33",
+      "imageIndex": 0,
+      "range": {
+        "start": 280,
+        "end": 296
+      }
+    }
+  ],
+  "rxCounters": [
+    {
+      "key": "rx:1",
+      "imageIndex": 0,
+      "range": {
+        "start": 296,
+        "end": 312
+      }
+    }
+  ],
+  "coverageSpans": [
+    {
+      "key": "rx:1/span:0",
+      "imageIndex": 0,
+      "range": {
+        "start": 312,
+        "end": 316
+      }
+    },
+    {
+      "key": "tx:33/span:0",
+      "imageIndex": 1,
+      "range": {
+        "start": 316,
+        "end": 320
+      }
+    }
+  ],
+  "txMessages": [
+    {
+      "key": "tx:33",
+      "source": "schema-a",
+      "sourcePath": "schema_a.dbc",
+      "name": "ACTIVATION_A_TX",
+      "logicalMessageId": 33,
+      "canId": 805,
+      "extended": false,
+      "payloadBytes": 8,
+      "imageIndex": 0,
+      "range": {
+        "start": 352,
+        "end": 376
+      }
+    }
+  ],
+  "txPrograms": [
+    {
+      "key": "tx:33/pool:2",
+      "imageIndex": 0,
+      "range": {
+        "start": 376,
+        "end": 392
+      }
+    },
+    {
+      "key": "tx:33/pool:3",
+      "imageIndex": 1,
+      "range": {
+        "start": 392,
+        "end": 408
+      }
+    }
+  ],
+  "txCounters": [
+    {
+      "key": "tx:33",
+      "startBit": 0,
+      "lengthBits": 4,
+      "byteOrder": "little",
+      "modulus": 16,
+      "increment": 1,
+      "initialValue": 0,
+      "imageIndex": 0,
+      "range": {
+        "start": 408,
+        "end": 432
+      }
+    }
+  ],
+  "txTemplates": [
+    {
+      "key": "tx:33",
+      "imageIndex": 0,
+      "range": {
+        "start": 432,
+        "end": 440
+      }
+    }
+  ]
+}
