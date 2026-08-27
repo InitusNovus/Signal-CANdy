@@ -35,7 +35,9 @@ module ScimgTxTests =
           TxMessages = []
           TxPrograms = []
           TxCounters = []
-          TxTemplates = [||] }
+          TxTemplates = [||]
+          NestedMuxRecords = []
+          QualityEntries = [] }
 
     let private frozenLegacyBytes () =
         Convert.FromHexString(
@@ -76,7 +78,9 @@ module ScimgTxTests =
                  Increment = 1u
                  InitialValue = 0u }
               : ImageTxCounter) ]
-          TxTemplates = Array.zeroCreate 8 }
+          TxTemplates = Array.zeroCreate 8
+          NestedMuxRecords = []
+          QualityEntries = [] }
 
     let private crc32 (bytes: byte array) count =
         let mutable crc = UInt32.MaxValue

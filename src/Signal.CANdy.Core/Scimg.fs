@@ -44,6 +44,12 @@ module Scimg =
     [<Literal>]
     let private CounterSize = 24
 
+    [<Literal>]
+    let private ExtensionHeaderSize = 40
+
+    [<Literal>]
+    let private NestedMuxRecordSize = 36
+
     let private magic =
         [| 0x53uy; 0x43uy; 0x49uy; 0x4Duy; 0x47uy; 0x30uy; 0x31uy; 0uy |]
 
@@ -85,6 +91,17 @@ module Scimg =
           Increment: uint32
           InitialValue: uint32 }
 
+    type ImageMuxPredicate =
+        { SelectorProgramIndex: uint16
+          SelectorSlot: uint16
+          Expected: uint32 }
+
+    type ImageNestedMuxRecord =
+        { TargetProgramIndex: uint16
+          Predicates: ImageMuxPredicate list }
+
+    type ImageQualityEntry = { FreshnessMs: uint32 }
+
     type RuntimeImage =
         { Messages: ImageMessage list
           Programs: ImageProgram list
@@ -95,7 +112,9 @@ module Scimg =
           TxMessages: ImageTxMessage list
           TxPrograms: ImageProgram list
           TxCounters: ImageTxCounter list
-          TxTemplates: byte array }
+          TxTemplates: byte array
+          NestedMuxRecords: ImageNestedMuxRecord list
+          QualityEntries: ImageQualityEntry list }
 
     let private identityConversion =
         { IsAffine = false
@@ -153,15 +172,21 @@ module Scimg =
         struct (BitConverter.DoubleToInt64Bits(factor), BitConverter.DoubleToInt64Bits(offset))
 
     let private orderedDecodePlans (message: LinkedMessage) =
-        message.Plans
-        |> List.sortBy (fun plan ->
-            let selectorRank = if plan.Mux = Selector then 0 else 1
-            selectorRank, plan.StartBit, plan.PoolSlotIndex)
+        if message.Plans |> List.forall (fun plan -> plan.MuxPath.Length <= 1) then
+            message.Plans
+            |> List.sortBy (fun plan ->
+                let selectorRank = if plan.IsMuxSelector then 0 else 1
+                selectorRank, plan.StartBit, plan.PoolSlotIndex)
+        else
+            message.Plans
+            |> List.sortBy (fun plan ->
+                let selectorRank = if plan.IsMuxSelector then 0 else 1
+                plan.MuxPath.Length, selectorRank, plan.StartBit, plan.PoolSlotIndex)
 
     let private orderedEncodePlans (message: LinkedTxMessage) =
         message.Plans
         |> List.sortBy (fun plan ->
-            let selectorRank = if plan.Mux = Selector then 0 else 1
+            let selectorRank = if plan.IsMuxSelector then 0 else 1
 
             let expectedRank =
                 match plan.MuxExpected with
@@ -330,12 +355,18 @@ module Scimg =
                 let messages = ResizeArray<ImageMessage>()
                 let programs = ResizeArray<ImageProgram>()
                 let messageNames = ResizeArray<string>()
+                let nestedMuxRecords = ResizeArray<ImageNestedMuxRecord>()
                 let mutable nextRxProgram = 0
 
                 schema.Messages
                 |> List.sortBy (fun message -> encodedCanId message.Id message.IsExtended)
                 |> List.iter (fun message ->
                     let plans = orderedDecodePlans message
+
+                    let programIndices =
+                        plans
+                        |> List.mapi (fun index plan -> plan.WireSignalName, uint16 (nextRxProgram + index))
+                        |> Map.ofList
 
                     messages.Add(
                         { EncodedCanId = encodedCanId message.Id message.IsExtended
@@ -346,7 +377,12 @@ module Scimg =
                     messageNames.Add(message.Name)
 
                     for plan in plans do
-                        let muxSlot, muxExpected = muxFields plan.MuxSelectorSlot plan.MuxExpected
+                        let firstPredicate = plan.MuxPath |> List.tryHead
+
+                        let muxSlot, muxExpected =
+                            match firstPredicate with
+                            | Some predicate -> predicate.SelectorSlot, predicate.Expected
+                            | None -> UInt16.MaxValue, UInt32.MaxValue
 
                         programs.Add(
                             imageProgram
@@ -360,6 +396,17 @@ module Scimg =
                                 muxSlot
                                 muxExpected
                         )
+
+                        if plan.MuxPath.Length >= 2 then
+                            nestedMuxRecords.Add(
+                                { TargetProgramIndex = programIndices.[plan.WireSignalName]
+                                  Predicates =
+                                    plan.MuxPath
+                                    |> List.map (fun predicate ->
+                                        { SelectorProgramIndex = programIndices.[predicate.SelectorProgramName]
+                                          SelectorSlot = predicate.SelectorSlot
+                                          Expected = predicate.Expected }) }
+                            )
 
                     nextRxProgram <- nextRxProgram + plans.Length)
 
@@ -447,6 +494,17 @@ module Scimg =
                         |> List.sortBy (fun plan -> plan.PoolSlotIndex)
                         |> List.map (fun plan -> plan.PoolSignalName)
 
+                let hasRxq =
+                    nestedMuxRecords.Count > 0
+                    || (schema.PoolSlots |> List.exists (fun slot -> slot.FreshnessMs.IsSome))
+
+                let qualityEntries =
+                    if hasRxq then
+                        schema.PoolSlots
+                        |> List.map (fun slot -> { FreshnessMs = slot.FreshnessMs |> Option.defaultValue 0u })
+                    else
+                        []
+
                 Ok
                     { Messages = messages |> Seq.toList
                       Programs = programs |> Seq.toList
@@ -457,7 +515,9 @@ module Scimg =
                       TxMessages = txMessages |> Seq.toList
                       TxPrograms = txPrograms |> Seq.toList
                       TxCounters = txCounters |> Seq.toList
-                      TxTemplates = templates.ToArray() }
+                      TxTemplates = templates.ToArray()
+                      NestedMuxRecords = nestedMuxRecords |> Seq.toList
+                      QualityEntries = qualityEntries }
 
     let private messageRangeErrors messages programCount allowEmpty =
         let mutable expectedIndex = 0
@@ -552,6 +612,102 @@ module Scimg =
         let conversions = image.Conversions |> List.toArray
         let rxPrograms = image.Programs |> List.toArray
         let txPrograms = image.TxPrograms |> List.toArray
+        let hasRxq = not image.NestedMuxRecords.IsEmpty || not image.QualityEntries.IsEmpty
+
+        let nestedErrors =
+            [ if image.NestedMuxRecords.Length > MaxPrograms then
+                  ImageLimit "nested mux record count exceeds 8192"
+
+              if hasRxq then
+                  if image.QualityEntries.Length <> slotCount then
+                      ImageTable
+              elif not image.QualityEntries.IsEmpty then
+                  ImageTable
+
+              for entry in image.QualityEntries do
+                  if entry.FreshnessMs > uint32 Int32.MaxValue then
+                      ImageTable
+
+              let targets = image.NestedMuxRecords |> List.map _.TargetProgramIndex
+
+              let recordsByTarget =
+                  image.NestedMuxRecords
+                  |> List.map (fun record -> record.TargetProgramIndex, record)
+                  |> Map.ofList
+
+              if
+                  targets <> List.sort targets
+                  || targets.Length <> (targets |> List.distinct).Length
+              then
+                  ImageTable
+
+              let containingMessage index =
+                  image.Messages
+                  |> List.tryFind (fun message ->
+                      index >= int message.ProgramIndex
+                      && index < int message.ProgramIndex + int message.ProgramCount)
+
+              for record in image.NestedMuxRecords do
+                  if record.Predicates.Length < 2 || record.Predicates.Length > 4 then
+                      ImageTable
+
+                  if int record.TargetProgramIndex >= rxPrograms.Length then
+                      ImageTable
+                  else
+                      let target = rxPrograms.[int record.TargetProgramIndex]
+                      let first = record.Predicates.Head
+
+                      if
+                          target.MuxSelectorSlot <> first.SelectorSlot
+                          || target.MuxExpected <> first.Expected
+                      then
+                          ImageTable
+
+                      for predicateIndex in 0 .. record.Predicates.Length - 1 do
+                          let predicate = record.Predicates.[predicateIndex]
+
+                          if
+                              int predicate.SelectorProgramIndex >= rxPrograms.Length
+                              || int predicate.SelectorSlot >= slotCount
+                              || predicate.SelectorProgramIndex = record.TargetProgramIndex
+                          then
+                              ImageTable
+                          else
+                              let selector = rxPrograms.[int predicate.SelectorProgramIndex]
+
+                              if
+                                  selector.SlotIndex <> predicate.SelectorSlot
+                                  || selector.LengthBits > 32us
+                                  || (selector.OrderFlags &&& 2uy) <> 0uy
+                                  || selector.Storage > 7uy
+                                  || selector.ConversionIndex <> 0us
+                                  || containingMessage (int record.TargetProgramIndex)
+                                     <> containingMessage (int predicate.SelectorProgramIndex)
+                              then
+                                  ImageTable
+
+                              if predicateIndex = 0 then
+                                  if
+                                      selector.MuxSelectorSlot <> UInt16.MaxValue
+                                      || selector.MuxExpected <> UInt32.MaxValue
+                                  then
+                                      ImageTable
+                              elif predicateIndex = 1 then
+                                  let outer = record.Predicates.[0]
+
+                                  if
+                                      selector.MuxSelectorSlot <> outer.SelectorSlot
+                                      || selector.MuxExpected <> outer.Expected
+                                  then
+                                      ImageTable
+                              else
+                                  match recordsByTarget |> Map.tryFind predicate.SelectorProgramIndex with
+                                  | None -> ImageTable
+                                  | Some selectorRecord when
+                                      selectorRecord.Predicates <> (record.Predicates |> List.take predicateIndex)
+                                      ->
+                                      ImageTable
+                                  | Some _ -> () ]
 
         let conversionErrors =
             [ if conversions.Length = 0 || conversions.[0] <> identityConversion then
@@ -616,6 +772,7 @@ module Scimg =
                   ImageLimit "a symbol name is not 1..255 UTF-8 bytes"
 
           yield! conversionErrors
+          yield! nestedErrors
           yield! messageRangeErrors image.Messages image.Programs.Length false
           yield! programErrors slotCount conversions.Length image.Programs
 
@@ -850,8 +1007,8 @@ module Scimg =
             let symOffset = cnvOffset + cnvSize
             let symSize = symbols.Length
             let hasTx = not image.TxMessages.IsEmpty
-
-            let txOffset = if hasTx then align4 (symOffset + symSize) else 0
+            let hasRxq = not image.NestedMuxRecords.IsEmpty || not image.QualityEntries.IsEmpty
+            let legacyEnd = symOffset + symSize
 
             let txUnalignedSize =
                 if hasTx then
@@ -864,8 +1021,24 @@ module Scimg =
                     0
 
             let txSize = if hasTx then align4 txUnalignedSize else 0
+            let extensionOffset = if hasRxq then align4 legacyEnd else 0
+            let nestedOffset = ExtensionHeaderSize
 
-            let contentEnd = if hasTx then txOffset + txSize else symOffset + symSize
+            let qualityOffset =
+                nestedOffset + image.NestedMuxRecords.Length * NestedMuxRecordSize
+
+            let embeddedTxOffset = qualityOffset + image.QualityEntries.Length * 4
+            let extensionSize = if hasRxq then embeddedTxOffset + txSize else 0
+
+            let txOffset =
+                if hasRxq && hasTx then extensionOffset + embeddedTxOffset
+                elif hasTx then align4 legacyEnd
+                else 0
+
+            let contentEnd =
+                if hasRxq then extensionOffset + extensionSize
+                elif hasTx then txOffset + txSize
+                else legacyEnd
 
             let totalSize = contentEnd + 4
 
@@ -875,16 +1048,27 @@ module Scimg =
                 let bytes = Array.zeroCreate<byte> totalSize
                 Array.Copy(magic, bytes, magic.Length)
                 putU16 bytes 8 1us
-                putU16 bytes 10 (if hasTx then 1us else 0us)
+                putU16 bytes 10 ((if hasTx then 1us else 0us) ||| (if hasRxq then 2us else 0us))
                 putU32 bytes 12 (uint32 totalSize)
                 putU16 bytes 16 (uint16 image.Messages.Length)
                 putU16 bytes 18 (uint16 image.Programs.Length)
                 putU16 bytes 20 (uint16 image.Conversions.Length)
 
-                putU16 bytes 22 (if hasTx then image.PoolSlotCount else 0us)
+                putU16 bytes 22 (if hasTx || hasRxq then image.PoolSlotCount else 0us)
 
-                putU32 bytes 24 (if hasTx then uint32 txOffset else 0u)
-                putU32 bytes 28 (if hasTx then uint32 txSize else 0u)
+                putU32
+                    bytes
+                    24
+                    (if hasRxq then uint32 extensionOffset
+                     elif hasTx then uint32 txOffset
+                     else 0u)
+
+                putU32
+                    bytes
+                    28
+                    (if hasRxq then uint32 extensionSize
+                     elif hasTx then uint32 txSize
+                     else 0u)
 
                 [| msgOffset, msgSize
                    prgOffset, prgSize
@@ -912,6 +1096,47 @@ module Scimg =
                     putDouble bytes (offset + 16) conversion.Offset)
 
                 Array.Copy(symbols, 0, bytes, symOffset, symbols.Length)
+
+                if hasRxq then
+                    putU32 bytes extensionOffset 0x31305845u
+
+                    putU16
+                        bytes
+                        (extensionOffset + 4)
+                        (2us
+                         ||| (if image.NestedMuxRecords.IsEmpty then 0us else 1us)
+                         ||| (if hasTx then 4us else 0us))
+
+                    bytes.[extensionOffset + 6] <- 4uy
+                    putU16 bytes (extensionOffset + 8) (uint16 image.NestedMuxRecords.Length)
+                    putU16 bytes (extensionOffset + 10) image.PoolSlotCount
+                    putU32 bytes (extensionOffset + 12) (uint32 nestedOffset)
+                    putU32 bytes (extensionOffset + 16) (uint32 qualityOffset)
+                    putU32 bytes (extensionOffset + 20) (uint32 embeddedTxOffset)
+                    putU32 bytes (extensionOffset + 24) (uint32 txSize)
+
+                    image.NestedMuxRecords
+                    |> List.iteri (fun index record ->
+                        let offset = extensionOffset + nestedOffset + index * NestedMuxRecordSize
+                        putU16 bytes offset record.TargetProgramIndex
+                        bytes.[offset + 2] <- uint8 record.Predicates.Length
+
+                        for predicateIndex in 0..3 do
+                            let predicateOffset = offset + 4 + predicateIndex * 8
+
+                            match record.Predicates |> List.tryItem predicateIndex with
+                            | Some predicate ->
+                                putU16 bytes predicateOffset predicate.SelectorProgramIndex
+                                putU16 bytes (predicateOffset + 2) predicate.SelectorSlot
+                                putU32 bytes (predicateOffset + 4) predicate.Expected
+                            | None ->
+                                putU16 bytes predicateOffset UInt16.MaxValue
+                                putU16 bytes (predicateOffset + 2) UInt16.MaxValue
+                                putU32 bytes (predicateOffset + 4) UInt32.MaxValue)
+
+                    image.QualityEntries
+                    |> List.iteri (fun index entry ->
+                        putU32 bytes (extensionOffset + qualityOffset + index * 4) entry.FreshnessMs)
 
                 if hasTx then
                     putU32 bytes txOffset 0x31305854u
@@ -1186,6 +1411,96 @@ module Scimg =
                 else
                     Ok(messages, programs, counters, bytes.[txOffset + templateOffset .. txOffset + templateEnd - 1])
 
+    let private parseExtension (bytes: byte array) offset size poolSlotCount programCount hasTx =
+        if size < ExtensionHeaderSize || getU32 bytes offset <> 0x31305845u then
+            Error[ImageTable]
+        elif
+            bytes.[offset + 6] <> 4uy
+            || bytes.[offset + 7] <> 0uy
+            || not (allZero bytes (offset + 28) 12)
+        then
+            Error[ImageTable]
+        else
+            let flags = getU16 bytes (offset + 4)
+            let nestedCount = int (getU16 bytes (offset + 8))
+            let qualityCount = int (getU16 bytes (offset + 10))
+            let nestedOffset = int (getU32 bytes (offset + 12))
+            let qualityOffset = int (getU32 bytes (offset + 16))
+            let txOffset = int (getU32 bytes (offset + 20))
+            let txSize = int (getU32 bytes (offset + 24))
+
+            let expectedFlags =
+                2us ||| (if nestedCount > 0 then 1us else 0us) ||| (if hasTx then 4us else 0us)
+
+            let expectedQuality = ExtensionHeaderSize + nestedCount * NestedMuxRecordSize
+            let expectedTx = expectedQuality + qualityCount * 4
+
+            if
+                (flags &&& ~~~7us) <> 0us
+                || flags <> expectedFlags
+                || nestedCount > MaxPrograms
+                || qualityCount <> poolSlotCount
+                || nestedOffset <> ExtensionHeaderSize
+                || qualityOffset <> expectedQuality
+                || txOffset <> expectedTx
+                || txOffset > size
+                || txSize <> size - txOffset
+                || (hasTx && txSize = 0)
+                || (not hasTx && txSize <> 0)
+            then
+                Error[ImageTable]
+            else
+                let mutable failed = false
+
+                let nested =
+                    [ for index in 0 .. nestedCount - 1 do
+                          let entry = offset + nestedOffset + index * NestedMuxRecordSize
+                          let target = getU16 bytes entry
+                          let depth = int bytes.[entry + 2]
+
+                          if depth < 2 || depth > 4 || bytes.[entry + 3] <> 0uy || int target >= programCount then
+                              failed <- true
+
+                          let predicates =
+                              [ for predicateIndex in 0..3 do
+                                    let predicateEntry = entry + 4 + predicateIndex * 8
+                                    let program = getU16 bytes predicateEntry
+                                    let slot = getU16 bytes (predicateEntry + 2)
+                                    let expected = getU32 bytes (predicateEntry + 4)
+
+                                    if predicateIndex < depth then
+                                        if int program >= programCount || int slot >= poolSlotCount then
+                                            failed <- true
+
+                                        yield
+                                            { SelectorProgramIndex = program
+                                              SelectorSlot = slot
+                                              Expected = expected }
+                                    elif
+                                        program <> UInt16.MaxValue
+                                        || slot <> UInt16.MaxValue
+                                        || expected <> UInt32.MaxValue
+                                    then
+                                        failed <- true ]
+
+                          yield
+                              { TargetProgramIndex = target
+                                Predicates = predicates } ]
+
+                let quality =
+                    [ for index in 0 .. qualityCount - 1 do
+                          let freshness = getU32 bytes (offset + qualityOffset + index * 4)
+
+                          if freshness > uint32 Int32.MaxValue then
+                              failed <- true
+
+                          yield { FreshnessMs = freshness } ]
+
+                if failed then
+                    Error[ImageTable]
+                else
+                    Ok(nested, quality, offset + txOffset, txSize)
+
     let read (bytes: byte array) : Result<RuntimeImage, ValidationError list> =
         if isNull bytes || bytes.Length < HeaderSize + DirectorySize + 4 then
             Error[ImageSize]
@@ -1201,49 +1516,66 @@ module Scimg =
                 Error[ImageSize]
             elif totalSize > MaxImageSize then
                 Error[ImageLimit "total_size exceeds 1 MiB"]
-            elif (flags &&& ~~~1us) <> 0us then
+            elif (flags &&& ~~~3us) <> 0us then
                 Error[ImageFeature]
             else
                 let hasTx = (flags &&& 1us) <> 0us
+                let hasRxq = (flags &&& 2us) <> 0us
                 let messageCount = int (getU16 bytes 16)
                 let programCount = int (getU16 bytes 18)
                 let conversionCount = int (getU16 bytes 20)
 
-                let poolSlotCount = if hasTx then int (getU16 bytes 22) else programCount
+                let poolSlotCount =
+                    if hasTx || hasRxq then
+                        int (getU16 bytes 22)
+                    else
+                        programCount
 
-                let txOffset = if hasTx then int (getU32 bytes 24) else totalSize - 4
+                let containerOffset =
+                    if hasTx || hasRxq then
+                        int (getU32 bytes 24)
+                    else
+                        totalSize - 4
 
-                let txSize = if hasTx then int (getU32 bytes 28) else 0
-
+                let containerSize = if hasTx || hasRxq then int (getU32 bytes 28) else 0
                 let crcOffset = totalSize - 4
 
-                if not hasTx && (getU16 bytes 22 <> 0us || not (allZero bytes 24 8)) then
+                if not hasTx && not hasRxq && (getU16 bytes 22 <> 0us || not (allZero bytes 24 8)) then
                     Error[ImageTable]
-                elif hasTx && poolSlotCount = 0 then
+                elif (hasTx || hasRxq) && poolSlotCount = 0 then
                     Error[ImageTable]
                 elif
                     messageCount > MaxMessages
                     || programCount > MaxPrograms
+                    || poolSlotCount > MaxPrograms
                     || conversionCount > MaxConversions
                 then
                     Error[ImageLimit "count exceeds v1 limits"]
                 elif conversionCount = 0 then
                     Error[ImageTable]
-                elif hasTx && txOffset % 4 <> 0 then
+                elif (hasTx || hasRxq) && containerOffset % 4 <> 0 then
                     Error[ImageAlign]
                 elif
-                    hasTx
-                    && (txOffset < HeaderSize + DirectorySize
-                        || txOffset > crcOffset
-                        || txSize > crcOffset - txOffset)
+                    (hasTx || hasRxq)
+                    && (containerOffset < HeaderSize + DirectorySize
+                        || containerOffset > crcOffset
+                        || containerSize > crcOffset - containerOffset)
                 then
                     Error[ImageBounds]
-                elif hasTx && crcOffset - (txOffset + txSize) > 3 then
+                elif hasRxq && containerOffset + containerSize <> crcOffset then
                     Error[ImageBounds]
-                elif hasTx && not (allZero bytes (txOffset + txSize) (crcOffset - txOffset - txSize)) then
+                elif not hasRxq && hasTx && crcOffset - (containerOffset + containerSize) > 3 then
+                    Error[ImageBounds]
+                elif
+                    not hasRxq
+                    && hasTx
+                    && not (
+                        allZero bytes (containerOffset + containerSize) (crcOffset - containerOffset - containerSize)
+                    )
+                then
                     Error[ImageTable]
                 else
-                    match readDirectory bytes totalSize messageCount programCount conversionCount txOffset with
+                    match readDirectory bytes totalSize messageCount programCount conversionCount containerOffset with
                     | Error errors -> Error errors
                     | Ok sections ->
                         if crc32 bytes crcOffset <> getU32 bytes crcOffset then
@@ -1262,30 +1594,47 @@ module Scimg =
                                 match parseSymbols bytes symOffset symSize poolSlotCount messageCount with
                                 | Error errors -> Error errors
                                 | Ok(signalNames, messageNames) ->
-                                    let txResult =
-                                        if hasTx then
-                                            parseTx bytes txOffset txSize
+                                    let extensionResult =
+                                        if hasRxq then
+                                            parseExtension
+                                                bytes
+                                                containerOffset
+                                                containerSize
+                                                poolSlotCount
+                                                programCount
+                                                hasTx
                                         else
-                                            Ok([], [], [], [||])
+                                            Ok([], [], containerOffset, containerSize)
 
-                                    match txResult with
+                                    match extensionResult with
                                     | Error errors -> Error errors
-                                    | Ok(txMessages, txPrograms, txCounters, txTemplates) ->
-                                        let image =
-                                            { Messages = messages
-                                              Programs = programs
-                                              Conversions = conversions
-                                              PoolSlotCount = uint16 poolSlotCount
-                                              SignalNames = signalNames
-                                              MessageNames = messageNames
-                                              TxMessages = txMessages
-                                              TxPrograms = txPrograms
-                                              TxCounters = txCounters
-                                              TxTemplates = txTemplates }
+                                    | Ok(nestedMuxRecords, qualityEntries, txOffset, txSize) ->
+                                        let txResult =
+                                            if hasTx then
+                                                parseTx bytes txOffset txSize
+                                            else
+                                                Ok([], [], [], [||])
 
-                                        let errors = validateRuntimeImage image
+                                        match txResult with
+                                        | Error errors -> Error errors
+                                        | Ok(txMessages, txPrograms, txCounters, txTemplates) ->
+                                            let image =
+                                                { Messages = messages
+                                                  Programs = programs
+                                                  Conversions = conversions
+                                                  PoolSlotCount = uint16 poolSlotCount
+                                                  SignalNames = signalNames
+                                                  MessageNames = messageNames
+                                                  TxMessages = txMessages
+                                                  TxPrograms = txPrograms
+                                                  TxCounters = txCounters
+                                                  TxTemplates = txTemplates
+                                                  NestedMuxRecords = nestedMuxRecords
+                                                  QualityEntries = qualityEntries }
 
-                                        if errors.IsEmpty then Ok image else Error errors
+                                            let errors = validateRuntimeImage image
+
+                                            if errors.IsEmpty then Ok image else Error errors
 
     let inspect (bytes: byte array) : Result<string, ValidationError list> =
         match read bytes with
@@ -1305,6 +1654,8 @@ module Scimg =
             writer.WriteNumber("txMessageCount", image.TxMessages.Length)
             writer.WriteNumber("txProgramCount", image.TxPrograms.Length)
             writer.WriteNumber("txCounterCount", image.TxCounters.Length)
+            writer.WriteNumber("nestedMuxRecordCount", image.NestedMuxRecords.Length)
+            writer.WriteNumber("qualityEntryCount", image.QualityEntries.Length)
             writer.WritePropertyName("messages")
             writer.WriteStartArray()
 

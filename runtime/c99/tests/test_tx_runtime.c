@@ -332,7 +332,7 @@ int main(void)
            sc_schema_tx_message_count(fd_schema) == 1u);
 
     memcpy(mutation, classic_image, sizeof(mutation));
-    put_u16(mutation + 10u, 3u);
+    put_u16(mutation + 10u, 5u);
     fix_crc(mutation);
     report("unknown image feature is rejected",
            sc_schema_open(other_schema, mutation, sizeof(mutation)) ==

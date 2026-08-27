@@ -48,6 +48,7 @@ module WireTests =
           ByteOrder = Little
           MultiplexerIndicator = None
           MultiplexerSwitchValue = None
+          ExtendedMuxParent = None
           ValueTable = None
           Receivers = []
           CrcMeta = None

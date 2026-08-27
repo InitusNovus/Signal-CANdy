@@ -14,6 +14,7 @@ extern "C" {
 #define SC_SLOT_VALID UINT32_C(0x01)
 #define SC_SLOT_UPDATED UINT32_C(0x02)
 #define SC_SLOT_CHANGED UINT32_C(0x04)
+#define SC_SLOT_STALE UINT32_C(0x08)
 
 /** Status returned by Signal-CANdy runtime operations. */
 typedef enum sc_status {
@@ -34,7 +35,8 @@ typedef enum sc_status {
     SC_ERR_SCRATCH = -13,
     SC_ERR_VALUE = -14,
     SC_ERR_BUSY = -15,
-    SC_ERR_TOKEN = -16
+    SC_ERR_TOKEN = -16,
+    SC_ERR_TIME = -17
 } sc_status_t;
 
 /** A normalized CAN/CAN-FD frame. */
@@ -94,6 +96,19 @@ sc_status_t sc_runtime_state_init(const sc_schema_t *schema,
 
 sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
                       sc_slot_t *pool, size_t pool_count);
+
+sc_status_t sc_decode_at(const sc_schema_t *schema,
+                         sc_runtime_state_t *state, uint32_t now_ms,
+                         const sc_frame_t *frame, sc_slot_t *pool,
+                         size_t pool_count);
+
+sc_status_t sc_expire(const sc_schema_t *schema,
+                      sc_runtime_state_t *state, uint32_t now_ms,
+                      sc_slot_t *pool, size_t pool_count);
+
+sc_status_t sc_runtime_reset(const sc_schema_t *schema,
+                             sc_runtime_state_t *state, size_t state_size,
+                             sc_slot_t *pool, size_t pool_count);
 
 sc_status_t sc_encode_prepare(const sc_schema_t *schema,
                               sc_runtime_state_t *state,

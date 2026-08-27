@@ -117,6 +117,7 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           ByteOrder = ByteOrder.Little
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
+                          ExtendedMuxParent = None
                           ValueTable = None
                           Receivers = []
                           CrcMeta = None
@@ -167,6 +168,7 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           ByteOrder = ByteOrder.Little
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
+                          ExtendedMuxParent = None
                           ValueTable = None
                           Receivers = []
                           CrcMeta = None
@@ -185,6 +187,7 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           ByteOrder = ByteOrder.Little
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
+                          ExtendedMuxParent = None
                           ValueTable = None
                           Receivers = []
                           CrcMeta = None
@@ -235,6 +238,7 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           ByteOrder = ByteOrder.Little
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
+                          ExtendedMuxParent = None
                           ValueTable = None
                           Receivers = []
                           CrcMeta = None
@@ -280,6 +284,7 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           ByteOrder = ByteOrder.Little
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
+                          ExtendedMuxParent = None
                           ValueTable = None
                           Receivers = []
                           CrcMeta = None
@@ -324,6 +329,7 @@ BO_ 500 MOTO_MSG: 8 Vector__XXX
                           ByteOrder = ByteOrder.Little
                           MultiplexerIndicator = None
                           MultiplexerSwitchValue = None
+                          ExtendedMuxParent = None
                           ValueTable = None
                           Receivers = []
                           CrcMeta = None

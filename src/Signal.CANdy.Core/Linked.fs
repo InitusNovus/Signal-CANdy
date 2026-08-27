@@ -9,6 +9,11 @@ open Signal.CANdy.Core.Wire
 
 module Linked =
 
+    type LinkedMuxPredicate =
+        { SelectorSlot: uint16
+          SelectorProgramName: string
+          Expected: uint32 }
+
     /// A resolved extraction and conversion operation for one RX pool slot.
     type DecodePlan =
         { PoolSignalName: string
@@ -21,9 +26,8 @@ module Linked =
           Factor: float
           Offset: float
           Storage: StorageType
-          Mux: MuxRole
-          MuxSelectorSlot: uint16 option
-          MuxExpected: uint32 option }
+          IsMuxSelector: bool
+          MuxPath: LinkedMuxPredicate list }
 
     /// A linked receive message with all source names resolved.
     type LinkedMessage =
@@ -39,7 +43,8 @@ module Linked =
           Storage: StorageType
           Direction: Direction
           Min: float option
-          Max: float option }
+          Max: float option
+          FreshnessMs: uint32 option }
 
     /// A resolved pool-to-wire insertion operation.
     type EncodePlan =
@@ -55,9 +60,26 @@ module Linked =
           Storage: StorageType
           PhysicalMin: float option
           PhysicalMax: float option
-          Mux: MuxRole
-          MuxSelectorSlot: uint16 option
-          MuxExpected: uint32 option }
+          IsMuxSelector: bool
+          MuxPath: LinkedMuxPredicate list }
+
+    type DecodePlan with
+        member plan.Mux =
+            if plan.IsMuxSelector then Selector
+            elif plan.MuxPath.IsEmpty then Unconditional
+            else Branch(int plan.MuxPath.Head.Expected)
+
+        member plan.MuxSelectorSlot = plan.MuxPath |> List.tryHead |> Option.map _.SelectorSlot
+        member plan.MuxExpected = plan.MuxPath |> List.tryHead |> Option.map _.Expected
+
+    type EncodePlan with
+        member plan.Mux =
+            if plan.IsMuxSelector then Selector
+            elif plan.MuxPath.IsEmpty then Unconditional
+            else Branch(int plan.MuxPath.Head.Expected)
+
+        member plan.MuxSelectorSlot = plan.MuxPath |> List.tryHead |> Option.map _.SelectorSlot
+        member plan.MuxExpected = plan.MuxPath |> List.tryHead |> Option.map _.Expected
 
     /// Resolved stateful counter field for one transmitted message.
     type LinkedTxCounter =
@@ -229,9 +251,13 @@ module Linked =
                                       Factor = factor
                                       Offset = offset
                                       Storage = poolSignal.Storage
-                                      Mux = wireSignal.Mux
-                                      MuxSelectorSlot = None
-                                      MuxExpected = None }
+                                      IsMuxSelector = wireSignal.IsMuxSelector
+                                      MuxPath =
+                                        wireSignal.MuxPath
+                                        |> List.map (fun predicate ->
+                                            { SelectorSlot = UInt16.MaxValue
+                                              SelectorProgramName = predicate.SelectorSignalName
+                                              Expected = predicate.Expected }) }
                                 )
                             )
                         | Tx when not (txNames.Contains(message.Name)) ->
@@ -272,89 +298,155 @@ module Linked =
                                           Storage = poolSignal.Storage
                                           PhysicalMin = physicalMin
                                           PhysicalMax = physicalMax
-                                          Mux = wireSignal.Mux
-                                          MuxSelectorSlot = None
-                                          MuxExpected = None }
+                                          IsMuxSelector = wireSignal.IsMuxSelector
+                                          MuxPath =
+                                            wireSignal.MuxPath
+                                            |> List.map (fun predicate ->
+                                                { SelectorSlot = UInt16.MaxValue
+                                                  SelectorProgramName = predicate.SelectorSignalName
+                                                  Expected = predicate.Expected }) }
                                     )
                                 )
 
     let private resolveMux<'T>
         (messageName: string)
-        (getMux: 'T -> MuxRole)
+        (getName: 'T -> string)
         (getSlot: 'T -> uint16)
         (getLength: 'T -> uint16)
-        (setMux: uint16 option -> uint32 option -> 'T -> 'T)
+        (getSigned: 'T -> bool)
+        (getIsSelector: 'T -> bool)
+        (getFactor: 'T -> float)
+        (getOffset: 'T -> float)
+        (getStorage: 'T -> StorageType)
+        (getPath: 'T -> LinkedMuxPredicate list)
+        (setPath: LinkedMuxPredicate list -> 'T -> 'T)
+        (maxDepth: int)
         (plans: 'T list)
         : Result<'T list, ValidationError list> =
-        let selectors =
-            plans
-            |> List.filter (fun plan ->
-                match getMux plan with
-                | Selector -> true
-                | _ -> false)
+        let byName = plans |> List.map (fun plan -> getName plan, plan) |> Map.ofList
 
-        let branches =
-            plans
-            |> List.choose (fun plan ->
-                match getMux plan with
-                | Branch expected -> Some(plan, expected)
-                | _ -> None)
+        let resolvePlan plan =
+            let sourcePath = getPath plan
 
-        if selectors.Length > 1 then
-            Error[InvalidValue(sprintf "Message '%s' has more than one bound multiplex selector." messageName)]
-        elif not branches.IsEmpty && selectors.IsEmpty then
-            Error[InvalidValue(sprintf "Message '%s' has multiplexed branches but no bound selector." messageName)]
+            if sourcePath.Length > maxDepth then
+                Error(InvalidValue(sprintf "Message '%s' mux path exceeds depth %d." messageName maxDepth))
+            else
+                let rec resolve prefix remaining =
+                    match remaining with
+                    | [] -> Ok prefix
+                    | predicate :: rest ->
+                        match byName |> Map.tryFind predicate.SelectorProgramName with
+                        | None ->
+                            Error(
+                                InvalidValue(
+                                    sprintf
+                                        "Message '%s' mux selector '%s' is not bound."
+                                        messageName
+                                        predicate.SelectorProgramName
+                                )
+                            )
+                        | Some selector ->
+                            let selectorPrefix = getPath selector
+
+                            let expectedPrefix =
+                                prefix |> List.map (fun item -> item.SelectorProgramName, item.Expected)
+
+                            let actualPrefix =
+                                selectorPrefix |> List.map (fun item -> item.SelectorProgramName, item.Expected)
+
+                            if actualPrefix <> expectedPrefix then
+                                Error(
+                                    InvalidValue(
+                                        sprintf "Message '%s' mux selector path is not a canonical prefix." messageName
+                                    )
+                                )
+                            elif
+                                not (getIsSelector selector)
+                                || getSigned selector
+                                || getLength selector < 1us
+                                || getLength selector > 32us
+                                || getFactor selector <> 1.0
+                                || getOffset selector <> 0.0
+                                || not (isIntegerStorage (getStorage selector))
+                            then
+                                Error(
+                                    InvalidValue(
+                                        sprintf
+                                            "Message '%s' mux selector must use unsigned identity integer storage."
+                                            messageName
+                                    )
+                                )
+                            else
+                                let maximum =
+                                    if getLength selector = 32us then
+                                        uint64 UInt32.MaxValue
+                                    else
+                                        (1UL <<< int (getLength selector)) - 1UL
+
+                                if uint64 predicate.Expected > maximum then
+                                    Error(
+                                        InvalidValue(
+                                            sprintf "Message '%s' has a mux value outside selector width." messageName
+                                        )
+                                    )
+                                else
+                                    resolve
+                                        (prefix
+                                         @ [ { SelectorSlot = getSlot selector
+                                               SelectorProgramName = predicate.SelectorProgramName
+                                               Expected = predicate.Expected } ])
+                                        rest
+
+                resolve [] sourcePath |> Result.map (fun path -> setPath path plan)
+
+        let resolved = plans |> List.map resolvePlan
+
+        let errors =
+            resolved
+            |> List.choose (function
+                | Error error -> Some error
+                | Ok _ -> None)
+
+        if errors.IsEmpty then
+            Ok(
+                resolved
+                |> List.choose (function
+                    | Ok value -> Some value
+                    | Error _ -> None)
+            )
         else
-            match selectors with
-            | [] -> Ok plans
-            | selector :: _ ->
-                let selectorSlot = getSlot selector
-
-                let selectorLength = getLength selector
-
-                let maximumExpected =
-                    if selectorLength >= 32us then
-                        uint64 UInt32.MaxValue
-                    else
-                        (1UL <<< int selectorLength) - 1UL
-
-                let invalidExpected =
-                    branches
-                    |> List.tryFind (fun (_, expected) -> expected < 0 || uint64 expected > maximumExpected)
-
-                match invalidExpected with
-                | Some _ ->
-                    Error[InvalidValue(sprintf "Message '%s' has a mux value outside the selector width." messageName)]
-                | None ->
-                    plans
-                    |> List.map (fun plan ->
-                        match getMux plan with
-                        | Branch expected -> setMux (Some selectorSlot) (Some(uint32 expected)) plan
-                        | _ -> plan)
-                    |> Ok
+            Error errors
 
     let private resolveDecodeMux messageName (plans: DecodePlan list) =
         resolveMux
             messageName
-            (fun (plan: DecodePlan) -> plan.Mux)
-            (fun (plan: DecodePlan) -> plan.PoolSlotIndex)
-            (fun (plan: DecodePlan) -> plan.Length)
-            (fun selector expected (plan: DecodePlan) ->
-                { plan with
-                    MuxSelectorSlot = selector
-                    MuxExpected = expected })
+            (fun (plan: DecodePlan) -> plan.WireSignalName)
+            (fun plan -> plan.PoolSlotIndex)
+            (fun plan -> plan.Length)
+            (fun plan -> plan.IsSigned)
+            (fun plan -> plan.IsMuxSelector)
+            (fun plan -> plan.Factor)
+            (fun plan -> plan.Offset)
+            (fun plan -> plan.Storage)
+            (fun plan -> plan.MuxPath)
+            (fun path plan -> { plan with MuxPath = path })
+            4
             plans
 
     let private resolveEncodeMux messageName (plans: EncodePlan list) =
         resolveMux
             messageName
-            (fun (plan: EncodePlan) -> plan.Mux)
-            (fun (plan: EncodePlan) -> plan.PoolSlotIndex)
-            (fun (plan: EncodePlan) -> plan.Length)
-            (fun selector expected (plan: EncodePlan) ->
-                { plan with
-                    MuxSelectorSlot = selector
-                    MuxExpected = expected })
+            (fun (plan: EncodePlan) -> plan.WireSignalName)
+            (fun plan -> plan.PoolSlotIndex)
+            (fun plan -> plan.Length)
+            (fun plan -> plan.IsSigned)
+            (fun plan -> plan.IsMuxSelector)
+            (fun plan -> plan.Factor)
+            (fun plan -> plan.Offset)
+            (fun plan -> plan.Storage)
+            (fun plan -> plan.MuxPath)
+            (fun path plan -> { plan with MuxPath = path })
+            1
             plans
 
     let private rangesOverlap startA lengthA startB lengthB =
@@ -362,10 +454,16 @@ module Linked =
         && uint32 startB < uint32 startA + uint32 lengthA
 
     let private legalBranchOverlap (left: EncodePlan) (right: EncodePlan) =
-        match left.Mux, right.Mux with
-        | Branch leftExpected, Branch rightExpected ->
-            left.MuxSelectorSlot = right.MuxSelectorSlot && leftExpected <> rightExpected
-        | _ -> false
+        let rightPath =
+            right.MuxPath
+            |> List.map (fun predicate -> predicate.SelectorProgramName, predicate.Expected)
+            |> Map.ofList
+
+        left.MuxPath
+        |> List.exists (fun predicate ->
+            rightPath
+            |> Map.tryFind predicate.SelectorProgramName
+            |> Option.exists (fun expected -> expected <> predicate.Expected))
 
     let private txPlanOverlapErrors messageName (plans: EncodePlan list) =
         [ for leftIndex in 0 .. plans.Length - 1 do
@@ -499,6 +597,28 @@ module Linked =
                     else
                         None)
 
+            let freshnessWriterErrors =
+                pool.Signals
+                |> List.choose (fun signal ->
+                    match signal.FreshnessMs with
+                    | None -> None
+                    | Some _ ->
+                        let writers =
+                            rxEntries
+                            |> List.filter (fun (_, plan) -> plan.PoolSignalName = signal.Name)
+                            |> List.length
+
+                        if writers = 1 then
+                            None
+                        else
+                            Some(
+                                InvalidValue(
+                                    sprintf
+                                        "Freshness-enabled RX pool signal '%s' must have exactly one writer."
+                                        signal.Name
+                                )
+                            ))
+
             let duplicateTxErrors =
                 txEntries
                 |> List.groupBy (fun (message, plan) -> message.Name, plan.PoolSlotIndex)
@@ -597,6 +717,7 @@ module Linked =
             let errors =
                 resolutionErrors
                 @ duplicateRxErrors
+                @ freshnessWriterErrors
                 @ duplicateTxErrors
                 @ mixedDirectionErrors
                 @ (rxMuxErrors |> List.concat)
@@ -613,6 +734,7 @@ module Linked =
                               Storage = signal.Storage
                               Direction = signal.Direction
                               Min = signal.Min
-                              Max = signal.Max })
+                              Max = signal.Max
+                              FreshnessMs = signal.FreshnessMs })
                       Messages = rxMessages |> List.choose id
                       TxMessages = txMessages |> List.choose id }

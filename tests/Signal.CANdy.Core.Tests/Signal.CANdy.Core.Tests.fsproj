@@ -10,10 +10,12 @@
   <ItemGroup>
     <Compile Include="DbcTests.fs" />
     <Compile Include="PoolTests.fs" />
+    <Compile Include="PoolQualityTests.fs" />
     <Compile Include="WireTests.fs" />
     <Compile Include="BindingTests.fs" />
     <Compile Include="BindingTxTests.fs" />
     <Compile Include="LinkedTests.fs" />
+    <Compile Include="NestedMuxTests.fs" />
     <Compile Include="ConfigTests.fs" />
     <Compile Include="CodegenTests.fs" />
     <Compile Include="EdgeCaseTests.fs" />
@@ -21,6 +23,7 @@
     <Compile Include="FacadeTests.fs" />
     <Compile Include="ScimgTests.fs" />
     <Compile Include="ScimgTxTests.fs" />
+    <Compile Include="ScimgQualityTests.fs" />
     <Compile Include="DifferentialTests.fs" />
   </ItemGroup>
 

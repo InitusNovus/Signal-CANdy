@@ -6,14 +6,17 @@ open Signal.CANdy.Core.Ir
 
 module Wire =
 
-    /// A signal's role in classic DBC multiplexing.
+    /// Compatibility projection for classic one-level multiplexing.
     type MuxRole =
         | Unconditional
         | Selector
         | Branch of expected: int
 
+    type MuxPredicate =
+        { SelectorSignalName: string
+          Expected: uint32 }
+
     /// A normalized wire-level signal independent of source syntax.
-    /// Value tables remain available in Ir but are display metadata and are not carried into Wire IR v1.
     type WireSignal =
         { Name: string
           StartBit: uint16
@@ -25,7 +28,8 @@ module Wire =
           Unit: string
           Min: float option
           Max: float option
-          Mux: MuxRole
+          IsMuxSelector: bool
+          MuxPath: MuxPredicate list
           Receivers: string list }
 
     /// A normalized CAN or CAN FD message.
@@ -36,12 +40,18 @@ module Wire =
           LengthBytes: uint16
           Signals: WireSignal list }
 
-    /// The canonical wire model consumed by later binding stages.
     type WireModel = { Messages: WireMessage list }
 
-    // Read-only compatibility for downstream stages that predate the canonical v1 field names.
     type WireSignal with
         member signal.Length = signal.LengthBits
+
+        member signal.Mux =
+            if signal.IsMuxSelector then
+                Selector
+            else
+                match List.tryLast signal.MuxPath with
+                | Some predicate -> Branch(int predicate.Expected)
+                | None -> Unconditional
 
     type WireMessage with
         member message.Id = message.CanId
@@ -49,9 +59,6 @@ module Wire =
 
     type WireIr = WireModel
 
-    /// DbcParserLib 1.7.0 returns Motorola StartBit unchanged from the DBC's
-    /// MSB-first sawtooth coordinate (for example, `263|8@0+` is returned as 263).
-    /// Convert the signal's DBC-stream final bit to the runtime's LSB-first frame coordinate.
     let private normalizeStartBit (signal: Signal) =
         match signal.ByteOrder with
         | Little -> int signal.StartBit
@@ -62,26 +69,100 @@ module Wire =
     let private unsupportedMux signalName details =
         UnsupportedFeature(sprintf "Signal '%s' uses unsupported multiplexing: %s" signalName details)
 
-    let private muxRole (signal: Signal) : Result<MuxRole, ValidationError> =
-        match signal.MultiplexerIndicator, signal.MultiplexerSwitchValue with
-        | None, None -> Ok Unconditional
-        | None, Some _ -> Error(unsupportedMux signal.Name "a switch value without an indicator")
-        | Some "M", _ -> Ok Selector
-        // Dbc.fs represents m<N> as indicator "m" plus MultiplexerSwitchValue.
-        | Some "m", Some expected -> Ok(Branch expected)
-        | Some "m", None -> Error(unsupportedMux signal.Name "branch indicator is missing a switch value")
-        // Also accept an Ir supplied directly with the complete DBC m<N> token.
-        | Some indicator, switchValue when indicator.StartsWith("m", StringComparison.Ordinal) ->
-            match Int32.TryParse(indicator.AsSpan(1)) with
-            | true, expected ->
-                match switchValue with
-                | Some actual when actual <> expected ->
-                    Error(unsupportedMux signal.Name "branch indicator and switch value disagree")
-                | _ -> Ok(Branch expected)
-            | false, _ -> Error(unsupportedMux signal.Name (sprintf "indicator '%s'" indicator))
-        | Some indicator, _ -> Error(unsupportedMux signal.Name (sprintf "indicator '%s'" indicator))
+    let private isSelector (signal: Signal) =
+        signal.MultiplexerIndicator = Some "M"
+        || signal.MultiplexerIndicator = Some "mM"
 
-    let private normalizeSignal (message: Message) (signal: Signal) =
+    let private resolvePaths (message: Message) =
+        let byName =
+            message.Signals |> List.map (fun signal -> signal.Name, signal) |> Map.ofList
+
+        let roots =
+            message.Signals
+            |> List.filter (fun signal -> signal.MultiplexerIndicator = Some "M")
+
+        let root = roots |> List.tryHead
+
+        let rec resolve visited (signal: Signal) =
+            if Set.contains signal.Name visited then
+                Error(unsupportedMux signal.Name "selector cycle")
+            else
+                match signal.ExtendedMuxParent with
+                | Some parent when parent.SelectorSignalName = signal.Name ->
+                    Error(unsupportedMux signal.Name "self-referencing selector")
+                | Some parent ->
+                    match byName |> Map.tryFind parent.SelectorSignalName with
+                    | None ->
+                        Error(unsupportedMux signal.Name (sprintf "missing parent '%s'" parent.SelectorSignalName))
+                    | Some selector when not (isSelector selector) ->
+                        Error(unsupportedMux signal.Name (sprintf "parent '%s' is not a selector" selector.Name))
+                    | Some selector when
+                        selector.IsSigned
+                        || selector.Length < 1us
+                        || selector.Length > 32us
+                        || selector.Factor <> 1.0
+                        || selector.Offset <> 0.0
+                        ->
+                        Error(unsupportedMux selector.Name "selector must be unsigned 1..32 bits with identity scaling")
+                    | Some selector ->
+                        let maximum =
+                            if selector.Length = 32us then
+                                uint64 UInt32.MaxValue
+                            else
+                                (1UL <<< int selector.Length) - 1UL
+
+                        if uint64 parent.Expected > maximum then
+                            Error(unsupportedMux signal.Name "predicate exceeds selector width")
+                        else
+                            resolve (Set.add signal.Name visited) selector
+                            |> Result.map (fun prefix ->
+                                prefix
+                                @ [ { SelectorSignalName = selector.Name
+                                      Expected = parent.Expected } ])
+                | None ->
+                    match signal.MultiplexerIndicator, signal.MultiplexerSwitchValue with
+                    | None, None
+                    | Some "M", None -> Ok []
+                    | Some "m", Some expected when expected >= 0 ->
+                        match root with
+                        | Some selector ->
+                            Ok
+                                [ { SelectorSignalName = selector.Name
+                                    Expected = uint32 expected } ]
+                        | None -> Error(unsupportedMux signal.Name "branch has no root selector")
+                    | Some "mM", _ -> Error(unsupportedMux signal.Name "nested selector is missing a parent")
+                    | None, Some _ -> Error(unsupportedMux signal.Name "a switch value without an indicator")
+                    | Some "m", None -> Error(unsupportedMux signal.Name "branch indicator is missing a switch value")
+                    | Some indicator, _ -> Error(unsupportedMux signal.Name (sprintf "indicator '%s'" indicator))
+
+        let rootErrors =
+            if roots.Length > 1 then
+                [ unsupportedMux message.Name "more than one root selector" ]
+            else
+                []
+
+        let resolved =
+            message.Signals |> List.map (fun signal -> signal, resolve Set.empty signal)
+
+        let errors =
+            rootErrors
+            @ (resolved
+               |> List.choose (fun (_, result) ->
+                   match result with
+                   | Error error -> Some error
+                   | Ok path when path.Length > 4 -> Some(unsupportedMux message.Name "path depth exceeds 4")
+                   | Ok _ -> None))
+
+        if errors.IsEmpty then
+            Ok(
+                resolved
+                |> List.map (fun (signal, result) -> signal.Name, Result.defaultValue [] result)
+                |> Map.ofList
+            )
+        else
+            Error errors
+
+    let private normalizeSignal (message: Message) paths (signal: Signal) =
         let startBit = normalizeStartBit signal
         let endBit = startBit + int signal.Length
         let frameBits = int message.Length * 8
@@ -90,16 +171,8 @@ module Wire =
             [ if endBit > frameBits then
                   SignalExceedsFrame(message.Name, signal.Name, endBit, frameBits)
 
-              // CRC remains outside runtime image v1. Counter metadata may pass
-              // through normalization; only an explicit TX binding gives it state.
               if signal.CrcMeta.IsSome then
-                  UnsupportedFeature "CRC/counter signals are not supported in Wire IR v1"
-
-              match muxRole signal with
-              | Error error -> error
-              | Ok _ -> () ]
-
-        let mux = muxRole signal |> Result.defaultValue Unconditional
+                  UnsupportedFeature "CRC/counter signals are not supported in Wire IR v1" ]
 
         { Name = signal.Name
           StartBit = uint16 startBit
@@ -111,32 +184,70 @@ module Wire =
           Unit = signal.Unit
           Min = signal.Minimum
           Max = signal.Maximum
-          Mux = mux
+          IsMuxSelector = isSelector signal
+          MuxPath = paths |> Map.find signal.Name
           Receivers = signal.Receivers },
         errors
+
+    let private rangesOverlap (leftStart: uint16) (leftLength: uint16) (rightStart: uint16) (rightLength: uint16) =
+        uint32 leftStart < uint32 rightStart + uint32 rightLength
+        && uint32 rightStart < uint32 leftStart + uint32 leftLength
+
+    let private mutuallyExclusive (left: WireSignal) (right: WireSignal) =
+        let rightPath =
+            right.MuxPath
+            |> List.map (fun predicate -> predicate.SelectorSignalName, predicate.Expected)
+            |> Map.ofList
+
+        left.MuxPath
+        |> List.exists (fun predicate ->
+            rightPath
+            |> Map.tryFind predicate.SelectorSignalName
+            |> Option.exists (fun expected -> expected <> predicate.Expected))
+
+    let private overlapErrors messageName (signals: WireSignal list) =
+        [ for leftIndex in 0 .. signals.Length - 1 do
+              for rightIndex in leftIndex + 1 .. signals.Length - 1 do
+                  let left = signals.[leftIndex]
+                  let right = signals.[rightIndex]
+
+                  if
+                      rangesOverlap left.StartBit left.LengthBits right.StartBit right.LengthBits
+                      && not (mutuallyExclusive left right)
+                  then
+                      InvalidValue(
+                          sprintf "Wire signals '%s' and '%s' overlap in message '%s'." left.Name right.Name messageName
+                      ) ]
 
     let private normalizeMessage (message: Message) =
         let messageErrors =
             [ if message.Length > 64us then
                   MessageTooLong(message.Name, int message.Length) ]
 
-        let signals, signalErrors =
-            message.Signals |> List.map (normalizeSignal message) |> List.unzip
+        match resolvePaths message with
+        | Error errors ->
+            { Name = message.Name
+              CanId = message.Id
+              IsExtended = message.IsExtended
+              LengthBytes = message.Length
+              Signals = [] },
+            messageErrors @ errors
+        | Ok paths ->
+            let signals, signalErrors =
+                message.Signals |> List.map (normalizeSignal message paths) |> List.unzip
 
-        { Name = message.Name
-          CanId = message.Id
-          IsExtended = message.IsExtended
-          LengthBytes = message.Length
-          Signals = signals },
-        messageErrors @ List.concat signalErrors
+            { Name = message.Name
+              CanId = message.Id
+              IsExtended = message.IsExtended
+              LengthBytes = message.Length
+              Signals = signals },
+            messageErrors @ List.concat signalErrors @ overlapErrors message.Name signals
 
-    /// Adapt the source Ir to Wire IR v1, normalizing bit coordinates and accumulating every diagnostic.
     let toWireModel (ir: Ir) : Result<WireModel, ValidationError list> =
         let messages, errors = ir.Messages |> List.map normalizeMessage |> List.unzip
-
         let allErrors = List.concat errors
 
-        if List.isEmpty allErrors then
+        if allErrors.IsEmpty then
             Ok { Messages = messages }
         else
             Error allErrors

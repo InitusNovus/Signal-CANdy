@@ -22,7 +22,13 @@ module BindingTxTests =
           Unit = ""
           Min = None
           Max = None
-          Mux = mux
+          IsMuxSelector = (mux = Selector)
+          MuxPath =
+            match mux with
+            | Branch expected ->
+                [ { SelectorSignalName = "Selector"
+                    Expected = uint32 expected } ]
+            | _ -> []
           Receivers = [] }
 
     let private message name canId signals : WireMessage =
@@ -42,7 +48,8 @@ module BindingTxTests =
                 Direction = direction
                 Min = None
                 Max = None
-                Default = None } ] }
+                Default = None
+                FreshnessMs = None } ] }
 
     let private parse json =
         match parseBindingSet json with

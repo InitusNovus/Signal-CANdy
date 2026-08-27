@@ -15,7 +15,8 @@ module PoolTests =
           Direction = Rx
           Min = Some 0.0
           Max = Some 250.0
-          Default = Some 0.0 }
+          Default = Some 0.0
+          FreshnessMs = None }
 
     let private validContract =
         { Name = "VehiclePool"
@@ -39,7 +40,8 @@ module PoolTests =
                         Direction = Tx
                         Min = None
                         Max = None
-                        Default = None } ] }
+                        Default = None
+                        FreshnessMs = None } ] }
 
         match writeManifest contract with
         | Error errors -> failwithf "Expected manifest write to succeed, got: %A" errors
@@ -100,7 +102,8 @@ module PoolTests =
             { validContract with
                 Signals =
                     [ { validSignal with
-                          Default = Some 300.0 } ] }
+                          Default = Some 300.0
+                          FreshnessMs = None } ] }
 
         validate contract
         |> containsError (function

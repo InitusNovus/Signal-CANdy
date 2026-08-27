@@ -9,6 +9,10 @@
 #define SC_CONVERSION_LIMIT ((uint16_t)1024u)
 #define SC_SCHEMA_TAG UINT32_C(0x53435231)
 #define SC_FEATURE_TX UINT16_C(0x0001)
+#define SC_FEATURE_RXQ UINT16_C(0x0002)
+#define SC_EX_MAGIC UINT32_C(0x31305845)
+#define SC_EX_HEADER_SIZE UINT32_C(40)
+#define SC_NMX_SIZE UINT32_C(36)
 #define SC_TX_MAGIC UINT32_C(0x31305854)
 #define SC_TX_HEADER_SIZE UINT32_C(32)
 #define SC_TX_MESSAGE_SIZE UINT32_C(24)
@@ -22,6 +26,9 @@ struct sc_schema {
     uint32_t msg_offset;
     uint32_t prg_offset;
     uint32_t cnv_offset;
+    uint32_t extension_offset;
+    uint32_t nested_offset;
+    uint32_t quality_offset;
     uint32_t tx_offset;
     uint32_t tx_message_offset;
     uint32_t tx_program_offset;
@@ -34,8 +41,9 @@ struct sc_schema {
     uint16_t tx_message_count;
     uint16_t tx_program_count;
     uint16_t counter_count;
+    uint16_t nested_count;
     uint8_t required_scratch;
-    uint8_t reserved;
+    uint8_t has_rxq;
     uint32_t tag;
 };
 
@@ -246,6 +254,11 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     uint16_t tx_message_count = 0u;
     uint16_t tx_program_count = 0u;
     uint16_t counter_count = 0u;
+    uint16_t nested_count = 0u;
+    uint32_t extension_offset = 0u;
+    uint32_t extension_size = 0u;
+    uint32_t nested_offset = 0u;
+    uint32_t quality_offset = 0u;
     uint32_t tx_offset = 0u;
     uint32_t tx_size = 0u;
     uint32_t tx_message_offset = 0u;
@@ -279,7 +292,7 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         return SC_ERR_VERSION;
     }
     feature_flags = sc_read_u16(bytes + 10);
-    if ((feature_flags & (uint16_t)~SC_FEATURE_TX) != 0u) {
+    if ((feature_flags & (uint16_t)~(SC_FEATURE_TX | SC_FEATURE_RXQ)) != 0u) {
         return SC_ERR_FEATURE;
     }
 
@@ -296,7 +309,22 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
         return conversion_count == 0u ? SC_ERR_TABLE : SC_ERR_LIMIT;
     }
 
-    if ((feature_flags & SC_FEATURE_TX) == 0u) {
+    if ((feature_flags & SC_FEATURE_RXQ) != 0u) {
+        pool_slot_count = sc_read_u16(bytes + 22);
+        extension_offset = sc_read_u32(bytes + 24);
+        extension_size = sc_read_u32(bytes + 28);
+        if (pool_slot_count == 0u || pool_slot_count > SC_SIGNAL_LIMIT) {
+            return SC_ERR_TABLE;
+        }
+        if ((extension_offset & 3u) != 0u) {
+            return SC_ERR_ALIGN;
+        }
+        if (extension_offset < 64u || extension_offset > crc_offset ||
+            extension_size != crc_offset - extension_offset) {
+            return SC_ERR_BOUNDS;
+        }
+        directory_end = extension_offset;
+    } else if ((feature_flags & SC_FEATURE_TX) == 0u) {
         if (sc_read_u16(bytes + 22) != 0u ||
             !sc_bytes_are_zero(bytes, 24u, 32u)) {
             return SC_ERR_TABLE;
@@ -360,6 +388,144 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     }
     if (sc_crc32(bytes, crc_offset) != sc_read_u32(bytes + crc_offset)) {
         return SC_ERR_CRC;
+    }
+
+    if ((feature_flags & SC_FEATURE_RXQ) != 0u) {
+        const uint8_t *extension = bytes + extension_offset;
+        uint16_t extension_flags;
+        uint16_t quality_count;
+        uint32_t relative_nested;
+        uint32_t relative_quality;
+        uint32_t relative_tx;
+        uint16_t expected_flags;
+
+        if (extension_size < SC_EX_HEADER_SIZE ||
+            sc_read_u32(extension) != SC_EX_MAGIC || extension[6] != 4u ||
+            extension[7] != 0u ||
+            !sc_bytes_are_zero(extension, 28u, 40u)) {
+            return SC_ERR_TABLE;
+        }
+        extension_flags = sc_read_u16(extension + 4u);
+        nested_count = sc_read_u16(extension + 8u);
+        quality_count = sc_read_u16(extension + 10u);
+        relative_nested = sc_read_u32(extension + 12u);
+        relative_quality = sc_read_u32(extension + 16u);
+        relative_tx = sc_read_u32(extension + 20u);
+        tx_size = sc_read_u32(extension + 24u);
+        expected_flags = (uint16_t)(2u | (nested_count != 0u ? 1u : 0u) |
+            ((feature_flags & SC_FEATURE_TX) != 0u ? 4u : 0u));
+
+        if (extension_flags != expected_flags ||
+            (extension_flags & (uint16_t)~7u) != 0u ||
+            nested_count > SC_SIGNAL_LIMIT || quality_count != pool_slot_count ||
+            relative_nested != SC_EX_HEADER_SIZE ||
+            relative_quality != SC_EX_HEADER_SIZE +
+                (uint32_t)nested_count * SC_NMX_SIZE ||
+            relative_tx != relative_quality + (uint32_t)quality_count * 4u ||
+            relative_tx > extension_size || tx_size != extension_size - relative_tx ||
+            (((feature_flags & SC_FEATURE_TX) != 0u) != (tx_size != 0u))) {
+            return SC_ERR_TABLE;
+        }
+        nested_offset = extension_offset + relative_nested;
+        quality_offset = extension_offset + relative_quality;
+        tx_offset = extension_offset + relative_tx;
+
+        for (i = 0u; i < nested_count; ++i) {
+            const uint8_t *record = bytes + nested_offset + (size_t)i * 36u;
+            uint16_t target = sc_read_u16(record);
+            uint8_t depth = record[2];
+            uint16_t target_message_start = 0u;
+            uint16_t target_message_count = 0u;
+            uint8_t predicate;
+            uint16_t message_index;
+
+            for (message_index = 0u; message_index < message_count; ++message_index) {
+                const uint8_t *message = bytes + offsets[0] +
+                    (size_t)message_index * 8u;
+                uint16_t start = sc_read_u16(message + 6u);
+                uint16_t count = sc_read_u16(message + 4u);
+                if (target >= start && target < (uint16_t)(start + count)) {
+                    target_message_start = start;
+                    target_message_count = count;
+                    break;
+                }
+            }
+
+            if (target >= signal_count || target_message_count == 0u ||
+                depth < 2u || depth > 4u ||
+                record[3] != 0u ||
+                (i != 0u && target <= sc_read_u16(record - 36u))) {
+                return SC_ERR_TABLE;
+            }
+            for (predicate = 0u; predicate < 4u; ++predicate) {
+                const uint8_t *item = record + 4u + (size_t)predicate * 8u;
+                uint16_t selector_program = sc_read_u16(item);
+                uint16_t selector_slot = sc_read_u16(item + 2u);
+                uint32_t expected = sc_read_u32(item + 4u);
+
+                if (predicate < depth) {
+                    const uint8_t *selector;
+                    if (selector_program >= signal_count ||
+                        selector_slot >= pool_slot_count ||
+                        selector_program == target ||
+                        selector_program < target_message_start ||
+                        selector_program >= (uint16_t)(target_message_start + target_message_count)) {
+                        return SC_ERR_BOUNDS;
+                    }
+                    selector = bytes + offsets[1] +
+                        (size_t)selector_program * 16u;
+                    if (sc_read_u16(selector + 8u) != selector_slot ||
+                        sc_read_u16(selector + 2u) > 32u ||
+                        (selector[4] & 2u) != 0u || selector[5] > 7u ||
+                        sc_read_u16(selector + 6u) != 0u) {
+                        return SC_ERR_TABLE;
+                    }
+                    if (predicate == 0u) {
+                        const uint8_t *target_program = bytes + offsets[1] +
+                            (size_t)target * 16u;
+                        if (sc_read_u16(selector + 10u) != UINT16_C(0xFFFF) ||
+                            sc_read_u32(selector + 12u) != UINT32_C(0xFFFFFFFF) ||
+                            sc_read_u16(target_program + 10u) != selector_slot ||
+                            sc_read_u32(target_program + 12u) != expected) {
+                            return SC_ERR_TABLE;
+                        }
+                    } else if (predicate == 1u) {
+                        const uint8_t *outer = record + 4u;
+                        if (sc_read_u16(selector + 10u) != sc_read_u16(outer + 2u) ||
+                            sc_read_u32(selector + 12u) != sc_read_u32(outer + 4u)) {
+                            return SC_ERR_TABLE;
+                        }
+                    } else {
+                        uint16_t prior;
+                        const uint8_t *selector_record = NULL;
+                        for (prior = 0u; prior < i; ++prior) {
+                            const uint8_t *candidate = bytes + nested_offset +
+                                (size_t)prior * 36u;
+                            if (sc_read_u16(candidate) == selector_program) {
+                                selector_record = candidate;
+                                break;
+                            }
+                        }
+                        if (selector_record == NULL ||
+                            selector_record[2] != predicate ||
+                            memcmp(selector_record + 4u, record + 4u,
+                                   (size_t)predicate * 8u) != 0) {
+                            return SC_ERR_TABLE;
+                        }
+                    }
+                } else if (selector_program != UINT16_C(0xFFFF) ||
+                           selector_slot != UINT16_C(0xFFFF) ||
+                           expected != UINT32_C(0xFFFFFFFF)) {
+                    return SC_ERR_TABLE;
+                }
+            }
+        }
+        for (i = 0u; i < quality_count; ++i) {
+            if (sc_read_u32(bytes + quality_offset + (size_t)i * 4u) >
+                UINT32_C(0x7FFFFFFF)) {
+                return SC_ERR_TABLE;
+            }
+        }
     }
 
     expected_program = 0u;
@@ -632,6 +798,9 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     parsed.msg_offset = offsets[0];
     parsed.prg_offset = offsets[1];
     parsed.cnv_offset = offsets[2];
+    parsed.extension_offset = extension_offset;
+    parsed.nested_offset = nested_offset;
+    parsed.quality_offset = quality_offset;
     parsed.tx_offset = tx_offset;
     parsed.tx_message_offset = tx_message_offset;
     parsed.tx_program_offset = tx_program_offset;
@@ -644,7 +813,9 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
     parsed.tx_message_count = tx_message_count;
     parsed.tx_program_count = tx_program_count;
     parsed.counter_count = counter_count;
+    parsed.nested_count = nested_count;
     parsed.required_scratch = required_scratch;
+    parsed.has_rxq = (feature_flags & SC_FEATURE_RXQ) != 0u;
     parsed.tag = SC_SCHEMA_TAG;
     *schema = parsed;
     return SC_OK;
@@ -665,13 +836,23 @@ uint16_t sc_schema_tx_message_count(const sc_schema_t *schema)
     return sc_schema_is_open(schema) ? schema->tx_message_count : 0u;
 }
 
-size_t sc_schema_required_state_bytes(const sc_schema_t *schema)
+SC_LOCAL size_t sc_counter_state_end(const sc_schema_t *schema)
 {
-    if (!sc_schema_is_open(schema) || schema->counter_count == 0u) {
-        return 0u;
-    }
     return offsetof(sc_runtime_state_t, counters) +
            (size_t)schema->counter_count * sizeof(sc_tx_counter_state_t);
+}
+
+size_t sc_schema_required_state_bytes(const sc_schema_t *schema)
+{
+    size_t counter_end;
+    if (!sc_schema_is_open(schema)) {
+        return 0u;
+    }
+    counter_end = sc_counter_state_end(schema);
+    if (schema->has_rxq != 0u) {
+        return counter_end + 8u + (size_t)schema->pool_slot_count * 8u;
+    }
+    return schema->counter_count == 0u ? 0u : counter_end;
 }
 
 size_t sc_schema_required_scratch_bytes(const sc_schema_t *schema)
@@ -753,8 +934,116 @@ SC_LOCAL uint64_t sc_sign_extend(uint64_t value, uint16_t length_bits)
     return value;
 }
 
-sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
-                      sc_slot_t *pool, size_t pool_count)
+SC_LOCAL uint8_t *sc_quality_state(const sc_schema_t *schema,
+                                   sc_runtime_state_t *state)
+{
+    return (uint8_t *)(void *)state + sc_counter_state_end(schema);
+}
+
+SC_LOCAL sc_status_t sc_accept_time(const sc_schema_t *schema,
+                                    sc_runtime_state_t *state,
+                                    uint32_t now_ms)
+{
+    uint8_t *quality;
+    uint32_t previous;
+    uint32_t flags;
+
+    if (state == NULL || state->schema != schema ||
+        state->counter_count != schema->counter_count) {
+        return SC_ERR_STATE;
+    }
+    quality = sc_quality_state(schema, state);
+    memcpy(&previous, quality, sizeof(previous));
+    memcpy(&flags, quality + 4u, sizeof(flags));
+    if ((flags & 1u) != 0u && now_ms - previous >= UINT32_C(0x80000000)) {
+        return SC_ERR_TIME;
+    }
+    memcpy(quality, &now_ms, sizeof(now_ms));
+    flags |= 1u;
+    memcpy(quality + 4u, &flags, sizeof(flags));
+    return SC_OK;
+}
+
+SC_LOCAL const uint8_t *sc_nested_record(const sc_schema_t *schema,
+                                         uint16_t target)
+{
+    uint16_t i;
+    for (i = 0u; i < schema->nested_count; ++i) {
+        const uint8_t *record = schema->image + schema->nested_offset +
+                                (size_t)i * 36u;
+        uint16_t candidate = sc_read_u16(record);
+        if (candidate == target) {
+            return record;
+        }
+        if (candidate > target) {
+            break;
+        }
+    }
+    return NULL;
+}
+
+SC_LOCAL int sc_selector_matches(const sc_schema_t *schema,
+                                 const sc_frame_t *frame,
+                                 uint16_t selector_program,
+                                 uint32_t expected)
+{
+    const uint8_t *selector = schema->image + schema->prg_offset +
+                              (size_t)selector_program * 16u;
+    uint16_t start = sc_read_u16(selector);
+    uint16_t length = sc_read_u16(selector + 2u);
+    uint64_t raw;
+
+    if ((uint32_t)start + length > (uint32_t)frame->len * 8u) {
+        return 0;
+    }
+    raw = sc_extract_bits(frame->data, start, length,
+                          (uint8_t)(selector[4] & 1u));
+    return (uint32_t)(raw & UINT64_C(0xFFFFFFFF)) == expected;
+}
+
+SC_LOCAL int sc_program_active(const sc_schema_t *schema,
+                               const sc_frame_t *frame,
+                               uint16_t message_program_index,
+                               uint16_t message_program_count,
+                               uint16_t target_index,
+                               const uint8_t *program)
+{
+    const uint8_t *record = sc_nested_record(schema, target_index);
+    if (record != NULL) {
+        uint8_t depth = record[2];
+        uint8_t i;
+        for (i = 0u; i < depth; ++i) {
+            const uint8_t *predicate = record + 4u + (size_t)i * 8u;
+            if (!sc_selector_matches(schema, frame,
+                                     sc_read_u16(predicate),
+                                     sc_read_u32(predicate + 4u))) {
+                return 0;
+            }
+        }
+        return 1;
+    }
+    if (sc_read_u16(program + 10u) != UINT16_C(0xFFFF)) {
+        uint16_t selector_slot = sc_read_u16(program + 10u);
+        uint16_t i;
+        for (i = 0u; i < message_program_count; ++i) {
+            uint16_t candidate_index = (uint16_t)(message_program_index + i);
+            const uint8_t *candidate = schema->image + schema->prg_offset +
+                (size_t)candidate_index * 16u;
+            if (sc_read_u16(candidate + 8u) == selector_slot) {
+                return sc_selector_matches(schema, frame, candidate_index,
+                                           sc_read_u32(program + 12u));
+            }
+        }
+        return 0;
+    }
+    return 1;
+}
+
+SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
+                                    sc_runtime_state_t *state,
+                                    uint32_t now_ms, int timestamped,
+                                    const sc_frame_t *frame,
+                                    sc_slot_t *pool, size_t pool_count)
 {
     const uint8_t *message = NULL;
     uint32_t wanted_id;
@@ -773,6 +1062,16 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
     }
     if (frame->len > 64u) {
         return SC_ERR_BOUNDS;
+    }
+    if (timestamped != 0) {
+        sc_status_t status;
+        if (schema->has_rxq == 0u) {
+            return SC_ERR_FEATURE;
+        }
+        status = sc_accept_time(schema, state, now_ms);
+        if (status != SC_OK) {
+            return status;
+        }
     }
 
     wanted_id = frame->id;
@@ -806,8 +1105,6 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
         uint8_t storage = program[5];
         uint16_t conversion_index = sc_read_u16(program + 6);
         uint16_t slot_index = sc_read_u16(program + 8);
-        uint16_t selector_slot = sc_read_u16(program + 10);
-        uint32_t expected_value = sc_read_u32(program + 12);
         uint64_t value;
         uint32_t old_flags;
         uint32_t changed;
@@ -815,9 +1112,8 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
         if ((uint32_t)start_bit + length_bits > (uint32_t)frame->len * 8u) {
             continue;
         }
-        if (selector_slot != UINT16_C(0xFFFF) &&
-            (uint32_t)(pool[selector_slot].raw & UINT64_C(0xFFFFFFFF)) !=
-                expected_value) {
+        if (!sc_program_active(schema, frame, program_index, program_count,
+                               (uint16_t)(program_index + i), program)) {
             continue;
         }
 
@@ -861,8 +1157,121 @@ sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
         pool[slot_index].raw = value;
         pool[slot_index].flags =
             (old_flags & ~(SC_SLOT_VALID | SC_SLOT_UPDATED |
-                           SC_SLOT_CHANGED)) |
+                           SC_SLOT_CHANGED |
+                           (timestamped != 0 ? SC_SLOT_STALE : 0u))) |
             SC_SLOT_VALID | SC_SLOT_UPDATED | changed;
+
+        if (timestamped != 0) {
+            uint8_t *slot_time = sc_quality_state(schema, state) + 8u +
+                                 (size_t)slot_index * 8u;
+            uint32_t initialized = 1u;
+            memcpy(slot_time, &now_ms, sizeof(now_ms));
+            memcpy(slot_time + 4u, &initialized, sizeof(initialized));
+        }
+    }
+    return SC_OK;
+}
+
+sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
+                      sc_slot_t *pool, size_t pool_count)
+{
+    return sc_decode_impl(schema, NULL, 0u, 0, frame, pool, pool_count);
+}
+
+sc_status_t sc_decode_at(const sc_schema_t *schema,
+                         sc_runtime_state_t *state, uint32_t now_ms,
+                         const sc_frame_t *frame, sc_slot_t *pool,
+                         size_t pool_count)
+{
+    return sc_decode_impl(schema, state, now_ms, 1, frame, pool, pool_count);
+}
+
+sc_status_t sc_expire(const sc_schema_t *schema,
+                      sc_runtime_state_t *state, uint32_t now_ms,
+                      sc_slot_t *pool, size_t pool_count)
+{
+    uint16_t slot;
+    sc_status_t status;
+
+    if (schema == NULL || pool == NULL) {
+        return SC_ERR_NULL;
+    }
+    if (!sc_schema_is_open(schema)) {
+        return SC_ERR_TABLE;
+    }
+    if (schema->has_rxq == 0u) {
+        return SC_ERR_FEATURE;
+    }
+    if (pool_count < schema->pool_slot_count) {
+        return SC_ERR_POOL;
+    }
+    status = sc_accept_time(schema, state, now_ms);
+    if (status != SC_OK) {
+        return status;
+    }
+
+    for (slot = 0u; slot < schema->pool_slot_count; ++slot) {
+        uint32_t threshold = sc_read_u32(schema->image +
+            schema->quality_offset + (size_t)slot * 4u);
+        uint8_t *slot_time = sc_quality_state(schema, state) + 8u +
+                             (size_t)slot * 8u;
+        uint32_t updated;
+        uint32_t flags;
+        memcpy(&updated, slot_time, sizeof(updated));
+        memcpy(&flags, slot_time + 4u, sizeof(flags));
+
+        if (threshold != 0u && (flags & 1u) != 0u &&
+            (pool[slot].flags & SC_SLOT_VALID) != 0u &&
+            now_ms - updated >= threshold) {
+            pool[slot].flags |= SC_SLOT_STALE;
+        }
+    }
+    return SC_OK;
+}
+
+sc_status_t sc_runtime_reset(const sc_schema_t *schema,
+                             sc_runtime_state_t *state, size_t state_size,
+                             sc_slot_t *pool, size_t pool_count)
+{
+    size_t required;
+    uint16_t i;
+
+    if (schema == NULL || pool == NULL) {
+        return SC_ERR_NULL;
+    }
+    if (!sc_schema_is_open(schema)) {
+        return SC_ERR_STATE;
+    }
+    required = sc_schema_required_state_bytes(schema);
+    if (pool_count < schema->pool_slot_count) {
+        return SC_ERR_POOL;
+    }
+    if (required != 0u && state == NULL) {
+        return SC_ERR_NULL;
+    }
+    if (state_size < required) {
+        return SC_ERR_STATE;
+    }
+    if (required != 0u &&
+        ((uintptr_t)(void *)state % sizeof(void *)) != 0u) {
+        return SC_ERR_ALIGN;
+    }
+
+    if (required != 0u) {
+        sc_status_t init = sc_runtime_state_init(schema, state, state_size);
+        if (init != SC_OK) {
+            return init;
+        }
+    } else if (state_size != 0u) {
+        return SC_ERR_STATE;
+    }
+
+    for (i = 0u; i < schema->signal_count; ++i) {
+        const uint8_t *program = schema->image + schema->prg_offset +
+                                 (size_t)i * 16u;
+        uint16_t slot = sc_read_u16(program + 8u);
+        pool[slot].flags &= ~(SC_SLOT_VALID | SC_SLOT_UPDATED |
+                              SC_SLOT_CHANGED | SC_SLOT_STALE);
     }
     return SC_OK;
 }

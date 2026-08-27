@@ -29,6 +29,10 @@ module Ir =
 
     type CounterSignalMeta = { Modulus: int; Increment: int }
 
+    type ExtendedMuxParent =
+        { SelectorSignalName: string
+          Expected: uint32 }
+
     type CrcCounterMode =
         | Validate
         | Passthrough
@@ -49,6 +53,7 @@ module Ir =
           ByteOrder: ByteOrder
           MultiplexerIndicator: string option
           MultiplexerSwitchValue: int option
+          ExtendedMuxParent: ExtendedMuxParent option
           ValueTable: (int * string) list option
           Receivers: string list
           CrcMeta: CrcSignalMeta option

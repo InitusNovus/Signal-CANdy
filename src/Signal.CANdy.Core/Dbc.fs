@@ -43,14 +43,41 @@ module Dbc =
             else
                 None)
 
-    // Determine whether two signals can coexist in the same frame instance.
-    let private canCoexist (a: Signal) (b: Signal) : bool =
-        let aMuxI, aMuxV = a.MultiplexerIndicator, a.MultiplexerSwitchValue
-        let bMuxI, bMuxV = b.MultiplexerIndicator, b.MultiplexerSwitchValue
+    let private muxPath (message: Message) (signal: Signal) =
+        let byName =
+            message.Signals |> List.map (fun value -> value.Name, value) |> Map.ofList
 
-        match aMuxI, aMuxV, bMuxI, bMuxV with
-        | Some indA, Some va, Some indB, Some vb when indA = "m" && indB = "m" && va <> vb -> false
-        | _ -> true
+        let root =
+            message.Signals
+            |> List.tryFind (fun value -> value.MultiplexerIndicator = Some "M")
+
+        let rec resolve visited (current: Signal) =
+            if Set.contains current.Name visited then
+                []
+            else
+                match current.ExtendedMuxParent with
+                | Some parent ->
+                    match byName |> Map.tryFind parent.SelectorSignalName with
+                    | Some selector ->
+                        resolve (Set.add current.Name visited) selector
+                        @ [ selector.Name, parent.Expected ]
+                    | None -> []
+                | None ->
+                    match current.MultiplexerIndicator, current.MultiplexerSwitchValue, root with
+                    | Some "m", Some expected, Some selector -> [ selector.Name, uint32 expected ]
+                    | _ -> []
+
+        resolve Set.empty signal
+
+    // Two paths are exclusive when any shared selector has different exact values.
+    let private canCoexist (message: Message) (a: Signal) (b: Signal) =
+        let left = muxPath message a |> Map.ofList
+        let right = muxPath message b |> Map.ofList
+
+        left
+        |> Map.exists (fun selector expected ->
+            right |> Map.tryFind selector |> Option.exists (fun other -> other <> expected))
+        |> not
 
     let private validateOverlaps (messages: Message list) : string option =
         let overlapsInMessage (m: Message) : string option =
@@ -64,7 +91,7 @@ module Dbc =
                     let conflict =
                         rest
                         |> List.tryPick (fun t ->
-                            if canCoexist s t then
+                            if canCoexist m s t then
                                 let tBits = coveredBits t |> Set.ofList
                                 let inter = Set.intersect sBits tBits
 
@@ -175,10 +202,12 @@ module Dbc =
                                 if t = "M" then
                                     muxInd <- Some "M"
                                 elif t.Length >= 1 && t.[0] = 'm' then
-                                    muxInd <- Some "m"
+                                    let nestedSelector = t.Length > 1 && t.EndsWith("M", StringComparison.Ordinal)
+                                    muxInd <- Some(if nestedSelector then "mM" else "m")
 
                                     if t.Length > 1 then
-                                        let vStr = t.Substring(1)
+                                        let valueEnd = if nestedSelector then t.Length - 1 else t.Length
+                                        let vStr = t.Substring(1, valueEnd - 1)
 
                                         match Int32.TryParse(vStr) with
                                         | true, v -> muxVal <- Some v
@@ -248,6 +277,61 @@ module Dbc =
 
         m
 
+    let private buildExtendedMuxMap (filePath: string) =
+        let idNames = buildIdNameMap filePath
+        let pattern = Regex(@"^SG_MUL_VAL_\s+(\d+)\s+(\S+)\s+(\S+)\s+(.+);\s*$")
+        let singleton = Regex(@"^(\d+)-(\d+)$")
+        let mutable parents: Map<string * string, ExtendedMuxParent> = Map.empty
+        let mutable error: string option = None
+
+        for raw in File.ReadLines(filePath) do
+            let line = raw.Trim()
+
+            if
+                error.IsNone
+                && line.StartsWith("SG_MUL_VAL_", StringComparison.Ordinal)
+                && line <> "SG_MUL_VAL_"
+            then
+                let matched = pattern.Match(line)
+
+                if not matched.Success then
+                    error <- Some(sprintf "Malformed SG_MUL_VAL_ declaration '%s'." line)
+                else
+                    let idText = matched.Groups.[1].Value
+                    let signalName = matched.Groups.[2].Value
+                    let selectorName = matched.Groups.[3].Value
+                    let predicateText = matched.Groups.[4].Value.Trim()
+                    let range = singleton.Match(predicateText)
+
+                    match Int32.TryParse(idText), range.Success with
+                    | (true, id), true when idNames.ContainsKey id ->
+                        match UInt32.TryParse(range.Groups.[1].Value), UInt32.TryParse(range.Groups.[2].Value) with
+                        | (true, first), (true, last) when first = last ->
+                            let key = idNames.[id], signalName
+
+                            if parents.ContainsKey key then
+                                error <- Some(sprintf "Signal '%s' has duplicate SG_MUL_VAL_ parents." signalName)
+                            else
+                                parents <-
+                                    parents
+                                    |> Map.add
+                                        key
+                                        { SelectorSignalName = selectorName
+                                          Expected = first }
+                        | (true, _), (true, _) ->
+                            error <-
+                                Some(
+                                    sprintf
+                                        "Signal '%s' uses a mux range; exact singleton predicates are required."
+                                        signalName
+                                )
+                        | _ -> error <- Some(sprintf "Signal '%s' has an invalid mux predicate." signalName)
+                    | _ -> error <- Some(sprintf "SG_MUL_VAL_ references an unknown message '%s'." idText)
+
+        match error with
+        | Some details -> Error details
+        | None -> Ok parents
+
     let private tryBuildValueTableMap (filePath: string) : Map<string * string, (int * string) list> =
         let idName = buildIdNameMap filePath
         let mutable map: Map<string * string, (int * string) list> = Map.empty
@@ -282,12 +366,81 @@ module Dbc =
 
         map
 
+    let private validateExtendedMux (messages: Message list) =
+        let validateMessage (message: Message) =
+            let byName =
+                message.Signals |> List.map (fun signal -> signal.Name, signal) |> Map.ofList
+
+            let isSelector signal =
+                signal.MultiplexerIndicator = Some "M"
+                || signal.MultiplexerIndicator = Some "mM"
+
+            let rec resolve visited (signal: Signal) =
+                if Set.contains signal.Name visited then
+                    Error(sprintf "Multiplexer cycle in message '%s'." message.Name)
+                else
+                    match signal.ExtendedMuxParent with
+                    | None ->
+                        if signal.MultiplexerIndicator = Some "mM" then
+                            Error(sprintf "Nested selector '%s' is missing its parent." signal.Name)
+                        else
+                            Ok(muxPath message signal)
+                    | Some parent when parent.SelectorSignalName = signal.Name ->
+                        Error(sprintf "Signal '%s' cannot multiplex itself." signal.Name)
+                    | Some parent ->
+                        match byName |> Map.tryFind parent.SelectorSignalName with
+                        | None ->
+                            Error(sprintf "Signal '%s' has missing parent '%s'." signal.Name parent.SelectorSignalName)
+                        | Some selector when not (isSelector selector) ->
+                            Error(sprintf "Signal '%s' parent '%s' is not a selector." signal.Name selector.Name)
+                        | Some selector when
+                            selector.IsSigned
+                            || selector.Length < 1us
+                            || selector.Length > 32us
+                            || selector.Factor <> 1.0
+                            || selector.Offset <> 0.0
+                            ->
+                            Error(
+                                sprintf
+                                    "Mux selector '%s' must be unsigned 1..32 bits with identity scaling."
+                                    selector.Name
+                            )
+                        | Some selector ->
+                            let maximum =
+                                if selector.Length = 32us then
+                                    uint64 UInt32.MaxValue
+                                else
+                                    (1UL <<< int selector.Length) - 1UL
+
+                            if uint64 parent.Expected > maximum then
+                                Error(sprintf "Mux predicate for '%s' exceeds selector width." signal.Name)
+                            elif
+                                signal.MultiplexerSwitchValue
+                                |> Option.exists (fun expected -> expected < 0 || uint32 expected <> parent.Expected)
+                            then
+                                Error(sprintf "Mux declaration for '%s' disagrees with SG_MUL_VAL_." signal.Name)
+                            else
+                                match resolve (Set.add signal.Name visited) selector with
+                                | Error details -> Error details
+                                | Ok prefix -> Ok(prefix @ [ selector.Name, parent.Expected ])
+
+            message.Signals
+            |> List.tryPick (fun signal ->
+                match resolve Set.empty signal with
+                | Error details -> Some details
+                | Ok path when path.Length > 4 ->
+                    Some(sprintf "Signal '%s' mux path exceeds maximum depth 4." signal.Name)
+                | Ok _ -> None)
+
+        messages |> List.tryPick validateMessage
+
     /// Parse DBC file into Core IR with validation
     let parseDbcFile (filePath: string) : Result<Ir, ParseError> =
         try
-            match validateDuplicateIdsFromText filePath with
-            | Some err -> Error(ParseError.InvalidDbc err)
-            | None ->
+            match validateDuplicateIdsFromText filePath, buildExtendedMuxMap filePath with
+            | Some err, _ -> Error(ParseError.InvalidDbc err)
+            | None, Error err -> Error(ParseError.InvalidDbc err)
+            | None, Ok extendedMuxMap ->
                 let metaMap = tryBuildSignalMetaMap filePath
                 let muxMap = tryBuildSignalMuxMap filePath
                 let valMap = tryBuildValueTableMap filePath
@@ -338,6 +491,7 @@ module Dbc =
                                   ByteOrder = inferredOrder
                                   MultiplexerIndicator = muxInd
                                   MultiplexerSwitchValue = muxVal
+                                  ExtendedMuxParent = extendedMuxMap |> Map.tryFind (msg.Name, s.Name)
                                   ValueTable = (valMap |> Map.tryFind (msg.Name, s.Name))
                                   Receivers = []
                                   CrcMeta = None
@@ -364,7 +518,8 @@ module Dbc =
                             let malformed =
                                 m.Signals
                                 |> List.tryFind (fun s ->
-                                    s.MultiplexerIndicator = Some "m" && s.MultiplexerSwitchValue.IsNone)
+                                    (s.MultiplexerIndicator = Some "m" || s.MultiplexerIndicator = Some "mM")
+                                    && s.MultiplexerSwitchValue.IsNone)
 
                             match malformed with
                             | Some s ->
@@ -383,8 +538,9 @@ module Dbc =
                 match
                     combineValidators
                         [ validateDuplicates messages
-                          validateOverlaps messages
                           validateMuxStructure messages
+                          validateExtendedMux messages
+                          validateOverlaps messages
                           validateExceedsDlc messages ]
                 with
                 | Some err -> Error(ParseError.InvalidDbc err)

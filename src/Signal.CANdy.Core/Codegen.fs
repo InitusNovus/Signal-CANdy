@@ -1094,6 +1094,14 @@ module Codegen =
 
             Directory.CreateDirectory(Path.Combine(outputPath, "src")) |> ignore
 
+            let nestedMuxGuard =
+                ir.Messages
+                |> List.tryPick (fun message ->
+                    message.Signals
+                    |> List.tryFind (fun signal ->
+                        signal.ExtendedMuxParent.IsSome || signal.MultiplexerIndicator = Some "mM")
+                    |> Option.map (fun signal -> message.Name, signal.Name))
+
             let overflowGuard =
                 ir.Messages
                 |> List.tryFind (fun msg ->
@@ -1106,8 +1114,17 @@ module Codegen =
 
                     hasMuxSwitch && hasMuxBranches && msg.Signals.Length > 1024)
 
-            match overflowGuard with
-            | Some msg ->
+            match nestedMuxGuard, overflowGuard with
+            | Some(messageName, signalName), _ ->
+                Error(
+                    CodeGenError.UnsupportedFeature(
+                        sprintf
+                            "Message '%s' signal '%s' uses nested multiplexing, which is runtime-image only."
+                            messageName
+                            signalName
+                    )
+                )
+            | None, Some msg ->
                 Error(
                     CodeGenError.UnsupportedFeature(
                         sprintf
@@ -1116,7 +1133,7 @@ module Codegen =
                             msg.Signals.Length
                     )
                 )
-            | None ->
+            | None, None ->
                 let ir = Signal.CANdy.Core.Dbc.applyConfigMetadata (Some config) ir
 
                 let hasCrcValidateMode =

@@ -22,7 +22,8 @@ module LinkedTests =
                 Direction = Rx
                 Min = Some 0.0
                 Max = Some 250.0
-                Default = None }
+                Default = None
+                FreshnessMs = None }
               { Name = "Temperature"
                 SemanticId = 2u
                 Storage = F32
@@ -30,7 +31,8 @@ module LinkedTests =
                 Direction = Rx
                 Min = None
                 Max = None
-                Default = None } ] }
+                Default = None
+                FreshnessMs = None } ] }
 
     let private wire: WireIr =
         { Messages =
@@ -49,7 +51,8 @@ module LinkedTests =
                       Unit = "km/h"
                       IsSigned = false
                       ByteOrder = Little
-                      Mux = Unconditional
+                      IsMuxSelector = false
+                      MuxPath = []
                       Receivers = [] } ] } ] }
 
     [<Fact>]

@@ -25,7 +25,8 @@ module ScimgTests =
                 Direction = Rx
                 Min = None
                 Max = None
-                Default = None }
+                Default = None
+                FreshnessMs = None }
               { Name = "Temperature"
                 SemanticId = 2u
                 Storage = F64
@@ -33,7 +34,8 @@ module ScimgTests =
                 Direction = Rx
                 Min = None
                 Max = None
-                Default = None }
+                Default = None
+                FreshnessMs = None }
               { Name = "SignedValue"
                 SemanticId = 3u
                 Storage = I16
@@ -41,7 +43,8 @@ module ScimgTests =
                 Direction = Rx
                 Min = None
                 Max = None
-                Default = None } ] }
+                Default = None
+                FreshnessMs = None } ] }
 
     let private wireSignal name startBit length byteOrder isSigned unitName : WireSignal =
         { Name = name
@@ -54,7 +57,8 @@ module ScimgTests =
           Unit = unitName
           Min = None
           Max = None
-          Mux = Unconditional
+          IsMuxSelector = false
+          MuxPath = []
           Receivers = [] }
 
     let private wire: WireIr =
@@ -212,11 +216,14 @@ module ScimgTests =
                     Direction = Rx
                     Min = None
                     Max = None
-                    Default = None } ] }
+                    Default = None
+                    FreshnessMs = None } ] }
 
         let branchSignal =
             { wireSignal "Muxed" 8us 8us Little false "" with
-                Mux = Branch 1 }
+                MuxPath =
+                    [ { SelectorSignalName = "MuxSelector"
+                        Expected = 1u } ] }
 
         let branchWire =
             { Messages =

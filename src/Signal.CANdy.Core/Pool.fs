@@ -35,7 +35,8 @@ module Pool =
           Direction: Direction
           Min: float option
           Max: float option
-          Default: float option }
+          Default: float option
+          FreshnessMs: uint32 option }
 
     /// The compiled pool contract for an application.
     type PoolContract =
@@ -64,6 +65,13 @@ module Pool =
           match signal.Min, signal.Max, signal.Default with
           | Some minimum, Some maximum, Some defaultValue when defaultValue < minimum || defaultValue > maximum ->
               DefaultOutOfRange signal.Name
+          | _ -> ()
+
+          match signal.FreshnessMs with
+          | Some value when value = 0u || value > uint32 Int32.MaxValue ->
+              InvalidValue(sprintf "Pool signal '%s' freshnessMs must be 1..2147483647." signal.Name)
+          | Some _ when signal.Direction = Tx ->
+              InvalidValue(sprintf "TX pool signal '%s' cannot declare freshnessMs." signal.Name)
           | _ -> () ]
 
     /// Validate names, semantic IDs, and numeric bounds in a pool contract.
@@ -195,6 +203,14 @@ module Pool =
             | true, number -> Ok(Some number)
             | false, _ -> Error(sprintf "%s key '%s' must be a number" context name)
 
+    let private optionalFreshness (context: string) (properties: JsonProperty list) =
+        match tryProperty "freshnessMs" properties with
+        | None -> Ok None
+        | Some value ->
+            match value.TryGetUInt32() with
+            | true, number when number > 0u && number <= uint32 Int32.MaxValue -> Ok(Some number)
+            | _ -> Error(sprintf "%s key 'freshnessMs' must be an integer in 1..2147483647" context)
+
     let private parseSignal (index: int) (element: JsonElement) =
         let context = sprintf "signals[%d]" index
 
@@ -211,7 +227,8 @@ module Pool =
                       "direction"
                       "min"
                       "max"
-                      "default" ]
+                      "default"
+                      "freshnessMs" ]
                     properties
 
             let! name = requiredString context "name" properties
@@ -224,16 +241,21 @@ module Pool =
             let! minimum = optionalFloat context "min" properties
             let! maximum = optionalFloat context "max" properties
             let! defaultValue = optionalFloat context "default" properties
+            let! freshnessMs = optionalFreshness context properties
 
-            return
-                { Name = name
-                  SemanticId = semanticId
-                  Storage = storage
-                  Unit = unit
-                  Direction = direction
-                  Min = minimum
-                  Max = maximum
-                  Default = defaultValue }
+            if freshnessMs.IsSome && direction = Tx then
+                return! Error(sprintf "%s TX signal cannot declare freshnessMs" context)
+            else
+                return
+                    { Name = name
+                      SemanticId = semanticId
+                      Storage = storage
+                      Unit = unit
+                      Direction = direction
+                      Min = minimum
+                      Max = maximum
+                      Default = defaultValue
+                      FreshnessMs = freshnessMs }
         }
 
     let private parseSignals (context: string) (properties: JsonProperty list) =
@@ -321,6 +343,10 @@ module Pool =
                     writeOptionalNumber writer "min" signal.Min
                     writeOptionalNumber writer "max" signal.Max
                     writeOptionalNumber writer "default" signal.Default
+
+                    signal.FreshnessMs
+                    |> Option.iter (fun value -> writer.WriteNumber("freshnessMs", value))
+
                     writer.WriteEndObject())
 
                 writer.WriteEndArray()
