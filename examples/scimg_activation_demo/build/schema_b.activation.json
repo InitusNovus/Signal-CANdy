@@ -1,0 +1,22 @@
+{
+  "format": "sc.activation/v1",
+  "runtimeImageMajor": 1,
+  "runtimeImageMinor": 0,
+  "runtimeAbi": "ilp32",
+  "features": [
+    "rx",
+    "tx",
+    "rx-quality",
+    "crc8-sae-j1850",
+    "crc16-ccitt-false",
+    "rx-counter",
+    "tx-counter"
+  ],
+  "imageFeatureFlags": 7,
+  "poolAbiHash": "sha256:3cff36849f7b67cae1fa24a1ec6711993e1a4e2c477e613f3701fa41e005e947",
+  "imageSha256": "sha256:6b1a5bdf3255bff17e12195bea2fd4703ae6427e06f2e701d7fde231e05312f2",
+  "imageBytes": 444,
+  "runtimeStateBytes": 60,
+  "runtimeScratchBytes": 8,
+  "poolSlots": 3
+}

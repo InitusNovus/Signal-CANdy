@@ -1,0 +1,23 @@
+{
+  "formatVersion": 1,
+  "totalSize": 444,
+  "crc32Hex": "0x7DB9E52E",
+  "crcValid": true,
+  "messageCount": 1,
+  "signalCount": 1,
+  "poolSlotCount": 3,
+  "conversionCount": 1,
+  "txMessageCount": 1,
+  "txProgramCount": 2,
+  "txCounterCount": 1,
+  "nestedMuxRecordCount": 0,
+  "qualityEntryCount": 3,
+  "messages": [
+    {
+      "name": "ACTIVATION_B_RX",
+      "encodedCanIdHex": "0x00000336",
+      "programCount": 1,
+      "programIndex": 0
+    }
+  ]
+}

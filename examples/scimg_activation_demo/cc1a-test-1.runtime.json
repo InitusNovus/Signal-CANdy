@@ -1,0 +1,36 @@
+{
+  "format": "sc.runtime-capabilities/v1",
+  "runtimeImageMajor": 1,
+  "runtimeImageMinor": 0,
+  "runtimeAbi": "ilp32",
+  "features": [
+    "rx",
+    "tx",
+    "rx-quality",
+    "crc8-sae-j1850",
+    "crc16-ccitt-false",
+    "rx-counter",
+    "tx-counter"
+  ],
+  "poolAbiHash": "sha256:3cff36849f7b67cae1fa24a1ec6711993e1a4e2c477e613f3701fa41e005e947",
+  "limits": {
+    "maxImageBytes": 444,
+    "maxRuntimeStateBytes": 60,
+    "maxRuntimeScratchBytes": 8,
+    "maxRxMessages": 1,
+    "maxRxPrograms": 1,
+    "maxTxMessages": 1,
+    "maxTxPrograms": 2,
+    "maxPoolSlots": 3,
+    "maxConversions": 1,
+    "maxNestedMuxRecords": 0,
+    "maxMuxDepth": 0,
+    "maxQualityEntries": 3,
+    "maxProtectionPlans": 2,
+    "maxTxCounters": 1,
+    "maxRxCounters": 1,
+    "maxCoverageSpans": 2,
+    "maxTxTemplateBytes": 8,
+    "maxPayloadBytes": 8
+  }
+}

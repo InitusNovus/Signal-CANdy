@@ -1,0 +1,16 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 805 ACTIVATION_A_TX: 8 Vector__XXX
+ SG_ AliveCounter : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ TxValue : 8|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ MarkerA5 : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Crc8 : 56|8@1+ (1,0) [0|255] "" Vector__XXX
+
+BO_ 806 ACTIVATION_A_RX: 8 Vector__XXX
+ SG_ AliveCounter : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ RxValue : 8|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ MarkerBC : 24|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Crc16 : 48|16@1+ (1,0) [0|65535] "" Vector__XXX

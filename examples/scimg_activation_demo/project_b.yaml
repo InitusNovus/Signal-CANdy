@@ -1,0 +1,15 @@
+format: sc.project/v1
+name: scimg-activation-b
+pool:
+  definition: pool.json
+wireSources:
+  - name: schema-b
+    type: dbc
+    path: schema_b.dbc
+binding: binding_b.json
+target: cc1a-test-1.runtime.json
+outputs:
+  image: build/schema_b.scimg
+  header: build/scimg_activation_b.h
+  inspect: build/schema_b.inspect.json
+  activation: build/schema_b.activation.json

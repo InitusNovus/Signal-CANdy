@@ -1,0 +1,9 @@
+{
+  "name": "activation_demo_pool",
+  "version": "1",
+  "signals": [
+    { "name": "RxValue", "semanticId": 1, "storage": "u16", "unit": "", "direction": "rx", "freshnessMs": 30 },
+    { "name": "TxValue", "semanticId": 2, "storage": "u16", "unit": "", "direction": "tx", "default": 4660 },
+    { "name": "MarkerA5", "semanticId": 3, "storage": "u8", "unit": "", "direction": "tx", "default": 165 }
+  ]
+}
