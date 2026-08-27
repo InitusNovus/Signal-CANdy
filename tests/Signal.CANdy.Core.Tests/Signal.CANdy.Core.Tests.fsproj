@@ -11,6 +11,7 @@
     <Compile Include="DbcTests.fs" />
     <Compile Include="PoolTests.fs" />
     <Compile Include="WireTests.fs" />
+    <Compile Include="BindingTests.fs" />
     <Compile Include="LinkedTests.fs" />
     <Compile Include="ConfigTests.fs" />
     <Compile Include="CodegenTests.fs" />
@@ -18,6 +19,7 @@
     <Compile Include="ApiTests.fs" />
     <Compile Include="FacadeTests.fs" />
     <Compile Include="ScimgTests.fs" />
+    <Compile Include="DifferentialTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

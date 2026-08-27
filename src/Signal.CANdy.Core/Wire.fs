@@ -90,7 +90,9 @@ module Wire =
             [ if endBit > frameBits then
                   SignalExceedsFrame(message.Name, signal.Name, endBit, frameBits)
 
-              if signal.IsCrc || signal.IsCounter then
+              // DBC parsing retains legacy name-based IsCrc/IsCounter hints. Only
+              // configured profile metadata gives those hints runtime semantics.
+              if signal.CrcMeta.IsSome || signal.CounterMeta.IsSome then
                   UnsupportedFeature "CRC/counter signals are not supported in Wire IR v1"
 
               match muxRole signal with

@@ -214,7 +214,19 @@ BO_ 901 RANGE: 8 Vector__XXX
     let ``CRC-configured signals are rejected in v1`` () =
         let crcSignal =
             { signal "PayloadCrc" 0us 8us with
-                IsCrc = true }
+                IsCrc = true
+                CrcMeta =
+                    Some
+                        { Algorithm = CRC8_SAE_J1850
+                          Params =
+                            { Width = 8
+                              Poly = 0x1DUL
+                              Init = 0xFFUL
+                              XorOut = 0xFFUL
+                              ReflectIn = false
+                              ReflectOut = false }
+                          ByteRange = {| Start = 0; End = 7 |}
+                          DataId = None } }
 
         toWireModel { Messages = [ message "CRC_FRAME" 8us [ crcSignal ] ] }
         |> containsError (function

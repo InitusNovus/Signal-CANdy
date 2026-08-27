@@ -64,6 +64,7 @@ type GeneratorFacade() =
                 | Signal.CANdy.Core.Errors.ValidationError.CrcWidthMismatch(message, crcWidth, signalBits) ->
                     sprintf "crc width %d mismatches signal bits %d in message '%s'" crcWidth signalBits message
                 | Signal.CANdy.Core.Errors.ValidationError.MessageNotFound name -> sprintf "message '%s' not found" name
+                | other -> sprintf "%A" other
 
             raise (SignalCandyValidationException(msg))
 
@@ -157,6 +158,7 @@ type GeneratorFacade() =
                                 message
                         | Signal.CANdy.Core.Errors.ValidationError.MessageNotFound name ->
                             sprintf "[MessageNotFound] message '%s' not found" name
+                        | other -> sprintf "[ValidationError] %A" other
 
                     return raise (SignalCandyValidationException(msg))
                 | Signal.CANdy.Core.Errors.GenerateError.CodeGen ce ->

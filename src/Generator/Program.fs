@@ -150,6 +150,7 @@ module Program =
                                         signalBits
                                 | ValidationError.MessageNotFound name ->
                                     sprintf "message '%s' not found in configuration." name
+                                | other -> sprintf "%A" other
 
                             eprintfn "Warning: Failed to load config: %s. Falling back to defaults." msg
                             defaultCfg

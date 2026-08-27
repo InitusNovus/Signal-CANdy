@@ -28,6 +28,7 @@ module Cli =
               ""
               "Usage:"
               "  signal-candy -d <file.dbc> -o <out_dir> [-c <config.yaml>] [-t]"
+              "  signal-candy scimg -d <dbc> -p <pool.json> -b <binding.json> -o <out.scimg> [--inspect <out.json>]"
               "  signal-candy --version"
               "  signal-candy --help"
               ""
@@ -36,6 +37,14 @@ module Cli =
               "  -o, --out <dir>        Output directory for generated C files (required)"
               "  -c, --config <path>    Optional YAML config (phys_type, range_check, dispatch, etc.)"
               "  -t, --harness          Generate test harness files (main.c + Makefile) if missing"
+              ""
+              "scimg options:"
+              "  -d, --dbc <path>       Path to input DBC file"
+              "  -p, --pool <path>      Path to pool definition JSON"
+              "  -b, --binding <path>   Path to binding JSON"
+              "  -o, --out <path>       Runtime image output path"
+              "      --inspect <path>   Optional inspector JSON output path"
+              ""
               "  -v, --version          Print library version and exit"
               "  -h, --help             Show this help and exit" ]
 
@@ -73,11 +82,171 @@ module Cli =
 
         loop 0 empty
 
+module ScimgCli =
+    type Parsed =
+        { DbcPath: string option
+          PoolPath: string option
+          BindingPath: string option
+          OutPath: string option
+          InspectPath: string option
+          ShowHelp: bool
+          Unknown: string list }
+
+    let private empty =
+        { DbcPath = None
+          PoolPath = None
+          BindingPath = None
+          OutPath = None
+          InspectPath = None
+          ShowHelp = false
+          Unknown = [] }
+
+    let private parse (argv: string array) =
+        let rec loop index state =
+            if index >= argv.Length then
+                state
+            else
+                match argv.[index] with
+                | "-d"
+                | "--dbc" when index + 1 < argv.Length ->
+                    loop
+                        (index + 2)
+                        { state with
+                            DbcPath = Some argv.[index + 1] }
+                | "-p"
+                | "--pool" when index + 1 < argv.Length ->
+                    loop
+                        (index + 2)
+                        { state with
+                            PoolPath = Some argv.[index + 1] }
+                | "-b"
+                | "--binding" when index + 1 < argv.Length ->
+                    loop
+                        (index + 2)
+                        { state with
+                            BindingPath = Some argv.[index + 1] }
+                | "-o"
+                | "--out" when index + 1 < argv.Length ->
+                    loop
+                        (index + 2)
+                        { state with
+                            OutPath = Some argv.[index + 1] }
+                | "--inspect" when index + 1 < argv.Length ->
+                    loop
+                        (index + 2)
+                        { state with
+                            InspectPath = Some argv.[index + 1] }
+                | "-h"
+                | "--help" -> loop (index + 1) { state with ShowHelp = true }
+                | unknown ->
+                    loop
+                        (index + 1)
+                        { state with
+                            Unknown = state.Unknown @ [ unknown ] }
+
+        loop 0 empty
+
+    let private printValidationErrors errors =
+        errors |> List.iter (fun error -> eprintfn "Validation error: %A" error)
+
+    let private printParseError error =
+        match error with
+        | Errors.ParseError.InvalidDbc details -> eprintfn "DBC error: %s" details
+        | Errors.ParseError.IoError details -> eprintfn "IO error: %s" details
+        | Errors.ParseError.Unknown details -> eprintfn "Parse error: %s" details
+
+    let run argv =
+        let args = parse argv
+
+        if args.ShowHelp then
+            printfn "%s" (Cli.usage ())
+            0
+        elif not args.Unknown.IsEmpty then
+            eprintfn "Unknown scimg arguments: %s" (String.Join(" ", args.Unknown))
+            eprintfn "\n%s" (Cli.usage ())
+            2
+        else
+            match args.DbcPath, args.PoolPath, args.BindingPath, args.OutPath with
+            | Some dbcPath, Some poolPath, Some bindingPath, Some outPath ->
+                try
+                    match Signal.CANdy.Core.Dbc.parseDbcFile dbcPath with
+                    | Error error ->
+                        printParseError error
+                        1
+                    | Ok ir ->
+                        match Signal.CANdy.Core.Wire.toWireModel ir with
+                        | Error errors ->
+                            printValidationErrors errors
+                            1
+                        | Ok wire ->
+                            match Signal.CANdy.Core.Pool.parsePoolDefinition (System.IO.File.ReadAllText(poolPath)) with
+                            | Error errors ->
+                                printValidationErrors errors
+                                1
+                            | Ok pool ->
+                                match
+                                    Signal.CANdy.Core.Binding.parseBindingSet (System.IO.File.ReadAllText(bindingPath))
+                                with
+                                | Error errors ->
+                                    printValidationErrors errors
+                                    1
+                                | Ok bindings ->
+                                    match Signal.CANdy.Core.Linked.link pool wire bindings with
+                                    | Error errors ->
+                                        printValidationErrors errors
+                                        1
+                                    | Ok linked ->
+                                        match Signal.CANdy.Core.Scimg.lower linked with
+                                        | Error errors ->
+                                            printValidationErrors errors
+                                            1
+                                        | Ok image ->
+                                            match Signal.CANdy.Core.Scimg.write image with
+                                            | Error errors ->
+                                                printValidationErrors errors
+                                                1
+                                            | Ok bytes ->
+                                                let inspection =
+                                                    match args.InspectPath with
+                                                    | None -> Ok None
+                                                    | Some inspectPath ->
+                                                        Signal.CANdy.Core.Scimg.inspect bytes
+                                                        |> Result.map (fun json -> Some(inspectPath, json))
+
+                                                match inspection with
+                                                | Error errors ->
+                                                    printValidationErrors errors
+                                                    1
+                                                | Ok inspectOutput ->
+                                                    System.IO.File.WriteAllBytes(outPath, bytes)
+
+                                                    inspectOutput
+                                                    |> Option.iter (fun (path, json) ->
+                                                        System.IO.File.WriteAllText(path, json))
+
+                                                    printfn
+                                                        "Wrote %s (%d bytes, messages=%d, signals=%d)"
+                                                        outPath
+                                                        bytes.Length
+                                                        image.Messages.Length
+                                                        image.Programs.Length
+
+                                                    0
+                with ex ->
+                    eprintfn "IO error: %s" ex.Message
+                    1
+            | _ ->
+                eprintfn "Missing required scimg arguments."
+                eprintfn "\n%s" (Cli.usage ())
+                2
+
 [<EntryPoint>]
 let main argv : int =
     let args = Cli.parse argv
 
-    if args.ShowHelp then
+    if argv.Length > 0 && argv.[0] = "scimg" then
+        ScimgCli.run argv.[1..]
+    elif args.ShowHelp then
         printfn "%s" (Cli.usage ())
         0
     elif args.ShowVersion then
@@ -365,6 +534,7 @@ clean:
                                     message
                             | Errors.ValidationError.MessageNotFound name ->
                                 sprintf "Validation error: message '%s' not found" name
+                            | other -> sprintf "Validation error: %A" other
                         | GenerateError.CodeGen ce ->
                             match ce with
                             | CodeGenError.TemplateError s -> sprintf "Template error: %s" s
