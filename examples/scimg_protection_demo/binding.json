@@ -1,0 +1,31 @@
+{
+  "version": "1",
+  "bindings": [
+    { "poolSignal": "RxValue", "message": "PROTECTION_RX", "wireSignal": "RxValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "TxValue", "message": "PROTECTION_TX", "wireSignal": "TxValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MarkerA5", "message": "PROTECTION_TX", "wireSignal": "MarkerA5", "conversion": { "kind": "identity" } }
+  ],
+  "rxMessages": [
+    {
+      "message": "PROTECTION_RX",
+      "crc": {
+        "wireSignal": "Crc16",
+        "algorithm": "crc16-ccitt-false",
+        "byteRange": { "start": 0, "end": 7 }
+      },
+      "counter": { "wireSignal": "AliveCounter", "modulus": 16, "increment": 1 }
+    }
+  ],
+  "txMessages": [
+    {
+      "message": "PROTECTION_TX",
+      "logicalMessageId": 33,
+      "crc": {
+        "wireSignal": "Crc8",
+        "algorithm": "crc8-sae-j1850",
+        "byteRange": { "start": 0, "end": 7 }
+      },
+      "counter": { "wireSignal": "AliveCounter", "modulus": 16, "increment": 1, "initialValue": 0 }
+    }
+  ]
+}
