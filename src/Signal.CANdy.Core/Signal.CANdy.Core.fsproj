@@ -32,6 +32,12 @@
   <Compile Include="Scimg.fs" />
   <Compile Include="Config.fs" />
   <Compile Include="Dbc.fs" />
+  <Compile Include="PoolAbi.fs" />
+  <Compile Include="RuntimeCapabilities.fs" />
+  <Compile Include="ProjectManifest.fs" />
+  <Compile Include="RuntimeRequirements.fs" />
+  <Compile Include="RuntimeBuild.fs" />
+  <Compile Include="ArtifactWriter.fs" />
   <Compile Include="Codegen.fs" />
   <Compile Include="Api.fs" />
   </ItemGroup>

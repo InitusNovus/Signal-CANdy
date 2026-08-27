@@ -26,6 +26,13 @@
     <Compile Include="ScimgTxTests.fs" />
     <Compile Include="ScimgQualityTests.fs" />
     <Compile Include="ProtectionScimgTests.fs" />
+    <Compile Include="PoolAbiTests.fs" />
+    <Compile Include="RuntimeCapabilitiesTests.fs" />
+    <Compile Include="ProjectManifestTests.fs" />
+    <Compile Include="RuntimeRequirementsTests.fs" />
+    <Compile Include="RuntimeBuildTests.fs" />
+    <Compile Include="ArtifactWriterTests.fs" />
+    <Compile Include="ProjectCliTests.fs" />
     <Compile Include="DifferentialTests.fs" />
   </ItemGroup>
 
@@ -43,6 +50,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\Signal.CANdy.Core\Signal.CANdy.Core.fsproj" />
     <ProjectReference Include="..\..\src\Signal.CANdy\Signal.CANdy.fsproj" />
+    <ProjectReference Include="..\..\src\Signal.CANdy.CLI\Signal.CANdy.CLI.fsproj" />
   </ItemGroup>
 
 </Project>

@@ -243,6 +243,35 @@ module Wire =
               Signals = signals },
             messageErrors @ List.concat signalErrors @ overlapErrors message.Name signals
 
+    /// Merge normalized wire sources in manifest order without last-wins semantics.
+    let merge (sources: (string * WireIr) list) : Result<WireIr, ValidationError list> =
+        let messages = sources |> List.collect (snd >> _.Messages)
+
+        let nameErrors =
+            messages
+            |> List.groupBy _.Name
+            |> List.choose (fun (name, values) ->
+                if values.Length > 1 then
+                    Some(InvalidValue(sprintf "Duplicate wire message name '%s'." name))
+                else
+                    None)
+
+        let keyErrors =
+            messages
+            |> List.groupBy (fun message -> message.IsExtended, message.CanId)
+            |> List.choose (fun ((extended, canId), values) ->
+                if values.Length > 1 then
+                    Some(InvalidValue(sprintf "Duplicate wire CAN key (extended=%b, id=%u)." extended canId))
+                else
+                    None)
+
+        let errors = nameErrors @ keyErrors
+
+        if errors.IsEmpty then
+            Ok { Messages = messages }
+        else
+            Error errors
+
     let toWireModel (ir: Ir) : Result<WireModel, ValidationError list> =
         let messages, errors = ir.Messages |> List.map normalizeMessage |> List.unzip
         let allErrors = List.concat errors

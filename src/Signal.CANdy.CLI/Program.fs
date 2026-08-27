@@ -29,6 +29,8 @@ module Cli =
               "Usage:"
               "  signal-candy -d <file.dbc> -o <out_dir> [-c <config.yaml>] [-t]"
               "  signal-candy scimg -d <dbc> -p <pool.json> -b <binding.json> -o <out.scimg> [--inspect <out.json>]"
+              "  signal-candy project validate <manifest.yaml>"
+              "  signal-candy project build <manifest.yaml>"
               "  signal-candy --version"
               "  signal-candy --help"
               ""
@@ -240,12 +242,155 @@ module ScimgCli =
                 eprintfn "\n%s" (Cli.usage ())
                 2
 
+module ProjectCli =
+    open System.IO
+    open System.Text
+    open Signal.CANdy.Core.ArtifactWriter
+    open Signal.CANdy.Core.ProjectManifest
+    open Signal.CANdy.Core.RuntimeBuild
+
+    let help =
+        String.concat
+            "\n"
+            [ "Project commands:"
+              "  project validate <manifest.yaml>"
+              "      Parse, resolve, compile, and validate target compatibility without writing files."
+              ""
+              "  project build <manifest.yaml>"
+              "      Validate first, then atomically write the manifest-declared artifacts." ]
+
+    let private printErrors errors =
+        errors |> List.iter (fun error -> eprintfn "error[SC2201] %A" error)
+
+    let private relative root path =
+        Path.GetRelativePath(root, path).Replace('\\', '/')
+
+    let private artifacts project compiled =
+        match renderHeader project.Name project.Outputs.Image compiled.ImageBytes with
+        | Error errors -> Error(sprintf "%A" errors)
+        | Ok headerBytes ->
+            Ok
+                [ yield
+                      { Kind = Image
+                        Destination = project.Outputs.Image
+                        Content = compiled.ImageBytes }
+                  match project.Outputs.Header with
+                  | Some path ->
+                      yield
+                          { Kind = Header
+                            Destination = path
+                            Content = headerBytes }
+                  | None -> ()
+                  match project.Outputs.Inspect with
+                  | Some path ->
+                      yield
+                          { Kind = Inspect
+                            Destination = path
+                            Content = Encoding.UTF8.GetBytes(compiled.InspectJson) }
+                  | None -> () ]
+
+    let private mismatchDiagnostic =
+        function
+        | RuntimeLimitExceeded(RuntimeStateBytes, required, supported) ->
+            sprintf "error[SC2207] target.maxRuntimeStateBytes: required %u, supported %u" required supported
+        | RuntimeLimitExceeded(resource, required, supported) ->
+            sprintf "error[SC2207] target.%A: required %u, supported %u" resource required supported
+        | error -> sprintf "error[SC2206] target: %A" error
+
+    let private execute build manifestPath =
+        try
+            if not (File.Exists manifestPath) then
+                eprintfn "error[SC2204] manifest input does not exist: %s" manifestPath
+                4
+            else
+                let yaml = File.ReadAllText manifestPath
+
+                match ProjectManifest.parse yaml with
+                | Error errors ->
+                    printErrors errors
+                    3
+                | Ok manifest ->
+                    match ProjectManifest.resolve manifestPath manifest with
+                    | Error errors ->
+                        let text = sprintf "%A" errors
+                        eprintfn "error[SC2204] %s" text
+                        if text.Contains("does not exist") then 4 else 3
+                    | Ok project ->
+                        match loadAndCompile project with
+                        | Error errors ->
+                            match errors with
+                            | [ TargetMismatch mismatch ] ->
+                                eprintfn "%s" (mismatchDiagnostic mismatch)
+                                3
+                            | _ ->
+                                printErrors errors
+
+                                if
+                                    errors
+                                    |> List.exists (function
+                                        | InputIo _ -> true
+                                        | _ -> false)
+                                then
+                                    4
+                                else
+                                    3
+                        | Ok(compiled, _) ->
+                            match artifacts project compiled with
+                            | Error details ->
+                                eprintfn "error[SC2208] %s" details
+                                3
+                            | Ok outputs when not build ->
+                                printfn
+                                    "Project valid: %s (image=%d bytes, state=%u bytes, scratch=%u bytes)"
+                                    project.Name
+                                    compiled.ImageBytes.Length
+                                    compiled.Requirements.RuntimeStateBytes
+                                    compiled.Requirements.RuntimeScratchBytes
+
+                                0
+                            | Ok outputs ->
+                                match writeAtomic outputs with
+                                | Error errors ->
+                                    printErrors errors
+                                    4
+                                | Ok() ->
+                                    printfn
+                                        "Built %s: %s (%d bytes)"
+                                        project.Name
+                                        (relative project.RootDirectory project.Outputs.Image)
+                                        compiled.ImageBytes.Length
+
+                                    project.Outputs.Header
+                                    |> Option.iter (relative project.RootDirectory >> printfn "Wrote header: %s")
+
+                                    project.Outputs.Inspect
+                                    |> Option.iter (relative project.RootDirectory >> printfn "Wrote inspect: %s")
+
+                                    0
+        with ex ->
+            eprintfn "error[SC2204] %s" ex.Message
+            4
+
+    let run (argv: string array) =
+        match Array.toList argv with
+        | [ "--help" ]
+        | [ "-h" ] ->
+            printfn "%s" help
+            0
+        | [ "validate"; manifest ] -> execute false manifest
+        | [ "build"; manifest ] -> execute true manifest
+        | _ ->
+            eprintfn "Usage: project validate|build <manifest.yaml>"
+            2
+
 [<EntryPoint>]
 let main argv : int =
     let args = Cli.parse argv
 
     if argv.Length > 0 && argv.[0] = "scimg" then
         ScimgCli.run argv.[1..]
+    elif argv.Length > 0 && argv.[0] = "project" then
+        ProjectCli.run argv.[1..]
     elif args.ShowHelp then
         printfn "%s" (Cli.usage ())
         0
