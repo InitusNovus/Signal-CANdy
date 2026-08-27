@@ -1,0 +1,13 @@
+{
+  "name": "demo_pool",
+  "version": "1",
+  "signals": [
+    { "name": "CabinTemperature", "semanticId": 1, "storage": "f64", "unit": "deg", "direction": "rx", "min": -40.0, "max": 32727.5, "default": 0.0 },
+    { "name": "TripCounter", "semanticId": 2, "storage": "u16", "unit": "", "direction": "rx" },
+    { "name": "VehicleSpeed", "semanticId": 3, "storage": "u16", "unit": "m/s", "direction": "rx" },
+    { "name": "AccelStep", "semanticId": 4, "storage": "i8", "unit": "", "direction": "rx" },
+    { "name": "MuxSelector", "semanticId": 5, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "MuxBase", "semanticId": 6, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "MuxBranchA", "semanticId": 7, "storage": "u16", "unit": "", "direction": "rx" }
+  ]
+}

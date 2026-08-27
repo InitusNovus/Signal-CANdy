@@ -1,0 +1,15 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 100 DEMO_STD: 8 Vector__XXX
+ SG_ Temp_raw : 0|16@1+ (1,0) [0|65535] "deg" Vector__XXX
+ SG_ Counter : 16|8@1+ (1,0) [0|255] "" Vector__XXX
+BO_ 300 DEMO_BE: 8 Vector__XXX
+ SG_ Speed_be : 0|16@0+ (1,0) [0|65535] "m/s" Vector__XXX
+ SG_ Signed_be : 24|8@0- (1,0) [-128|127] "" Vector__XXX
+BO_ 200 DEMO_MUX: 8 Vector__XXX
+ SG_ Mux_sel M : 0|4@1+ (1,0) [0|3] "" Vector__XXX
+ SG_ Base_u8 : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ Branch_a m1 : 16|16@1+ (1,0) [0|65535] "" Vector__XXX

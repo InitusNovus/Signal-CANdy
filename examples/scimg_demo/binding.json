@@ -1,0 +1,12 @@
+{
+  "version": "1",
+  "bindings": [
+    { "poolSignal": "CabinTemperature", "message": "DEMO_STD", "wireSignal": "Temp_raw", "conversion": { "kind": "affine", "factor": 0.5, "offset": -40.0 } },
+    { "poolSignal": "TripCounter", "message": "DEMO_STD", "wireSignal": "Counter", "conversion": { "kind": "identity" } },
+    { "poolSignal": "VehicleSpeed", "message": "DEMO_BE", "wireSignal": "Speed_be", "conversion": { "kind": "identity" } },
+    { "poolSignal": "AccelStep", "message": "DEMO_BE", "wireSignal": "Signed_be", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxSelector", "message": "DEMO_MUX", "wireSignal": "Mux_sel", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxBase", "message": "DEMO_MUX", "wireSignal": "Base_u8", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxBranchA", "message": "DEMO_MUX", "wireSignal": "Branch_a", "conversion": { "kind": "identity" } }
+  ]
+}
