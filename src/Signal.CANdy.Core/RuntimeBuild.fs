@@ -2,6 +2,9 @@ namespace Signal.CANdy.Core
 
 open System
 open System.IO
+open System.Security.Cryptography
+open System.Text.Json
+open System.Text.RegularExpressions
 open Signal.CANdy.Core.Binding
 open Signal.CANdy.Core.Linked
 open Signal.CANdy.Core.Pool
@@ -19,6 +22,19 @@ module RuntimeBuild =
           Wires: (string * WireIr) list
           Bindings: BindingSet }
 
+    type ActivationDescriptor =
+        { RuntimeImageMajor: uint16
+          RuntimeImageMinor: uint16
+          RuntimeAbi: RuntimeAbi
+          Features: Set<RuntimeFeature>
+          ImageFeatureFlags: uint16
+          PoolAbiHash: PoolAbiHash
+          ImageSha256: string
+          ImageBytes: uint32
+          RuntimeStateBytes: uint32
+          RuntimeScratchBytes: uint32
+          PoolSlots: uint32 }
+
     type CompiledRuntime =
         { Pool: PoolContract
           Linked: LinkedSchema
@@ -26,9 +42,167 @@ module RuntimeBuild =
           ImageBytes: byte array
           InspectJson: string
           PoolAbiHash: PoolAbiHash
-          Requirements: RuntimeRequirements }
+          Requirements: RuntimeRequirements
+          Activation: ActivationDescriptor
+          ActivationJson: string }
 
     type RuntimeBuildError = RuntimeBuildError of string
+
+    let private activationError message = Error[RuntimeBuildError message]
+
+    let writeActivationDescriptor (descriptor: ActivationDescriptor) =
+        if not (Regex.IsMatch(descriptor.ImageSha256, "^sha256:[0-9a-f]{64}$")) then
+            activationError "Activation image hash is invalid."
+        else
+            let tokens =
+                RuntimeCapabilities.featurePairs
+                |> List.choose (fun (feature, token) ->
+                    if descriptor.Features.Contains feature then
+                        Some token
+                    else
+                        None)
+
+            let featureLines =
+                tokens
+                |> List.mapi (fun index token ->
+                    sprintf "    \"%s\"%s" token (if index + 1 < tokens.Length then "," else ""))
+
+            [ "{"
+              "  \"format\": \"sc.activation/v1\","
+              sprintf "  \"runtimeImageMajor\": %d," descriptor.RuntimeImageMajor
+              sprintf "  \"runtimeImageMinor\": %d," descriptor.RuntimeImageMinor
+              "  \"runtimeAbi\": \"ilp32\","
+              "  \"features\": ["
+              yield! featureLines
+              "  ],"
+              sprintf "  \"imageFeatureFlags\": %d," descriptor.ImageFeatureFlags
+              sprintf "  \"poolAbiHash\": \"%s\"," (PoolAbi.format descriptor.PoolAbiHash)
+              sprintf "  \"imageSha256\": \"%s\"," descriptor.ImageSha256
+              sprintf "  \"imageBytes\": %u," descriptor.ImageBytes
+              sprintf "  \"runtimeStateBytes\": %u," descriptor.RuntimeStateBytes
+              sprintf "  \"runtimeScratchBytes\": %u," descriptor.RuntimeScratchBytes
+              sprintf "  \"poolSlots\": %u" descriptor.PoolSlots
+              "}" ]
+            |> String.concat "\n"
+            |> fun text -> Ok(text + "\n")
+
+    let private activationKeys =
+        [ "format"
+          "runtimeImageMajor"
+          "runtimeImageMinor"
+          "runtimeAbi"
+          "features"
+          "imageFeatureFlags"
+          "poolAbiHash"
+          "imageSha256"
+          "imageBytes"
+          "runtimeStateBytes"
+          "runtimeScratchBytes"
+          "poolSlots" ]
+
+    let parseActivationDescriptor (json: string) =
+        try
+            use document =
+                JsonDocument.Parse(
+                    json,
+                    JsonDocumentOptions(CommentHandling = JsonCommentHandling.Disallow, AllowTrailingCommas = false)
+                )
+
+            let root = document.RootElement
+
+            if root.ValueKind <> JsonValueKind.Object then
+                activationError "Activation descriptor must be an object."
+            else
+                let properties = root.EnumerateObject() |> Seq.toList
+                let names = properties |> List.map _.Name
+
+                if names |> List.exists (fun name -> not (List.contains name activationKeys)) then
+                    activationError "Activation descriptor contains an unknown key."
+                elif names.Length <> (names |> List.distinct).Length then
+                    activationError "Activation descriptor contains a duplicate key."
+                elif activationKeys |> List.exists (fun key -> not (List.contains key names)) then
+                    activationError "Activation descriptor is missing a required key."
+                else
+                    let value (name: string) : JsonElement =
+                        properties |> List.find (_.Name >> (=) name) |> _.Value
+
+                    let uintValue (maxValue: uint64) (name: string) =
+                        let element = value name
+                        let raw = element.GetRawText()
+
+                        if not (Regex.IsMatch(raw, "^(0|[1-9][0-9]*)$")) then
+                            raise (FormatException(name + " must be a lexical unsigned integer."))
+
+                        let parsed = UInt64.Parse(raw)
+
+                        if parsed > maxValue then
+                            raise (OverflowException(name))
+
+                        parsed
+
+                    let stringValue (name: string) : string =
+                        let element = value name
+
+                        if element.ValueKind <> JsonValueKind.String then
+                            raise (FormatException(name))
+
+                        element.GetString()
+
+                    if stringValue "format" <> "sc.activation/v1" then
+                        raise (FormatException("Invalid activation format."))
+
+                    if stringValue "runtimeAbi" <> "ilp32" then
+                        raise (FormatException("Invalid runtime ABI."))
+
+                    let featuresElement = value "features"
+
+                    if featuresElement.ValueKind <> JsonValueKind.Array then
+                        raise (FormatException("features"))
+
+                    let tokens =
+                        featuresElement.EnumerateArray()
+                        |> Seq.map (fun item ->
+                            if item.ValueKind <> JsonValueKind.String then
+                                raise (FormatException("features"))
+
+                            item.GetString())
+                        |> Seq.toList
+
+                    if tokens.Length <> (tokens |> List.distinct).Length then
+                        raise (FormatException("Feature tokens must be unique."))
+
+                    let features =
+                        tokens
+                        |> List.map (fun token ->
+                            RuntimeCapabilities.featurePairs
+                            |> List.tryFind (snd >> (=) token)
+                            |> Option.map fst
+                            |> Option.defaultWith (fun () -> raise (FormatException("Unknown feature."))))
+                        |> Set.ofList
+
+                    let poolHash =
+                        PoolAbi.parse (stringValue "poolAbiHash")
+                        |> Result.defaultWith (sprintf "%A" >> FormatException >> raise)
+
+                    let imageHash = stringValue "imageSha256"
+
+                    if not (Regex.IsMatch(imageHash, "^sha256:[0-9a-f]{64}$")) then
+                        raise (FormatException("Invalid image hash."))
+
+                    Ok
+                        { RuntimeImageMajor = uint16 (uintValue 65535UL "runtimeImageMajor")
+                          RuntimeImageMinor = uint16 (uintValue 65535UL "runtimeImageMinor")
+                          RuntimeAbi = Ilp32
+                          Features = features
+                          ImageFeatureFlags = uint16 (uintValue 65535UL "imageFeatureFlags")
+                          PoolAbiHash = poolHash
+                          ImageSha256 = imageHash
+                          ImageBytes = uint32 (uintValue (uint64 UInt32.MaxValue) "imageBytes")
+                          RuntimeStateBytes = uint32 (uintValue (uint64 UInt32.MaxValue) "runtimeStateBytes")
+                          RuntimeScratchBytes = uint32 (uintValue (uint64 UInt32.MaxValue) "runtimeScratchBytes")
+                          PoolSlots = uint32 (uintValue (uint64 UInt32.MaxValue) "poolSlots") }
+        with ex ->
+            activationError ex.Message
 
     type RuntimeResource =
         | ImageBytes
@@ -93,6 +267,23 @@ module RuntimeBuild =
                 RuntimeRequirements.derive inputs.Pool linked image bytes
                 |> Result.mapError buildError
 
+            let activation =
+                { RuntimeImageMajor = requirements.RuntimeImageMajor
+                  RuntimeImageMinor = requirements.RuntimeImageMinor
+                  RuntimeAbi = Ilp32
+                  Features = requirements.Features
+                  ImageFeatureFlags = uint16 bytes.[10] ||| (uint16 bytes.[11] <<< 8)
+                  PoolAbiHash = hash
+                  ImageSha256 =
+                    "sha256:"
+                    + (SHA256.HashData(bytes) |> Convert.ToHexString |> _.ToLowerInvariant())
+                  ImageBytes = requirements.ImageBytes
+                  RuntimeStateBytes = requirements.RuntimeStateBytes
+                  RuntimeScratchBytes = requirements.RuntimeScratchBytes
+                  PoolSlots = requirements.PoolSlots }
+
+            let! activationJson = writeActivationDescriptor activation
+
             return
                 { Pool = inputs.Pool
                   Linked = linked
@@ -100,7 +291,9 @@ module RuntimeBuild =
                   ImageBytes = bytes
                   InspectJson = inspection
                   PoolAbiHash = hash
-                  Requirements = requirements }
+                  Requirements = requirements
+                  Activation = activation
+                  ActivationJson = activationJson }
         }
 
     let private limitCases (limits: RuntimeLimits) (required: RuntimeRequirements) =

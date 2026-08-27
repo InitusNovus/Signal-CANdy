@@ -31,6 +31,7 @@
     <Compile Include="ProjectManifestTests.fs" />
     <Compile Include="RuntimeRequirementsTests.fs" />
     <Compile Include="RuntimeBuildTests.fs" />
+    <Compile Include="ActivationDescriptorTests.fs" />
     <Compile Include="ArtifactWriterTests.fs" />
     <Compile Include="ProjectCliTests.fs" />
     <Compile Include="DifferentialTests.fs" />

@@ -266,7 +266,12 @@ module ProjectCli =
         Path.GetRelativePath(root, path).Replace('\\', '/')
 
     let private artifacts project compiled =
-        match renderHeader project.Name project.Outputs.Image compiled.ImageBytes with
+        let renderedHeader =
+            match project.Outputs.Activation with
+            | Some _ -> renderActivationHeader project.Name project.Outputs.Image compiled
+            | None -> renderHeader project.Name project.Outputs.Image compiled.ImageBytes
+
+        match renderedHeader with
         | Error errors -> Error(sprintf "%A" errors)
         | Ok headerBytes ->
             Ok
@@ -287,6 +292,13 @@ module ProjectCli =
                           { Kind = Inspect
                             Destination = path
                             Content = Encoding.UTF8.GetBytes(compiled.InspectJson) }
+                  | None -> ()
+                  match project.Outputs.Activation with
+                  | Some path ->
+                      yield
+                          { Kind = Activation
+                            Destination = path
+                            Content = Encoding.UTF8.GetBytes(compiled.ActivationJson) }
                   | None -> () ]
 
     let private mismatchDiagnostic =
@@ -365,6 +377,9 @@ module ProjectCli =
 
                                     project.Outputs.Inspect
                                     |> Option.iter (relative project.RootDirectory >> printfn "Wrote inspect: %s")
+
+                                    project.Outputs.Activation
+                                    |> Option.iter (relative project.RootDirectory >> printfn "Wrote activation: %s")
 
                                     0
         with ex ->

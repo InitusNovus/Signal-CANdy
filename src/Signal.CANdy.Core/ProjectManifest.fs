@@ -17,7 +17,8 @@ module ProjectManifest =
     type ProjectOutputs =
         { Image: string
           Header: string option
-          Inspect: string option }
+          Inspect: string option
+          Activation: string option }
 
     type ProjectManifest =
         { Name: string
@@ -36,7 +37,8 @@ module ProjectManifest =
     type ResolvedOutputs =
         { Image: string
           Header: string option
-          Inspect: string option }
+          Inspect: string option
+          Activation: string option }
 
     type ResolvedProject =
         { ManifestPath: string
@@ -200,7 +202,7 @@ module ProjectManifest =
                     let! binding = requiredScalar "Project" "binding" root
                     let! target = requiredScalar "Project" "target" root
                     let! outputNode = required "Project" "outputs" root
-                    let! outputMap = mapping "Project.outputs" [ "image"; "header"; "inspect" ] outputNode
+                    let! outputMap = mapping "Project.outputs" [ "image"; "header"; "inspect"; "activation" ] outputNode
                     let! image = requiredScalar "Project.outputs" "image" outputMap
 
                     let! header =
@@ -212,6 +214,11 @@ module ProjectManifest =
                         match Map.tryFind "inspect" outputMap with
                         | None -> Ok None
                         | Some node -> scalar "Project.outputs.inspect" node |> Result.map Some
+
+                    let! activation =
+                        match Map.tryFind "activation" outputMap with
+                        | None -> Ok None
+                        | Some node -> scalar "Project.outputs.activation" node |> Result.map Some
 
                     if not (image.EndsWith(".scimg", StringComparison.OrdinalIgnoreCase)) then
                         return! Error "Image output must end in .scimg."
@@ -228,6 +235,13 @@ module ProjectManifest =
                     then
                         return! Error "Inspect output must end in .json."
 
+                    if
+                        activation
+                        |> Option.exists (fun p ->
+                            not (p.EndsWith(".activation.json", StringComparison.OrdinalIgnoreCase)))
+                    then
+                        return! Error "Activation output must end in .activation.json."
+
                     return
                         ({ Name = name
                            Pool = pool
@@ -237,7 +251,8 @@ module ProjectManifest =
                            Outputs =
                              { Image = image
                                Header = header
-                               Inspect = inspect } }
+                               Inspect = inspect
+                               Activation = activation } }
                         : ProjectManifest)
                 }
 
@@ -341,8 +356,18 @@ module ProjectManifest =
                     | None -> Ok None
                     | Some p -> resolveOne "outputs.inspect" p |> Result.map Some
 
+                let! activation =
+                    match manifest.Outputs.Activation with
+                    | None -> Ok None
+                    | Some p -> resolveOne "outputs.activation" p |> Result.map Some
+
                 let inputs = manifestFull :: pool :: binding :: target :: (wires |> List.map _.Path)
-                let outputs = image :: (header |> Option.toList) @ (inspect |> Option.toList)
+
+                let outputs =
+                    image :: (header |> Option.toList)
+                    @ (inspect |> Option.toList)
+                    @ (activation |> Option.toList)
+
                 let comparer = StringComparer.OrdinalIgnoreCase
 
                 let distinct (paths: string list) =
@@ -398,7 +423,8 @@ module ProjectManifest =
                       Outputs =
                         { Image = image
                           Header = header
-                          Inspect = inspect } }
+                          Inspect = inspect
+                          Activation = activation } }
             }
         with ex ->
             Error[ProjectParseError ex.Message]

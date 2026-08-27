@@ -436,12 +436,11 @@ int main(void)
                  (pool[i].flags & UINT32_C(0x100)) != 0u;
     }
     passed = passed && pool[7].raw == UINT64_C(0x7777) &&
-             pool[7].flags ==
-                 (SC_SLOT_VALID | SC_SLOT_STALE | UINT32_C(0x200)) &&
+             pool[7].flags == (SC_SLOT_VALID | UINT32_C(0x200)) &&
              state->counters[0].current == 3u &&
              state->counters[0].pending_generation == 0u &&
              state->counters[0].next_generation == 1u;
-    report("reset preserves raw and TX slots and restores counters", passed);
+    report("reset clears transient flags and restores counters", passed);
 
     set_mux_frame(&frame, 1u, 1u, 0x20u, 0u, 0u, 0u);
     passed = sc_decode_at(schema, state, 0u, &frame, pool, SLOT_COUNT) ==

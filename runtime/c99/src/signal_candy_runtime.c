@@ -1629,6 +1629,22 @@ sc_status_t sc_expire(const sc_schema_t *schema,
     return SC_OK;
 }
 
+SC_LOCAL void sc_reset_pool_flags(const sc_schema_t *schema,
+                                  sc_slot_t *pool)
+{
+    uint16_t i;
+
+    for (i = 0u; i < schema->pool_slot_count; ++i) {
+        pool[i].flags &= ~(SC_SLOT_UPDATED | SC_SLOT_CHANGED | SC_SLOT_STALE);
+    }
+    for (i = 0u; i < schema->signal_count; ++i) {
+        const uint8_t *program = schema->image + schema->prg_offset +
+                                 (size_t)i * SC_PROGRAM_SIZE;
+        uint16_t slot = sc_read_u16(program + 8u);
+        pool[slot].flags &= ~SC_SLOT_VALID;
+    }
+}
+
 sc_status_t sc_runtime_reset(const sc_schema_t *schema,
                              sc_runtime_state_t *state, size_t state_size,
                              sc_slot_t *pool, size_t pool_count)
@@ -1666,13 +1682,8 @@ sc_status_t sc_runtime_reset(const sc_schema_t *schema,
         return SC_ERR_STATE;
     }
 
-    for (i = 0u; i < schema->signal_count; ++i) {
-        const uint8_t *program = schema->image + schema->prg_offset +
-                                 (size_t)i * 16u;
-        uint16_t slot = sc_read_u16(program + 8u);
-        pool[slot].flags &= ~(SC_SLOT_VALID | SC_SLOT_UPDATED |
-                              SC_SLOT_CHANGED | SC_SLOT_STALE);
-    }
+    (void)i;
+    sc_reset_pool_flags(schema, pool);
     return SC_OK;
 }
 
@@ -2047,5 +2058,596 @@ sc_status_t sc_encode_commit(sc_tx_token_t *token, int transmitted)
     }
     counter_state->pending_generation = 0u;
     memset(token, 0, sizeof(*token));
+    return SC_OK;
+}
+
+#define SC_ACTIVATION_TAG UINT32_C(0x53434131)
+
+typedef char sc_activation_descriptor_host_size[
+    sizeof(void *) != 8u || sizeof(sc_activation_descriptor_t) == 128u ? 1 : -1];
+typedef char sc_activation_controller_host_size[
+    sizeof(void *) != 8u || sizeof(sc_activation_controller_t) == 184u ? 1 : -1];
+
+typedef struct {
+    uint32_t state[8];
+    uint64_t bit_count;
+    uint8_t block[64];
+    size_t used;
+} sc_sha256_t;
+
+SC_LOCAL uint32_t sc_rotate_right(uint32_t value, unsigned count)
+{
+    return (value >> count) | (value << (32u - count));
+}
+
+SC_LOCAL void sc_sha256_transform(sc_sha256_t *hash,
+                                  const uint8_t block[64])
+{
+    static const uint32_t constants[64] = {
+        UINT32_C(0x428A2F98), UINT32_C(0x71374491), UINT32_C(0xB5C0FBCF),
+        UINT32_C(0xE9B5DBA5), UINT32_C(0x3956C25B), UINT32_C(0x59F111F1),
+        UINT32_C(0x923F82A4), UINT32_C(0xAB1C5ED5), UINT32_C(0xD807AA98),
+        UINT32_C(0x12835B01), UINT32_C(0x243185BE), UINT32_C(0x550C7DC3),
+        UINT32_C(0x72BE5D74), UINT32_C(0x80DEB1FE), UINT32_C(0x9BDC06A7),
+        UINT32_C(0xC19BF174), UINT32_C(0xE49B69C1), UINT32_C(0xEFBE4786),
+        UINT32_C(0x0FC19DC6), UINT32_C(0x240CA1CC), UINT32_C(0x2DE92C6F),
+        UINT32_C(0x4A7484AA), UINT32_C(0x5CB0A9DC), UINT32_C(0x76F988DA),
+        UINT32_C(0x983E5152), UINT32_C(0xA831C66D), UINT32_C(0xB00327C8),
+        UINT32_C(0xBF597FC7), UINT32_C(0xC6E00BF3), UINT32_C(0xD5A79147),
+        UINT32_C(0x06CA6351), UINT32_C(0x14292967), UINT32_C(0x27B70A85),
+        UINT32_C(0x2E1B2138), UINT32_C(0x4D2C6DFC), UINT32_C(0x53380D13),
+        UINT32_C(0x650A7354), UINT32_C(0x766A0ABB), UINT32_C(0x81C2C92E),
+        UINT32_C(0x92722C85), UINT32_C(0xA2BFE8A1), UINT32_C(0xA81A664B),
+        UINT32_C(0xC24B8B70), UINT32_C(0xC76C51A3), UINT32_C(0xD192E819),
+        UINT32_C(0xD6990624), UINT32_C(0xF40E3585), UINT32_C(0x106AA070),
+        UINT32_C(0x19A4C116), UINT32_C(0x1E376C08), UINT32_C(0x2748774C),
+        UINT32_C(0x34B0BCB5), UINT32_C(0x391C0CB3), UINT32_C(0x4ED8AA4A),
+        UINT32_C(0x5B9CCA4F), UINT32_C(0x682E6FF3), UINT32_C(0x748F82EE),
+        UINT32_C(0x78A5636F), UINT32_C(0x84C87814), UINT32_C(0x8CC70208),
+        UINT32_C(0x90BEFFFA), UINT32_C(0xA4506CEB), UINT32_C(0xBEF9A3F7),
+        UINT32_C(0xC67178F2)
+    };
+    uint32_t words[64];
+    uint32_t a;
+    uint32_t b;
+    uint32_t c;
+    uint32_t d;
+    uint32_t e;
+    uint32_t f;
+    uint32_t g;
+    uint32_t h;
+    unsigned i;
+
+    for (i = 0u; i < 16u; ++i) {
+        const uint8_t *p = block + 4u * i;
+        words[i] = ((uint32_t)p[0] << 24) | ((uint32_t)p[1] << 16) |
+                   ((uint32_t)p[2] << 8) | p[3];
+    }
+    for (i = 16u; i < 64u; ++i) {
+        uint32_t s0 = sc_rotate_right(words[i - 15u], 7u) ^
+                      sc_rotate_right(words[i - 15u], 18u) ^
+                      (words[i - 15u] >> 3);
+        uint32_t s1 = sc_rotate_right(words[i - 2u], 17u) ^
+                      sc_rotate_right(words[i - 2u], 19u) ^
+                      (words[i - 2u] >> 10);
+        words[i] = words[i - 16u] + s0 + words[i - 7u] + s1;
+    }
+
+    a = hash->state[0]; b = hash->state[1]; c = hash->state[2];
+    d = hash->state[3]; e = hash->state[4]; f = hash->state[5];
+    g = hash->state[6]; h = hash->state[7];
+    for (i = 0u; i < 64u; ++i) {
+        uint32_t sum1 = sc_rotate_right(e, 6u) ^ sc_rotate_right(e, 11u) ^
+                        sc_rotate_right(e, 25u);
+        uint32_t choose = (e & f) ^ ((~e) & g);
+        uint32_t temporary1 = h + sum1 + choose + constants[i] + words[i];
+        uint32_t sum0 = sc_rotate_right(a, 2u) ^ sc_rotate_right(a, 13u) ^
+                        sc_rotate_right(a, 22u);
+        uint32_t majority = (a & b) ^ (a & c) ^ (b & c);
+        uint32_t temporary2 = sum0 + majority;
+        h = g; g = f; f = e; e = d + temporary1;
+        d = c; c = b; b = a; a = temporary1 + temporary2;
+    }
+    hash->state[0] += a; hash->state[1] += b;
+    hash->state[2] += c; hash->state[3] += d;
+    hash->state[4] += e; hash->state[5] += f;
+    hash->state[6] += g; hash->state[7] += h;
+}
+
+SC_LOCAL void sc_sha256(const uint8_t *bytes, size_t count,
+                        uint8_t digest[32])
+{
+    sc_sha256_t hash;
+    size_t offset = 0u;
+    unsigned i;
+
+    memset(&hash, 0, sizeof(hash));
+    hash.state[0] = UINT32_C(0x6A09E667);
+    hash.state[1] = UINT32_C(0xBB67AE85);
+    hash.state[2] = UINT32_C(0x3C6EF372);
+    hash.state[3] = UINT32_C(0xA54FF53A);
+    hash.state[4] = UINT32_C(0x510E527F);
+    hash.state[5] = UINT32_C(0x9B05688C);
+    hash.state[6] = UINT32_C(0x1F83D9AB);
+    hash.state[7] = UINT32_C(0x5BE0CD19);
+    hash.bit_count = (uint64_t)count * UINT64_C(8);
+    while (count - offset >= 64u) {
+        sc_sha256_transform(&hash, bytes + offset);
+        offset += 64u;
+    }
+    hash.used = count - offset;
+    memcpy(hash.block, bytes + offset, hash.used);
+    hash.block[hash.used++] = UINT8_C(0x80);
+    if (hash.used > 56u) {
+        memset(hash.block + hash.used, 0, 64u - hash.used);
+        sc_sha256_transform(&hash, hash.block);
+        hash.used = 0u;
+    }
+    memset(hash.block + hash.used, 0, 56u - hash.used);
+    for (i = 0u; i < 8u; ++i) {
+        hash.block[63u - i] = (uint8_t)(hash.bit_count >> (8u * i));
+    }
+    sc_sha256_transform(&hash, hash.block);
+    for (i = 0u; i < 8u; ++i) {
+        digest[i * 4u] = (uint8_t)(hash.state[i] >> 24);
+        digest[i * 4u + 1u] = (uint8_t)(hash.state[i] >> 16);
+        digest[i * 4u + 2u] = (uint8_t)(hash.state[i] >> 8);
+        digest[i * 4u + 3u] = (uint8_t)hash.state[i];
+    }
+}
+
+SC_LOCAL int sc_memory_is_zero(const void *memory, size_t count)
+{
+    const uint8_t *bytes = (const uint8_t *)memory;
+    size_t i;
+    for (i = 0u; i < count; ++i) {
+        if (bytes[i] != 0u) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+SC_LOCAL int sc_memory_overlaps(const void *left, size_t left_size,
+                                const void *right, size_t right_size)
+{
+    uintptr_t a;
+    uintptr_t b;
+    if (left == NULL || right == NULL || left_size == 0u || right_size == 0u) {
+        return 0;
+    }
+    a = (uintptr_t)left;
+    b = (uintptr_t)right;
+    return a <= b ? b - a < left_size : a - b < right_size;
+}
+
+SC_LOCAL uint32_t sc_required_features(const sc_schema_t *schema)
+{
+    uint32_t features = 0u;
+    uint16_t i;
+
+    if (schema->message_count != 0u) features |= SC_RUNTIME_FEATURE_RX;
+    if (schema->tx_message_count != 0u) features |= SC_RUNTIME_FEATURE_TX;
+    if (schema->nested_count != 0u) features |= SC_RUNTIME_FEATURE_NESTED_MUX;
+    if (schema->has_rxq != 0u) features |= SC_RUNTIME_FEATURE_RX_QUALITY;
+    if (schema->rx_counter_count != 0u) features |= SC_RUNTIME_FEATURE_RX_COUNTER;
+    if (schema->counter_count != 0u) features |= SC_RUNTIME_FEATURE_TX_COUNTER;
+
+    for (i = 0u; i < schema->message_count; ++i) {
+        const uint8_t *message = schema->image + schema->msg_offset +
+                                 (size_t)i * 8u;
+        if ((sc_read_u32(message) & UINT32_C(0x80000000)) != 0u) {
+            features |= SC_RUNTIME_FEATURE_EXTENDED_CAN;
+        }
+    }
+    for (i = 0u; i < schema->signal_count; ++i) {
+        const uint8_t *program = schema->image + schema->prg_offset +
+                                 (size_t)i * SC_PROGRAM_SIZE;
+        if (sc_read_u16(program + 10u) != UINT16_C(0xFFFF)) {
+            features |= SC_RUNTIME_FEATURE_MULTIPLEXING;
+        }
+        if ((program[4] & 1u) != 0u) features |= SC_RUNTIME_FEATURE_MOTOROLA;
+        if ((uint32_t)sc_read_u16(program) + sc_read_u16(program + 2u) > 64u) {
+            features |= SC_RUNTIME_FEATURE_CAN_FD;
+        }
+    }
+    for (i = 0u; i < schema->conversion_count; ++i) {
+        if (schema->image[schema->cnv_offset + (size_t)i * 24u] != 0u) {
+            features |= SC_RUNTIME_FEATURE_AFFINE;
+        }
+    }
+    for (i = 0u; i < schema->tx_message_count; ++i) {
+        const uint8_t *message = schema->image + schema->tx_offset +
+            schema->tx_message_offset + (size_t)i * SC_TX_MESSAGE_SIZE;
+        uint16_t first = sc_read_u16(message + 12u);
+        uint16_t count = sc_read_u16(message + 10u);
+        uint16_t j;
+        if (message[8] > 8u) features |= SC_RUNTIME_FEATURE_CAN_FD;
+        if ((sc_read_u32(message + 4u) & UINT32_C(0x80000000)) != 0u) {
+            features |= SC_RUNTIME_FEATURE_EXTENDED_CAN;
+        }
+        for (j = 0u; j < count; ++j) {
+            const uint8_t *program = schema->image + schema->tx_offset +
+                schema->tx_program_offset + (size_t)(first + j) * SC_PROGRAM_SIZE;
+            if (sc_read_u16(program + 10u) != UINT16_C(0xFFFF)) {
+                features |= SC_RUNTIME_FEATURE_MULTIPLEXING;
+            }
+            if ((program[4] & 1u) != 0u) features |= SC_RUNTIME_FEATURE_MOTOROLA;
+        }
+    }
+    if (schema->has_protection != 0u) {
+        uint32_t plans = (uint32_t)schema->message_count + schema->tx_message_count;
+        uint32_t p;
+        for (p = 0u; p < plans; ++p) {
+            const uint8_t *plan = schema->image + schema->protection_offset +
+                                  SC_PR_HEADER_SIZE + p * SC_PR_PLAN_SIZE;
+            if (plan[1] == 1u) features |= SC_RUNTIME_FEATURE_CRC8_SAE_J1850;
+            if (plan[1] == 2u) features |= SC_RUNTIME_FEATURE_CRC16_CCITT_FALSE;
+            if (plan[9] == 2u) features |= SC_RUNTIME_FEATURE_CRC_DATA_ID;
+            if (plan[3] != 0u) features |= SC_RUNTIME_FEATURE_MOTOROLA;
+        }
+        for (i = 0u; i < schema->rx_counter_count; ++i) {
+            if (schema->image[schema->rx_counter_offset + (size_t)i *
+                              SC_RX_COUNTER_SIZE + 4u] != 0u) {
+                features |= SC_RUNTIME_FEATURE_MOTOROLA;
+            }
+        }
+    }
+    for (i = 0u; i < schema->counter_count; ++i) {
+        if (schema->image[schema->tx_offset + schema->tx_counter_offset +
+                          (size_t)i * SC_COUNTER_SIZE + 4u] != 0u) {
+            features |= SC_RUNTIME_FEATURE_MOTOROLA;
+        }
+    }
+    return features;
+}
+
+SC_LOCAL uint32_t sc_ilp32_state_bytes(const sc_schema_t *schema)
+{
+    uint64_t bytes;
+    if (schema->counter_count == 0u && schema->has_rxq == 0u &&
+        schema->rx_counter_count == 0u) {
+        return 0u;
+    }
+    bytes = 8u + (uint64_t)schema->counter_count * 12u +
+            (schema->has_rxq != 0u
+                 ? 8u + (uint64_t)schema->pool_slot_count * 8u
+                 : 0u) +
+            (uint64_t)schema->rx_counter_count * 8u;
+    return (uint32_t)bytes;
+}
+
+SC_LOCAL sc_status_t sc_validate_storage(const sc_schema_t *parsed,
+                                         const sc_activation_storage_t *storage)
+{
+    size_t required = sc_schema_required_state_bytes(parsed);
+    if (storage == NULL || storage->schema == NULL) return SC_ERR_NULL;
+    if (storage->schema_capacity < sizeof(sc_schema_t)) return SC_ERR_SIZE;
+    if (sc_memory_overlaps(storage->schema, storage->schema_capacity,
+                           storage->state, storage->state_capacity)) {
+        return SC_ERR_VALUE;
+    }
+    if (((uintptr_t)(void *)storage->schema % sizeof(void *)) != 0u) {
+        return SC_ERR_ALIGN;
+    }
+    if (required == 0u) {
+        return storage->state == NULL && storage->state_capacity == 0u
+                   ? SC_OK : SC_ERR_STATE;
+    }
+    if (storage->state == NULL) return SC_ERR_NULL;
+    if (((uintptr_t)(void *)storage->state % sizeof(void *)) != 0u) {
+        return SC_ERR_ALIGN;
+    }
+    return storage->state_capacity >= required ? SC_OK : SC_ERR_STATE;
+}
+
+SC_LOCAL sc_status_t sc_preflight_descriptor(
+    const sc_activation_descriptor_t *descriptor, uint16_t runtime_abi,
+    uint16_t image_major, uint16_t image_minor, uint32_t supported_features,
+    const uint8_t pool_hash[32], size_t scratch_capacity,
+    size_t pool_count, const sc_activation_storage_t *storage,
+    struct sc_schema *parsed)
+{
+    uint8_t digest[32];
+    uint32_t features;
+    sc_status_t status;
+    unsigned i;
+
+    if (descriptor == NULL || storage == NULL) return SC_ERR_NULL;
+    if (descriptor->struct_size != sizeof(*descriptor)) return SC_ERR_SIZE;
+    if (descriptor->descriptor_major != SC_ACTIVATION_DESCRIPTOR_VERSION_MAJOR ||
+        descriptor->descriptor_minor > SC_ACTIVATION_DESCRIPTOR_VERSION_MINOR) {
+        return SC_ERR_VERSION;
+    }
+    for (i = 0u; i < 4u; ++i) {
+        if (descriptor->reserved[i] != 0u) return SC_ERR_VALUE;
+    }
+    if (descriptor->runtime_abi != runtime_abi ||
+        descriptor->runtime_image_major != image_major ||
+        descriptor->runtime_image_minor > image_minor) {
+        return SC_ERR_VERSION;
+    }
+    if (descriptor->image == NULL) return SC_ERR_NULL;
+    if (descriptor->image_size < 68u || descriptor->image_size > SC_IMAGE_LIMIT ||
+        sc_read_u32(descriptor->image + 12u) != descriptor->image_size) {
+        return SC_ERR_SIZE;
+    }
+    sc_sha256(descriptor->image, descriptor->image_size, digest);
+    if (memcmp(digest, descriptor->image_sha256, sizeof(digest)) != 0) {
+        return SC_ERR_CRC;
+    }
+    if (memcmp(descriptor->pool_abi_sha256, pool_hash, 32u) != 0) {
+        return SC_ERR_POOL;
+    }
+    status = sc_schema_open(parsed, descriptor->image, descriptor->image_size);
+    if (status != SC_OK) return status;
+    if (descriptor->runtime_image_major != sc_read_u16(descriptor->image + 8u) ||
+        descriptor->runtime_image_minor != 0u) {
+        return SC_ERR_VERSION;
+    }
+    if (descriptor->image_feature_flags != sc_read_u16(descriptor->image + 10u)) {
+        return SC_ERR_FEATURE;
+    }
+    features = sc_required_features(parsed);
+    if (descriptor->required_features != features ||
+        (features & ~supported_features) != 0u) {
+        return SC_ERR_FEATURE;
+    }
+    if (descriptor->runtime_state_bytes != sc_ilp32_state_bytes(parsed)) {
+        return SC_ERR_STATE;
+    }
+    if (descriptor->runtime_scratch_bytes != parsed->required_scratch) {
+        return SC_ERR_SCRATCH;
+    }
+    if (descriptor->pool_slots != parsed->pool_slot_count) return SC_ERR_POOL;
+    if (descriptor->runtime_scratch_bytes > scratch_capacity) return SC_ERR_SCRATCH;
+    if (descriptor->pool_slots > pool_count) return SC_ERR_POOL;
+    return sc_validate_storage(parsed, storage);
+}
+
+SC_LOCAL int sc_storage_overlaps(const sc_activation_storage_t *left,
+                                 const sc_activation_storage_t *right)
+{
+    return sc_memory_overlaps(left->schema, left->schema_capacity,
+                              right->schema, right->schema_capacity) ||
+           sc_memory_overlaps(left->schema, left->schema_capacity,
+                              right->state, right->state_capacity) ||
+           sc_memory_overlaps(left->state, left->state_capacity,
+                              right->schema, right->schema_capacity) ||
+           sc_memory_overlaps(left->state, left->state_capacity,
+                              right->state, right->state_capacity);
+}
+
+SC_LOCAL int sc_controller_is_valid(const sc_activation_controller_t *controller)
+{
+    return controller != NULL && controller->tag == SC_ACTIVATION_TAG &&
+           controller->generation != 0u && controller->pool != NULL &&
+           controller->active.descriptor != NULL &&
+           sc_schema_is_open(controller->active.storage.schema);
+}
+
+sc_status_t sc_activation_init(
+    sc_activation_controller_t *controller,
+    const sc_activation_target_t *target,
+    const sc_activation_descriptor_t *initial,
+    const sc_activation_storage_t *active_storage)
+{
+    struct sc_schema parsed;
+    sc_activation_controller_t initialized;
+    sc_status_t status;
+
+    if (controller == NULL || target == NULL || initial == NULL ||
+        active_storage == NULL) return SC_ERR_NULL;
+    if (!sc_memory_is_zero(controller, sizeof(*controller))) return SC_ERR_STATE;
+    if (target->struct_size != sizeof(*target)) return SC_ERR_SIZE;
+    if (target->reserved != 0u) return SC_ERR_VALUE;
+    if (target->runtime_abi != SC_RUNTIME_ABI_ILP32 ||
+        target->runtime_image_major != 1u) return SC_ERR_VERSION;
+    if (target->pool == NULL) return SC_ERR_NULL;
+    status = sc_preflight_descriptor(initial, target->runtime_abi,
+        target->runtime_image_major, target->runtime_image_minor,
+        target->supported_features, target->pool_abi_sha256,
+        target->scratch_capacity, target->pool_count, active_storage, &parsed);
+    if (status != SC_OK) return status;
+    if (sc_memory_overlaps(controller, sizeof(*controller), target->pool,
+                           target->pool_count * sizeof(sc_slot_t)) ||
+        sc_memory_overlaps(controller, sizeof(*controller),
+                           active_storage->schema, active_storage->schema_capacity) ||
+        sc_memory_overlaps(controller, sizeof(*controller),
+                           active_storage->state, active_storage->state_capacity) ||
+        sc_memory_overlaps(target->pool, target->pool_count * sizeof(sc_slot_t),
+                           active_storage->schema, active_storage->schema_capacity) ||
+        sc_memory_overlaps(target->pool, target->pool_count * sizeof(sc_slot_t),
+                           active_storage->state, active_storage->state_capacity) ||
+        sc_memory_overlaps(initial->image, initial->image_size,
+                           active_storage->schema, active_storage->schema_capacity) ||
+        sc_memory_overlaps(initial->image, initial->image_size,
+                           active_storage->state, active_storage->state_capacity) ||
+        sc_memory_overlaps(initial->image, initial->image_size, target->pool,
+                           target->pool_count * sizeof(sc_slot_t))) {
+        return SC_ERR_VALUE;
+    }
+
+    memset(&initialized, 0, sizeof(initialized));
+    initialized.tag = SC_ACTIVATION_TAG;
+    initialized.generation = 1u;
+    initialized.next_serial = 1u;
+    initialized.pool = target->pool;
+    initialized.pool_count = target->pool_count;
+    initialized.scratch_capacity = target->scratch_capacity;
+    initialized.supported_features = target->supported_features;
+    initialized.runtime_abi = target->runtime_abi;
+    initialized.runtime_image_major = target->runtime_image_major;
+    initialized.runtime_image_minor = target->runtime_image_minor;
+    memcpy(initialized.pool_abi_sha256, target->pool_abi_sha256, 32u);
+    initialized.active.descriptor = initial;
+    initialized.active.storage = *active_storage;
+
+    *active_storage->schema = parsed;
+    if (sc_schema_required_state_bytes(&parsed) != 0u) {
+        (void)sc_runtime_state_init(active_storage->schema,
+                                    active_storage->state,
+                                    active_storage->state_capacity);
+    }
+    sc_reset_pool_flags(active_storage->schema, target->pool);
+    *controller = initialized;
+    return SC_OK;
+}
+
+sc_status_t sc_activation_prepare(
+    sc_activation_controller_t *controller,
+    const sc_activation_descriptor_t *candidate,
+    const sc_activation_storage_t *staging_storage,
+    sc_activation_token_t *token)
+{
+    struct sc_schema parsed;
+    uint64_t serial;
+    sc_status_t status;
+
+    if (controller == NULL || candidate == NULL || staging_storage == NULL ||
+        token == NULL) return SC_ERR_NULL;
+    if (!sc_controller_is_valid(controller)) return SC_ERR_STATE;
+    if (controller->pending_token != NULL) return SC_ERR_BUSY;
+    status = sc_preflight_descriptor(candidate, controller->runtime_abi,
+        controller->runtime_image_major, controller->runtime_image_minor,
+        controller->supported_features, controller->pool_abi_sha256,
+        controller->scratch_capacity, controller->pool_count,
+        staging_storage, &parsed);
+    if (status != SC_OK) return status;
+    if (sc_storage_overlaps(&controller->active.storage, staging_storage) ||
+        sc_memory_overlaps(candidate->image, candidate->image_size,
+            controller->active.descriptor->image,
+            controller->active.descriptor->image_size) ||
+        sc_memory_overlaps(controller, sizeof(*controller),
+            staging_storage->schema, staging_storage->schema_capacity) ||
+        sc_memory_overlaps(controller, sizeof(*controller),
+            staging_storage->state, staging_storage->state_capacity) ||
+        sc_memory_overlaps(token, sizeof(*token), staging_storage->schema,
+            staging_storage->schema_capacity) ||
+        sc_memory_overlaps(token, sizeof(*token), staging_storage->state,
+            staging_storage->state_capacity) ||
+        sc_memory_overlaps(controller->pool,
+            controller->pool_count * sizeof(sc_slot_t), staging_storage->schema,
+            staging_storage->schema_capacity) ||
+        sc_memory_overlaps(controller->pool,
+            controller->pool_count * sizeof(sc_slot_t), staging_storage->state,
+            staging_storage->state_capacity) ||
+        sc_memory_overlaps(candidate->image, candidate->image_size,
+            staging_storage->schema, staging_storage->schema_capacity) ||
+        sc_memory_overlaps(candidate->image, candidate->image_size,
+            staging_storage->state, staging_storage->state_capacity) ||
+        sc_memory_overlaps(candidate->image, candidate->image_size,
+            controller->pool, controller->pool_count * sizeof(sc_slot_t)) ||
+        sc_memory_overlaps(token, sizeof(*token), controller,
+            sizeof(*controller)) ||
+        sc_memory_overlaps(token, sizeof(*token), controller->pool,
+            controller->pool_count * sizeof(sc_slot_t)) ||
+        sc_memory_overlaps(token, sizeof(*token),
+            controller->active.storage.schema,
+            controller->active.storage.schema_capacity) ||
+        sc_memory_overlaps(token, sizeof(*token),
+            controller->active.storage.state,
+            controller->active.storage.state_capacity) ||
+        sc_memory_overlaps(token, sizeof(*token), candidate->image,
+            candidate->image_size)) {
+        return SC_ERR_VALUE;
+    }
+
+    *staging_storage->schema = parsed;
+    if (sc_schema_required_state_bytes(&parsed) != 0u) {
+        (void)sc_runtime_state_init(staging_storage->schema,
+                                    staging_storage->state,
+                                    staging_storage->state_capacity);
+    }
+    serial = controller->next_serial;
+    if (serial == 0u) serial = 1u;
+    controller->next_serial = serial + 1u;
+    if (controller->next_serial == 0u) controller->next_serial = 1u;
+    controller->pending.descriptor = candidate;
+    controller->pending.storage = *staging_storage;
+    controller->pending_token = token;
+    controller->pending_serial = serial;
+    token->controller = controller;
+    token->serial = serial;
+    token->prepared_generation = controller->generation;
+    token->reserved = 0u;
+    return SC_OK;
+}
+
+SC_LOCAL sc_status_t sc_validate_activation_token(
+    sc_activation_controller_t *controller, sc_activation_token_t *token)
+{
+    if (!sc_controller_is_valid(controller)) return SC_ERR_STATE;
+    if (token == NULL || controller->pending_token != token ||
+        token->controller != controller || token->serial == 0u ||
+        token->serial != controller->pending_serial ||
+        token->prepared_generation != controller->generation ||
+        token->reserved != 0u || controller->pending.descriptor == NULL ||
+        !sc_schema_is_open(controller->pending.storage.schema)) {
+        return SC_ERR_TOKEN;
+    }
+    return SC_OK;
+}
+
+sc_status_t sc_activation_abort(sc_activation_controller_t *controller,
+                                sc_activation_token_t *token,
+                                sc_activation_slot_t *released)
+{
+    sc_status_t status;
+    if (controller == NULL || token == NULL || released == NULL) return SC_ERR_NULL;
+    if (sc_memory_overlaps(released, sizeof(*released), controller,
+                           sizeof(*controller)) ||
+        sc_memory_overlaps(released, sizeof(*released), token,
+                           sizeof(*token))) return SC_ERR_VALUE;
+    status = sc_validate_activation_token(controller, token);
+    if (status != SC_OK) return status;
+    *released = controller->pending;
+    memset(&controller->pending, 0, sizeof(controller->pending));
+    controller->pending_token = NULL;
+    controller->pending_serial = 0u;
+    memset(token, 0, sizeof(*token));
+    return SC_OK;
+}
+
+sc_status_t sc_activation_commit(sc_activation_controller_t *controller,
+                                 sc_activation_token_t *token,
+                                 sc_activation_slot_t *previous)
+{
+    sc_activation_slot_t old;
+    sc_status_t status;
+    if (controller == NULL || token == NULL || previous == NULL) return SC_ERR_NULL;
+    if (sc_memory_overlaps(previous, sizeof(*previous), controller,
+                           sizeof(*controller)) ||
+        sc_memory_overlaps(previous, sizeof(*previous), token,
+                           sizeof(*token))) return SC_ERR_VALUE;
+    status = sc_validate_activation_token(controller, token);
+    if (status != SC_OK) return status;
+
+    old = controller->active;
+    sc_reset_pool_flags(controller->pending.storage.schema, controller->pool);
+    controller->active = controller->pending;
+    ++controller->generation;
+    if (controller->generation == 0u) controller->generation = 1u;
+    memset(&controller->pending, 0, sizeof(controller->pending));
+    controller->pending_token = NULL;
+    controller->pending_serial = 0u;
+    *previous = old;
+    memset(token, 0, sizeof(*token));
+    return SC_OK;
+}
+
+sc_status_t sc_activation_view(const sc_activation_controller_t *controller,
+                               sc_activation_view_t *view)
+{
+    if (controller == NULL || view == NULL) return SC_ERR_NULL;
+    if (sc_memory_overlaps(view, sizeof(*view), controller,
+                           sizeof(*controller))) return SC_ERR_VALUE;
+    if (!sc_controller_is_valid(controller)) return SC_ERR_STATE;
+    view->descriptor = controller->active.descriptor;
+    view->schema = controller->active.storage.schema;
+    view->state = controller->active.storage.state;
+    view->state_capacity = controller->active.storage.state_capacity;
+    view->generation = controller->generation;
+    view->reserved = 0u;
     return SC_OK;
 }
