@@ -1734,7 +1734,7 @@ module CodegenTests =
             let result = generate ir outDir defaultConfig
 
             match result with
-            | Error(UnsupportedFeature msg) -> msg |> should haveSubstring "1024"
+            | Error(CodeGenError.UnsupportedFeature msg) -> msg |> should haveSubstring "1024"
             | _ -> failwith "Expected UnsupportedFeature error"
         finally
             cleanupDir outDir

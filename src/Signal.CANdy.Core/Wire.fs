@@ -1,123 +1,139 @@
 namespace Signal.CANdy.Core
 
+open System
 open Signal.CANdy.Core.Errors
 open Signal.CANdy.Core.Ir
 
 module Wire =
 
+    /// A signal's role in classic DBC multiplexing.
+    type MuxRole =
+        | Unconditional
+        | Selector
+        | Branch of expected: int
+
     /// A normalized wire-level signal independent of source syntax.
+    /// Value tables remain available in Ir but are display metadata and are not carried into Wire IR v1.
     type WireSignal =
         { Name: string
           StartBit: uint16
-          Length: uint16
+          LengthBits: uint16
+          ByteOrder: ByteOrder
+          IsSigned: bool
           Factor: float
           Offset: float
-          Minimum: float option
-          Maximum: float option
           Unit: string
-          IsSigned: bool
-          ByteOrder: ByteOrder
-          MultiplexerIndicator: string option
-          MultiplexerSwitchValue: int option }
+          Min: float option
+          Max: float option
+          Mux: MuxRole
+          Receivers: string list }
 
     /// A normalized CAN or CAN FD message.
     type WireMessage =
         { Name: string
-          Id: uint32
+          CanId: uint32
           IsExtended: bool
-          Length: uint16
+          LengthBytes: uint16
           Signals: WireSignal list }
 
     /// The canonical wire model consumed by later binding stages.
-    type WireIr = { Messages: WireMessage list }
+    type WireModel = { Messages: WireMessage list }
 
-    let private coveredBits (signal: Signal) =
-        let start = int signal.StartBit
-        let length = int signal.Length
+    // Read-only compatibility for downstream stages that predate the canonical v1 field names.
+    type WireSignal with
+        member signal.Length = signal.LengthBits
 
+    type WireMessage with
+        member message.Id = message.CanId
+        member message.Length = message.LengthBytes
+
+    type WireIr = WireModel
+
+    /// DbcParserLib 1.7.0 returns Motorola StartBit unchanged from the DBC's
+    /// MSB-first sawtooth coordinate (for example, `263|8@0+` is returned as 263).
+    /// Convert the signal's DBC-stream final bit to the runtime's LSB-first frame coordinate.
+    let private normalizeStartBit (signal: Signal) =
         match signal.ByteOrder with
-        | Little -> [ for bit in 0 .. length - 1 -> start + bit ]
+        | Little -> int signal.StartBit
         | Big ->
-            let byte0 = start / 8
-            let bit0 = start % 8
+            let finalBit = int signal.StartBit + int signal.Length - 1
+            (finalBit / 8) * 8 + (7 - finalBit % 8)
 
-            [ for bit in 0 .. length - 1 ->
-                  let mutable currentByte = byte0
-                  let mutable currentBit = bit0 - bit
+    let private unsupportedMux signalName details =
+        UnsupportedFeature(sprintf "Signal '%s' uses unsupported multiplexing: %s" signalName details)
 
-                  while currentBit < 0 do
-                      currentBit <- currentBit + 8
-                      currentByte <- currentByte + 1
+    let private muxRole (signal: Signal) : Result<MuxRole, ValidationError> =
+        match signal.MultiplexerIndicator, signal.MultiplexerSwitchValue with
+        | None, None -> Ok Unconditional
+        | None, Some _ -> Error(unsupportedMux signal.Name "a switch value without an indicator")
+        | Some "M", _ -> Ok Selector
+        // Dbc.fs represents m<N> as indicator "m" plus MultiplexerSwitchValue.
+        | Some "m", Some expected -> Ok(Branch expected)
+        | Some "m", None -> Error(unsupportedMux signal.Name "branch indicator is missing a switch value")
+        // Also accept an Ir supplied directly with the complete DBC m<N> token.
+        | Some indicator, switchValue when indicator.StartsWith("m", StringComparison.Ordinal) ->
+            match Int32.TryParse(indicator.AsSpan(1)) with
+            | true, expected ->
+                match switchValue with
+                | Some actual when actual <> expected ->
+                    Error(unsupportedMux signal.Name "branch indicator and switch value disagree")
+                | _ -> Ok(Branch expected)
+            | false, _ -> Error(unsupportedMux signal.Name (sprintf "indicator '%s'" indicator))
+        | Some indicator, _ -> Error(unsupportedMux signal.Name (sprintf "indicator '%s'" indicator))
 
-                  currentByte * 8 + currentBit ]
+    let private normalizeSignal (message: Message) (signal: Signal) =
+        let startBit = normalizeStartBit signal
+        let endBit = startBit + int signal.Length
+        let frameBits = int message.Length * 8
 
-    let private normalizeSignal (messageLength: uint16) (signal: Signal) =
-        let bits = coveredBits signal
-        let frameBits = int messageLength * 8
+        let errors =
+            [ if endBit > frameBits then
+                  SignalExceedsFrame(message.Name, signal.Name, endBit, frameBits)
 
-        if signal.Length = 0us then
-            Error(InvalidValue(sprintf "Signal '%s' has zero length." signal.Name))
-        elif messageLength > 64us then
-            Error(InvalidValue(sprintf "Message '%s' exceeds the 64-byte CAN FD limit." signal.Name))
-        elif bits |> List.exists (fun bit -> bit < 0 || bit >= frameBits) then
-            Error(
-                InvalidValue(
-                    sprintf
-                        "Signal '%s' exceeds the %d-byte frame payload."
-                        signal.Name
-                        (int messageLength)
-                )
-            )
-        else
-            let normalizedStart =
-                match signal.ByteOrder with
-                | Little -> int signal.StartBit
-                | Big -> bits |> List.min
+              if signal.IsCrc || signal.IsCounter then
+                  UnsupportedFeature "CRC/counter signals are not supported in Wire IR v1"
 
-            Ok
-                { Name = signal.Name
-                  StartBit = uint16 normalizedStart
-                  Length = signal.Length
-                  Factor = signal.Factor
-                  Offset = signal.Offset
-                  Minimum = signal.Minimum
-                  Maximum = signal.Maximum
-                  Unit = signal.Unit
-                  IsSigned = signal.IsSigned
-                  ByteOrder = signal.ByteOrder
-                  MultiplexerIndicator = signal.MultiplexerIndicator
-                  MultiplexerSwitchValue = signal.MultiplexerSwitchValue }
+              match muxRole signal with
+              | Error error -> error
+              | Ok _ -> () ]
+
+        let mux = muxRole signal |> Result.defaultValue Unconditional
+
+        { Name = signal.Name
+          StartBit = uint16 startBit
+          LengthBits = signal.Length
+          ByteOrder = signal.ByteOrder
+          IsSigned = signal.IsSigned
+          Factor = signal.Factor
+          Offset = signal.Offset
+          Unit = signal.Unit
+          Min = signal.Minimum
+          Max = signal.Maximum
+          Mux = mux
+          Receivers = signal.Receivers },
+        errors
 
     let private normalizeMessage (message: Message) =
-        if message.Length > 64us then
-            Error(InvalidValue(sprintf "Message '%s' exceeds the 64-byte CAN FD limit." message.Name))
+        let messageErrors =
+            [ if message.Length > 64us then
+                  MessageTooLong(message.Name, int message.Length) ]
+
+        let signals, signalErrors =
+            message.Signals |> List.map (normalizeSignal message) |> List.unzip
+
+        { Name = message.Name
+          CanId = message.Id
+          IsExtended = message.IsExtended
+          LengthBytes = message.Length
+          Signals = signals },
+        messageErrors @ List.concat signalErrors
+
+    /// Adapt the source Ir to Wire IR v1, normalizing bit coordinates and accumulating every diagnostic.
+    let toWireModel (ir: Ir) : Result<WireModel, ValidationError list> =
+        let messages, errors = ir.Messages |> List.map normalizeMessage |> List.unzip
+        let allErrors = List.concat errors
+
+        if List.isEmpty allErrors then
+            Ok { Messages = messages }
         else
-            let rec normalizeSignals remaining normalized =
-                match remaining with
-                | [] -> Ok(List.rev normalized)
-                | signal :: rest ->
-                    match normalizeSignal message.Length signal with
-                    | Error error -> Error error
-                    | Ok normalizedSignal -> normalizeSignals rest (normalizedSignal :: normalized)
-
-            match normalizeSignals message.Signals [] with
-            | Error error -> Error error
-            | Ok signals ->
-                Ok
-                    { Name = message.Name
-                      Id = message.Id
-                      IsExtended = message.IsExtended
-                      Length = message.Length
-                      Signals = signals }
-
-    /// Adapt the existing public IR to the normalized wire IR.
-    let ofIr (ir: Ir) : Result<WireIr, ValidationError list> =
-        let rec normalizeMessages remaining normalized =
-            match remaining with
-            | [] -> Ok { Messages = List.rev normalized }
-            | message :: rest ->
-                match normalizeMessage message with
-                | Error error -> Error [ error ]
-                | Ok normalizedMessage -> normalizeMessages rest (normalizedMessage :: normalized)
-
-        normalizeMessages ir.Messages []
+            Error allErrors

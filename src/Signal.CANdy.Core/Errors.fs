@@ -29,6 +29,17 @@ module Errors =
         | InvalidRange of name: string
         | DefaultOutOfRange of name: string
         | InvalidJson of details: string
+        | UnsupportedFeature of string
+        | SignalExceedsFrame of messageName: string * signalName: string * endBit: int * frameBits: int
+        | MessageTooLong of messageName: string * length: int
+        | ImageBadMagic
+        | ImageBadVersion
+        | ImageSize
+        | ImageBounds
+        | ImageAlign
+        | ImageTable
+        | ImageCrc
+        | ImageLimit of string
 
     /// Unified error type for the full generate-from-paths pipeline.
     /// Preserves the original error category so consumers can distinguish

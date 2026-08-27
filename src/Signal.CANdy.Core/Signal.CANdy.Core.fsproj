@@ -29,6 +29,7 @@
   <Compile Include="Wire.fs" />
   <Compile Include="Binding.fs" />
   <Compile Include="Linked.fs" />
+  <Compile Include="Scimg.fs" />
   <Compile Include="Config.fs" />
   <Compile Include="Dbc.fs" />
   <Compile Include="Codegen.fs" />

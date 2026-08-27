@@ -17,6 +17,7 @@
     <Compile Include="EdgeCaseTests.fs" />
     <Compile Include="ApiTests.fs" />
     <Compile Include="FacadeTests.fs" />
+    <Compile Include="ScimgTests.fs" />
   </ItemGroup>
 
   <ItemGroup>
