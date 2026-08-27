@@ -1,0 +1,14 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 801 TX_CLASSIC: 8 Vector__XXX
+ SG_ AliveCounter : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ CommandLE : 8|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ SignedBE : 24|8@0- (1,0) [-128|127] "" Vector__XXX
+BO_ 802 TX_FD: 64 Vector__XXX
+ SG_ FdValue : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
+BO_ 803 TX_MUX: 8 Vector__XXX
+ SG_ Selector M : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ Branch m1 : 16|16@1+ (1,0) [0|65535] "" Vector__XXX

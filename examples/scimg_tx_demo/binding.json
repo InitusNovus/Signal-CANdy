@@ -1,0 +1,19 @@
+{
+  "version": "1",
+  "bindings": [
+    { "poolSignal": "CommandLE", "message": "TX_CLASSIC", "wireSignal": "CommandLE", "conversion": { "kind": "identity" } },
+    { "poolSignal": "SignedBE", "message": "TX_CLASSIC", "wireSignal": "SignedBE", "conversion": { "kind": "identity" } },
+    { "poolSignal": "FdValue", "message": "TX_FD", "wireSignal": "FdValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "Selector", "message": "TX_MUX", "wireSignal": "Selector", "conversion": { "kind": "identity" } },
+    { "poolSignal": "Branch", "message": "TX_MUX", "wireSignal": "Branch", "conversion": { "kind": "identity" } }
+  ],
+  "txMessages": [
+    {
+      "message": "TX_CLASSIC",
+      "logicalMessageId": 1,
+      "counter": { "wireSignal": "AliveCounter", "modulus": 16, "increment": 1, "initialValue": 0 }
+    },
+    { "message": "TX_FD", "logicalMessageId": 2 },
+    { "message": "TX_MUX", "logicalMessageId": 3 }
+  ]
+}

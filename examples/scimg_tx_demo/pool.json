@@ -1,0 +1,11 @@
+{
+  "name": "tx_demo_pool",
+  "version": "1",
+  "signals": [
+    { "name": "CommandLE", "semanticId": 1, "storage": "u16", "unit": "", "direction": "tx", "default": 4660 },
+    { "name": "SignedBE", "semanticId": 2, "storage": "i8", "unit": "", "direction": "tx", "default": -1 },
+    { "name": "FdValue", "semanticId": 3, "storage": "u16", "unit": "", "direction": "tx", "default": 48879 },
+    { "name": "Selector", "semanticId": 4, "storage": "u8", "unit": "", "direction": "tx", "default": 1 },
+    { "name": "Branch", "semanticId": 5, "storage": "u16", "unit": "", "direction": "tx", "default": 564 }
+  ]
+}
