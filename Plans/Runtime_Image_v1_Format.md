@@ -86,14 +86,14 @@ v1 검증 규칙: `section_count` 필드는 없다 — v1은 항상 4개 section
 |---|---|---|
 | 0 | 2 | u16 start_bit — §6.1 비트 좌표계 |
 | 2 | 2 | u16 length_bits (1..64) |
-| 4 | 1 | u8 byte_order — 0 = little(Intel), 1 = big(Motorola) |
-| 5 | 1 | u8 is_signed — 0/1 |
+| 4 | 1 | u8 order_flags — bit0 = big endian(Motorola), bit1 = signed (값 0..3) |
+| 5 | 1 | u8 storage — 0..9: 0=U8,1=U16,2=U32,3=U64,4=I8,5=I16,6=I32,7=I64,8=F32,9=F64 (Pool.StorageType 순서) |
 | 6 | 2 | u16 conversion_index — CNV 인덱스 (0은 항상 identity) |
 | 8 | 2 | u16 slot_index — 대상 pool slot (dense, 0부터) |
 | 10 | 2 | u16 mux_selector_slot — 이 신호를 게이트하는 selector 신호의 slot. `0xFFFF` = 무조건 |
 | 12 | 4 | u32 mux_expected_value — selector raw 값 하위 32비트와 비교 |
 
-검증: start_bit + length_bits ≤ 512 (64바이트 × 8), length_bits ≥ 1, byte_order ≤ 1, is_signed ≤ 1, conversion_index < conversion_count, slot_index < signal_count, (mux_selector_slot == 0xFFFF) ⟺ (mux_expected_value == 0xFFFFFFFF), mux_selector_slot == 자기 slot_index 불가, byte_order=big이면 start_bit/length_bits가 byte 경계 정렬이 **아니어도** 된다(비트 단위 좌표계가 처리).
+검증: start_bit + length_bits ≤ 512 (64바이트 × 8), length_bits ≥ 1, order_flags ≤ 3, storage ≤ 9, conversion_index < conversion_count, slot_index < signal_count, (mux_selector_slot == 0xFFFF) ⟺ (mux_expected_value == 0xFFFFFFFF), mux_selector_slot == 자기 slot_index 불가, **storage가 정수(0..7)면 conversion_index는 identity(0)여야 한다** (affine→정수 저장은 rounding 정책이 DEFERRED — D-14), byte_order=big이면 start_bit/length_bits가 byte 경계 정렬이 **아니어도** 된다(비트 단위 좌표계가 처리).
 
 ### 6.1 비트 좌표계 (정규화 규칙)
 
@@ -154,7 +154,7 @@ CRC-32/ISO-HDLC (zlib와 동일): 다항식 0xEDB88320(reflected), init 0xFFFFFF
    - MSG에서 can_id(IDE 플래그 반영) 검색(순차 스캔 허용, 정렬 덕에 이분 탐색 가능). miss → `SC_OK_NO_MATCH`(에러 아님).
    - 프레임 payload 길이 `len`(0..64). 각 프로그램: `start_bit + length_bits > len*8`이면 그 신호만 **skip**(플래그 불변, 에러 아님).
    - unconditional 프로그램을 먼저 실행(테이블 순서가 이미 보장). muxed 프로그램: `pool[mux_selector_slot].raw & 0xFFFFFFFF == mux_expected_value`인 경우만 실행.
-   - extraction(§6.1) → 필요 시 부호 확장 → conversion(§7) → `slot.raw = 물리값 비트열(f64는 IEEE754 double, 정수 storage는 정수값)` — **slot 표현은 storage type에 따름(D-06)**: 정수 storage는 u64 정수 원값, f32는 float32 값의 u64 확장, f64는 double 비트열.
+   - extraction(§6.1) → 필요 시 부호 확장 → conversion(§7) → `slot.raw = 물리값 비트열` — **slot 표현은 storage 필드(§6)에 따름(D-06)**: 정수 storage(0..7)는 변환이 identity임이 검증되어 있으므로 부호 확장된 정수 원값 그대로, f64 storage(9)는 물리값(double)의 IEEE754 비트열, f32 storage(8)는 `(float)phys` 값의 widened 표현(상위 32비트 0 + 하위 float 비트). identity 변환 + f64 storage의 경우 정수 원값을 double로 변환해 저장한다(2^53까지 값 보존).
    - flags 갱신(D-19): `valid=1`, `updated=1`, 이전 valid 상태에서 raw가 달라졌으면 `changed=1`(초기 invalid→valid는 changed=1 아님 — 최초 값 확정으로 본다. 단 이전에 valid였고 값이 같으면 changed=0).
 3. 상태 비의존: `sc_decode`는 pool 외부 상태를 쓰지 않는다(v1 TX/counter 없음).
 
