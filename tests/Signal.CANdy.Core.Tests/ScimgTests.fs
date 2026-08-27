@@ -85,7 +85,8 @@ module ScimgTests =
               { PoolSignalName = "SignedValue"
                 MessageName = "ExtendedFrame"
                 WireSignalName = "RawSigned"
-                Conversion = Identity } ] }
+                Conversion = Identity } ]
+          TxMessages = [] }
 
     let private linkedFixture () =
         match link pool wire bindings with
@@ -133,7 +134,9 @@ module ScimgTests =
         | Ok json ->
             json |> should haveSubstring "\"messageCount\": 2"
             json |> should haveSubstring "\"signalCount\": 3"
+
             json |> should haveSubstring "\"conversionCount\": 2"
+
             json |> should haveSubstring "\"crc32Hex\": \"0x"
             json |> should haveSubstring "\"crcValid\": true"
             json.EndsWith("\n") |> should equal true
@@ -142,24 +145,28 @@ module ScimgTests =
     let ``reader rejects bad magic`` () =
         let bytes = bytesFixture ()
         bytes.[0] <- 0uy
+
         Scimg.read bytes |> hasError ImageBadMagic |> should equal true
 
     [<Fact>]
     let ``reader rejects truncated mid-section`` () =
         let bytes = bytesFixture ()
         let truncated = bytes.[0 .. bytes.Length - 11]
+
         Scimg.read truncated |> hasError ImageSize |> should equal true
 
     [<Fact>]
     let ``reader rejects offset past end`` () =
         let bytes = bytesFixture ()
         BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(32, 4), uint32 bytes.Length + 4u)
+
         Scimg.read bytes |> hasError ImageBounds |> should equal true
 
     [<Fact>]
     let ``reader rejects crc mismatch`` () =
         let bytes = bytesFixture ()
         bytes.[64] <- bytes.[64] ^^^ 1uy
+
         Scimg.read bytes |> hasError ImageCrc |> should equal true
 
     [<Fact>]
@@ -169,12 +176,13 @@ module ScimgTests =
         let plan = message.Plans.Head
 
         let invalid: LinkedSchema =
-            { Messages =
-                [ { message with
-                      Plans =
-                          [ { plan with
-                                Factor = 2.0
-                                Storage = U16 } ] } ] }
+            { schema with
+                Messages =
+                    [ { message with
+                          Plans =
+                              [ { plan with
+                                    Factor = 2.0
+                                    Storage = U16 } ] } ] }
 
         lower invalid |> hasError ImageTable |> should equal true
 
@@ -185,9 +193,10 @@ module ScimgTests =
         let plan = message.Plans.Head
 
         let invalid: LinkedSchema =
-            { Messages =
-                [ { message with
-                      Plans = [ { plan with PoolSlotIndex = 1us } ] } ] }
+            { schema with
+                Messages =
+                    [ { message with
+                          Plans = [ { plan with PoolSlotIndex = 1us } ] } ] }
 
         lower invalid |> hasError ImageTable |> should equal true
 
@@ -222,7 +231,8 @@ module ScimgTests =
                 [ { PoolSignalName = "BranchValue"
                     MessageName = "MuxFrame"
                     WireSignalName = "Muxed"
-                    Conversion = Identity } ] }
+                    Conversion = Identity } ]
+              TxMessages = [] }
 
         match link branchPool branchWire branchBindings with
         | Ok _ -> failwith "Expected missing selector error."

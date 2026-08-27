@@ -8,35 +8,36 @@
 extern "C" {
 #endif
 
+#define SC_FRAME_EXTENDED UINT8_C(0x01)
+#define SC_FRAME_FD UINT8_C(0x02)
+
+#define SC_SLOT_VALID UINT32_C(0x01)
+#define SC_SLOT_UPDATED UINT32_C(0x02)
+#define SC_SLOT_CHANGED UINT32_C(0x04)
+
 /** Status returned by Signal-CANdy runtime operations. */
 typedef enum sc_status {
-    /** Operation completed successfully. */
     SC_OK = 0,
-    /** Decode completed successfully, but no CAN message matched the frame. */
     SC_OK_NO_MATCH = 1,
-    /** A required pointer argument was NULL. */
     SC_ERR_NULL = -1,
-    /** The runtime-image magic bytes are invalid. */
     SC_ERR_MAGIC = -2,
-    /** The runtime-image format version is unsupported. */
     SC_ERR_VERSION = -3,
-    /** The supplied image size or encoded total size is invalid. */
     SC_ERR_SIZE = -4,
-    /** An offset, range, frame length, or descriptor value is out of bounds. */
     SC_ERR_BOUNDS = -5,
-    /** A runtime-image section does not satisfy the required alignment. */
     SC_ERR_ALIGN = -6,
-    /** A table invariant, reserved field, ordering rule, or conversion is invalid. */
     SC_ERR_TABLE = -7,
-    /** The runtime-image CRC32 does not match its contents. */
     SC_ERR_CRC = -8,
-    /** A v1 runtime-image resource limit is exceeded. */
     SC_ERR_LIMIT = -9,
-    /** The caller-provided signal pool is too small. */
-    SC_ERR_POOL = -10
+    SC_ERR_POOL = -10,
+    SC_ERR_FEATURE = -11,
+    SC_ERR_STATE = -12,
+    SC_ERR_SCRATCH = -13,
+    SC_ERR_VALUE = -14,
+    SC_ERR_BUSY = -15,
+    SC_ERR_TOKEN = -16
 } sc_status_t;
 
-/** A normalized CAN/CAN-FD receive frame. flags bit 0 denotes an extended frame. */
+/** A normalized CAN/CAN-FD frame. */
 typedef struct {
     uint32_t id;
     uint8_t flags;
@@ -44,12 +45,7 @@ typedef struct {
     uint8_t data[64];
 } sc_frame_t;
 
-/**
- * One uniform signal-pool slot.
- *
- * flags bit 0 is valid, bit 1 is updated, and bit 2 is changed. Integer values
- * use their uint64_t representation; floating-point values use IEEE-754 bits.
- */
+/** One uniform signal-pool slot. */
 typedef struct {
     uint64_t raw;
     uint32_t flags;
@@ -58,78 +54,55 @@ typedef struct {
 /** Validated, immutable runtime-image view. Its representation is private. */
 typedef struct sc_schema sc_schema_t;
 
-/**
- * Return the number of bytes required for one sc_schema_t object.
- *
- * The caller owns this suitably aligned storage. The runtime performs no heap
- * allocation. The returned size is constant for a given runtime build.
- */
-size_t sc_schema_size(void);
+/** Persistent state for one stateful TX counter. */
+typedef struct {
+    uint32_t current;
+    uint32_t pending_generation;
+    uint32_t next_generation;
+} sc_tx_counter_state_t;
 
-/**
- * Validate and open a v1 runtime image.
- *
- * schema must point to at least sc_schema_size() suitably aligned writable
- * bytes. image remains caller-owned and must remain unchanged and alive for the
- * lifetime of schema. Every v1 header, directory, table, padding, limit, and
- * CRC invariant is checked before schema is modified.
- *
- * Returns SC_OK on success or a negative sc_status_t value on failure. A failed
- * call leaves the previous contents of schema unchanged.
- */
+/** Caller-owned persistent state bound to one opened schema. */
+typedef struct sc_runtime_state {
+    const sc_schema_t *schema;
+    uint16_t counter_count;
+    uint16_t reserved;
+    sc_tx_counter_state_t counters[];
+} sc_runtime_state_t;
+
+/** Caller-owned reservation token returned by encode prepare. */
+typedef struct {
+    const sc_schema_t *schema;
+    sc_runtime_state_t *state;
+    uint16_t counter_index;
+    uint16_t reserved;
+    uint32_t generation;
+    uint32_t counter_value;
+} sc_tx_token_t;
+
+size_t sc_schema_size(void);
 sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
                            size_t image_size);
-
-/**
- * Return the number of messages in an opened schema.
- *
- * Returns zero when schema is NULL or is not an opened schema.
- */
 uint16_t sc_schema_message_count(const sc_schema_t *schema);
-
-/**
- * Return the number of signal programs (and required pool slots) in a schema.
- *
- * Returns zero when schema is NULL or is not an opened schema.
- */
 uint16_t sc_schema_signal_count(const sc_schema_t *schema);
-
-/**
- * Return caller-owned persistent state bytes required by a schema.
- *
- * Runtime image v1 is state-independent outside the pool, so this always
- * returns zero, including for NULL schema.
- */
+uint16_t sc_schema_tx_message_count(const sc_schema_t *schema);
 size_t sc_schema_required_state_bytes(const sc_schema_t *schema);
-
-/**
- * Return caller-owned scratch bytes required by decode.
- *
- * Runtime image v1 decodes with stack temporaries, so this always returns zero,
- * including for NULL schema.
- */
 size_t sc_schema_required_scratch_bytes(const sc_schema_t *schema);
 
-/**
- * Decode one receive frame into a caller-owned uniform slot pool.
- *
- * pool_count must be at least sc_schema_signal_count(schema). Frame length must
- * be in 0..64. A program outside the supplied payload is skipped without
- * changing its slot. A matching decoded signal sets valid and updated; changed
- * is set only when a previously valid slot receives different raw bits.
- * Representation follows each program's storage field. Integer storage keeps
- * the sign-extended or unsigned raw integer. F64 stores the IEEE-754 double
- * bits of the physical value, including integer-to-double conversion for an
- * identity conversion. F32 stores the narrowed IEEE-754 float bits in the low
- * 32 bits with the upper 32 bits zero.
- *
- * Calls for one schema/pool are single-writer. Synchronization against readers
- * and protection from torn reads are the caller's responsibility.
- *
- * Returns SC_OK, SC_OK_NO_MATCH, or a negative sc_status_t value.
- */
+sc_status_t sc_runtime_state_init(const sc_schema_t *schema,
+                                  sc_runtime_state_t *state,
+                                  size_t state_size);
+
 sc_status_t sc_decode(const sc_schema_t *schema, const sc_frame_t *frame,
                       sc_slot_t *pool, size_t pool_count);
+
+sc_status_t sc_encode_prepare(const sc_schema_t *schema,
+                              sc_runtime_state_t *state,
+                              uint32_t logical_message_id,
+                              const sc_slot_t *pool, size_t pool_count,
+                              sc_frame_t *frame, void *scratch,
+                              size_t scratch_size, sc_tx_token_t *token);
+
+sc_status_t sc_encode_commit(sc_tx_token_t *token, int transmitted);
 
 #ifdef __cplusplus
 }

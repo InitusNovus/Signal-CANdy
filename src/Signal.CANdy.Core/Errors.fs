@@ -34,6 +34,7 @@ module Errors =
         | MessageTooLong of messageName: string * length: int
         | ImageBadMagic
         | ImageBadVersion
+        | ImageFeature
         | ImageSize
         | ImageBounds
         | ImageAlign

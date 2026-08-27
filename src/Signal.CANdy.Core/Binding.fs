@@ -5,7 +5,7 @@ open Signal.CANdy.Core.Errors
 
 module Binding =
 
-    /// Conversion policy applied after wire extraction.
+    /// Conversion policy applied between raw wire values and pool values.
     type Conversion =
         | Identity
         | Affine of factor: float * offset: float
@@ -17,36 +17,88 @@ module Binding =
           WireSignalName: string
           Conversion: Conversion }
 
+    /// Explicit stateful counter profile for one transmitted message.
+    type TxCounterBinding =
+        { WireSignalName: string
+          Modulus: uint32
+          Increment: uint32
+          InitialValue: uint32 }
+
+    /// Explicit logical identifier and optional counter for one transmitted message.
+    type TxMessageBinding =
+        { MessageName: string
+          LogicalMessageId: uint32
+          Counter: TxCounterBinding option }
+
     /// Bindings are deliberately separate from both source models.
-    type BindingSet = { Bindings: SignalBinding list }
+    type BindingSet =
+        { Bindings: SignalBinding list
+          TxMessages: TxMessageBinding list }
 
+    /// Validate conversion contracts. Direction-aware duplicate checks happen in the linker.
     let validate (bindings: SignalBinding list) : Result<SignalBinding list, ValidationError list> =
-        let duplicateNames =
-            bindings
-            |> List.groupBy (fun binding -> binding.PoolSignalName)
-            |> List.choose (fun (name, values) ->
-                if List.length values > 1 then
-                    Some(InvalidValue(sprintf "Pool signal '%s' has multiple bindings." name))
-                else
-                    None)
-
         let conversionErrors =
             bindings
             |> List.choose (fun binding ->
                 match binding.Conversion with
-                | Affine(0.0, _) ->
-                    Some(
-                        InvalidValue(
-                            sprintf
-                                "Pool signal '%s' has an affine conversion with factor zero."
-                                binding.PoolSignalName
-                        )
-                    )
+                | Affine(factor, _) when
+                    factor = 0.0 || System.Double.IsNaN(factor) || System.Double.IsInfinity(factor)
+                    ->
+                    Some(InvalidValue(sprintf "Pool signal '%s' has an invalid affine factor." binding.PoolSignalName))
+                | Affine(_, offset) when System.Double.IsNaN(offset) || System.Double.IsInfinity(offset) ->
+                    Some(InvalidValue(sprintf "Pool signal '%s' has an invalid affine offset." binding.PoolSignalName))
                 | _ -> None)
 
-        let errors = duplicateNames @ conversionErrors
+        if conversionErrors.IsEmpty then
+            Ok bindings
+        else
+            Error conversionErrors
 
-        if errors.IsEmpty then Ok bindings else Error errors
+    let private counterProfileError messageName (counter: TxCounterBinding) =
+        if counter.Modulus = 1u then
+            Some(InvalidValue(sprintf "TX message '%s' counter modulus must be zero or at least two." messageName))
+        elif counter.Increment = 0u then
+            Some(InvalidValue(sprintf "TX message '%s' counter increment must be non-zero." messageName))
+        elif counter.Modulus <> 0u && counter.Increment >= counter.Modulus then
+            Some(InvalidValue(sprintf "TX message '%s' counter increment must be less than modulus." messageName))
+        elif counter.Modulus <> 0u && counter.InitialValue >= counter.Modulus then
+            Some(InvalidValue(sprintf "TX message '%s' counter initial value must be less than modulus." messageName))
+        else
+            None
+
+    /// Validate message-level TX identities and counter profiles.
+    let validateSet (bindingSet: BindingSet) : Result<BindingSet, ValidationError list> =
+        let duplicateMessageErrors =
+            bindingSet.TxMessages
+            |> List.groupBy (fun message -> message.MessageName)
+            |> List.choose (fun (name, values) ->
+                if values.Length > 1 then
+                    Some(InvalidValue(sprintf "TX message '%s' is declared more than once." name))
+                else
+                    None)
+
+        let duplicateIdErrors =
+            bindingSet.TxMessages
+            |> List.groupBy (fun message -> message.LogicalMessageId)
+            |> List.choose (fun (logicalId, values) ->
+                if values.Length > 1 then
+                    Some(InvalidValue(sprintf "TX logical message ID %u is declared more than once." logicalId))
+                else
+                    None)
+
+        let counterErrors =
+            bindingSet.TxMessages
+            |> List.choose (fun message -> message.Counter |> Option.bind (counterProfileError message.MessageName))
+
+        let bindingErrors =
+            match validate bindingSet.Bindings with
+            | Ok _ -> []
+            | Error errors -> errors
+
+        let errors =
+            bindingErrors @ duplicateMessageErrors @ duplicateIdErrors @ counterErrors
+
+        if errors.IsEmpty then Ok bindingSet else Error errors
 
     type private ResultBuilder() =
         member _.Bind(result, binder) = Result.bind binder result
@@ -108,6 +160,15 @@ module Binding =
                 | false, _ -> return! Error(sprintf "%s key '%s' must be a number" context name)
         }
 
+    let private requiredUInt32 (context: string) (name: string) (properties: JsonProperty list) =
+        result {
+            let! value = requiredProperty context name properties
+
+            match value.TryGetUInt32() with
+            | true, number -> return number
+            | false, _ -> return! Error(sprintf "%s key '%s' must be a uint32" context name)
+        }
+
     let private parseConversion index (element: JsonElement) =
         let context = sprintf "bindings[%d].conversion" index
 
@@ -124,8 +185,12 @@ module Binding =
                 let! factor = requiredNumber context "factor" properties
                 let! offset = requiredNumber context "offset" properties
 
-                if factor = 0.0 then
-                    return! Error(sprintf "%s key 'factor' must be non-zero" context)
+                if
+                    factor = 0.0
+                    || not (System.Double.IsFinite(factor))
+                    || not (System.Double.IsFinite(offset))
+                then
+                    return! Error(sprintf "%s must contain finite values and a non-zero factor" context)
                 else
                     return Affine(factor, offset)
             | _ -> return! Error(sprintf "%s has unknown kind '%s'" context kind)
@@ -152,25 +217,79 @@ module Binding =
                   Conversion = conversion }
         }
 
+    let private parseArray context parser (element: JsonElement) =
+        if element.ValueKind <> JsonValueKind.Array then
+            Error(sprintf "%s must be an array" context)
+        else
+            let rec parseAll index elements =
+                match elements with
+                | [] -> Ok []
+                | item :: rest ->
+                    result {
+                        let! parsed = parser index item
+                        let! remaining = parseAll (index + 1) rest
+                        return parsed :: remaining
+                    }
+
+            element.EnumerateArray() |> Seq.toList |> parseAll 0
+
     let private parseBindings (properties: JsonProperty list) =
         result {
             let! value = requiredProperty "Binding set" "bindings" properties
-
-            if value.ValueKind <> JsonValueKind.Array then
-                return! Error("Binding set key 'bindings' must be an array")
-            else
-                let rec parseAll index elements =
-                    match elements with
-                    | [] -> Ok []
-                    | element :: rest ->
-                        result {
-                            let! binding = parseBinding index element
-                            let! remaining = parseAll (index + 1) rest
-                            return binding :: remaining
-                        }
-
-                return! value.EnumerateArray() |> Seq.toList |> parseAll 0
+            return! parseArray "Binding set key 'bindings'" parseBinding value
         }
+
+    let private parseCounter index (element: JsonElement) =
+        let context = sprintf "txMessages[%d].counter" index
+
+        result {
+            let! properties = objectProperties context element
+
+            do! ensureAllowedProperties context [ "wireSignal"; "modulus"; "increment"; "initialValue" ] properties
+
+            let! wireSignal = requiredString context "wireSignal" properties
+            let! modulus = requiredUInt32 context "modulus" properties
+            let! increment = requiredUInt32 context "increment" properties
+            let! initialValue = requiredUInt32 context "initialValue" properties
+
+            let counter =
+                { WireSignalName = wireSignal
+                  Modulus = modulus
+                  Increment = increment
+                  InitialValue = initialValue }
+
+            match counterProfileError context counter with
+            | Some(InvalidValue details) -> return! Error details
+            | Some _ -> return! Error(sprintf "%s has an invalid profile" context)
+            | None -> return counter
+        }
+
+    let private parseTxMessage index (element: JsonElement) =
+        let context = sprintf "txMessages[%d]" index
+
+        result {
+            let! properties = objectProperties context element
+
+            do! ensureAllowedProperties context [ "message"; "logicalMessageId"; "counter" ] properties
+
+            let! message = requiredString context "message" properties
+            let! logicalId = requiredUInt32 context "logicalMessageId" properties
+
+            let! counter =
+                match tryProperty "counter" properties with
+                | None -> Ok None
+                | Some value -> parseCounter index value |> Result.map Some
+
+            return
+                { MessageName = message
+                  LogicalMessageId = logicalId
+                  Counter = counter }
+        }
+
+    let private parseTxMessages (properties: JsonProperty list) =
+        match tryProperty "txMessages" properties with
+        | None -> Ok []
+        | Some value -> parseArray "Binding set key 'txMessages'" parseTxMessage value
 
     /// Parse a strict version 1 JSON binding set and validate all bindings.
     let parseBindingSet (json: string) : Result<BindingSet, ValidationError list> =
@@ -184,21 +303,22 @@ module Binding =
             let parsed =
                 result {
                     let! properties = objectProperties "Binding set" document.RootElement
-                    do! ensureAllowedProperties "Binding set" [ "version"; "bindings" ] properties
+                    do! ensureAllowedProperties "Binding set" [ "version"; "bindings"; "txMessages" ] properties
                     let! version = requiredString "Binding set" "version" properties
 
                     if version <> "1" then
                         return! Error(sprintf "Binding set has unsupported version '%s'" version)
                     else
                         let! bindings = parseBindings properties
-                        return { Bindings = bindings }
+                        let! txMessages = parseTxMessages properties
+
+                        return
+                            { Bindings = bindings
+                              TxMessages = txMessages }
                 }
 
             match parsed with
             | Error details -> Error[InvalidJson details]
-            | Ok bindingSet ->
-                match validate bindingSet.Bindings with
-                | Ok bindings -> Ok { Bindings = bindings }
-                | Error errors -> Error errors
+            | Ok bindingSet -> validateSet bindingSet
         with ex ->
             Error[InvalidJson ex.Message]

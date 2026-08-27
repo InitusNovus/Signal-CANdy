@@ -32,6 +32,18 @@ module Scimg =
     [<Literal>]
     let private DirectorySize = 32
 
+    [<Literal>]
+    let private TxHeaderSize = 32
+
+    [<Literal>]
+    let private TxMessageSize = 24
+
+    [<Literal>]
+    let private ProgramSize = 16
+
+    [<Literal>]
+    let private CounterSize = 24
+
     let private magic =
         [| 0x53uy; 0x43uy; 0x49uy; 0x4Duy; 0x47uy; 0x30uy; 0x31uy; 0uy |]
 
@@ -55,12 +67,35 @@ module Scimg =
           Factor: float
           Offset: float }
 
+    type ImageTxMessage =
+        { LogicalMessageId: uint32
+          EncodedCanId: uint32
+          PayloadLength: uint8
+          FrameFlags: uint8
+          ProgramCount: uint16
+          ProgramIndex: uint16
+          CounterIndex: uint16
+          TemplateOffset: uint32 }
+
+    type ImageTxCounter =
+        { StartBit: uint16
+          LengthBits: uint16
+          BigEndian: bool
+          Modulus: uint32
+          Increment: uint32
+          InitialValue: uint32 }
+
     type RuntimeImage =
         { Messages: ImageMessage list
           Programs: ImageProgram list
           Conversions: ImageConversion list
+          PoolSlotCount: uint16
           SignalNames: string list
-          MessageNames: string list }
+          MessageNames: string list
+          TxMessages: ImageTxMessage list
+          TxPrograms: ImageProgram list
+          TxCounters: ImageTxCounter list
+          TxTemplates: byte array }
 
     let private identityConversion =
         { IsAffine = false
@@ -88,6 +123,20 @@ module Scimg =
     let private validCanId id isExtended =
         if isExtended then id <= 0x1FFFFFFFu else id <= 0x7FFu
 
+    let private validEncodedCanId value =
+        let extended = (value &&& 0x80000000u) <> 0u
+        validCanId (value &&& 0x7FFFFFFFu) extended
+
+    let private validPayloadLength length =
+        length <= 8uy
+        || length = 12uy
+        || length = 16uy
+        || length = 20uy
+        || length = 24uy
+        || length = 32uy
+        || length = 48uy
+        || length = 64uy
+
     let private utf8 = UTF8Encoding(false, true)
 
     let private nameError (name: string) =
@@ -103,235 +152,335 @@ module Scimg =
     let private conversionKey factor offset =
         struct (BitConverter.DoubleToInt64Bits(factor), BitConverter.DoubleToInt64Bits(offset))
 
-    let private lowerErrors (schema: LinkedSchema) =
-        let plans = schema.Messages |> List.collect _.Plans
-        let slots = plans |> List.map _.PoolSlotIndex
-        let sortedSlots = slots |> List.sort
-        let expectedSlots = [ for index in 0 .. plans.Length - 1 -> uint16 index ]
+    let private orderedDecodePlans (message: LinkedMessage) =
+        message.Plans
+        |> List.sortBy (fun plan ->
+            let selectorRank = if plan.Mux = Selector then 0 else 1
+            selectorRank, plan.StartBit, plan.PoolSlotIndex)
 
-        [ if schema.Messages.Length > MaxMessages then
-              ImageLimit "message_count exceeds 4096"
+    let private orderedEncodePlans (message: LinkedTxMessage) =
+        message.Plans
+        |> List.sortBy (fun plan ->
+            let selectorRank = if plan.Mux = Selector then 0 else 1
 
-          if plans.Length > MaxPrograms then
-              ImageLimit "signal_count exceeds 8192"
+            let expectedRank =
+                match plan.MuxExpected with
+                | None -> struct (0, 0u)
+                | Some value -> struct (1, value)
 
-          if sortedSlots <> expectedSlots then
-              ImageTable
+            selectorRank, plan.StartBit, expectedRank, plan.PoolSlotIndex)
 
-          let encodedIds =
-              schema.Messages
-              |> List.map (fun message -> encodedCanId message.Id message.IsExtended)
+    let private imageProgram conversionIndex planStart planLength byteOrder isSigned storage slot muxSlot muxExpected =
+        { StartBit = planStart
+          LengthBits = planLength
+          OrderFlags = (if byteOrder = Big then 1uy else 0uy) ||| (if isSigned then 2uy else 0uy)
+          Storage = storageValue storage
+          ConversionIndex = conversionIndex
+          SlotIndex = slot
+          MuxSelectorSlot = muxSlot
+          MuxExpected = muxExpected }
 
-          if (encodedIds |> List.distinct).Length <> encodedIds.Length then
-              ImageTable
+    let private muxFields selector expected =
+        match selector, expected with
+        | Some slot, Some value -> slot, value
+        | _ -> UInt16.MaxValue, UInt32.MaxValue
 
-          for message in schema.Messages do
-              if not (validCanId message.Id message.IsExtended) then
-                  ImageTable
-
-              if message.Plans.IsEmpty then
-                  ImageTable
-
-              if nameError message.Name then
-                  ImageLimit(sprintf "message name '%s' is not 1..255 UTF-8 bytes" message.Name)
-
-              for plan in message.Plans do
-                  if nameError plan.PoolSignalName then
-                      ImageLimit(sprintf "signal name '%s' is not 1..255 UTF-8 bytes" plan.PoolSignalName)
-
-                  if
-                      plan.Length < 1us
-                      || plan.Length > 64us
-                      || uint32 plan.StartBit + uint32 plan.Length > 512u
-                  then
-                      ImageTable
-
-                  if
-                      isIntegerStorageValue (storageValue plan.Storage)
-                      && (plan.Factor <> 1.0 || plan.Offset <> 0.0)
-                  then
-                      ImageTable
-
-                  if plan.Factor = 0.0 && (plan.Factor <> 1.0 || plan.Offset <> 0.0) then
-                      ImageTable
-
-                  match plan.Mux, plan.MuxSelectorSlot, plan.MuxExpected with
-                  | Branch expected, Some selectorSlot, Some actual when
-                      selectorSlot <> plan.PoolSlotIndex && actual = uint32 expected
-                      ->
-                      ()
-                  | Branch _, _, _ -> ImageTable
-                  | Selector, None, None
-                  | Unconditional, None, None -> ()
-                  | _ -> ImageTable
-
-              let selectors =
-                  message.Plans
-                  |> List.filter (fun plan ->
-                      match plan.Mux with
-                      | Selector -> true
-                      | _ -> false)
-
-              let branches =
-                  message.Plans
-                  |> List.filter (fun plan ->
-                      match plan.Mux with
-                      | Branch _ -> true
-                      | _ -> false)
-
-              if selectors.Length > 1 || (not branches.IsEmpty && selectors.Length <> 1) then
-                  ImageTable
-
-              match selectors with
-              | [ selector ] ->
-                  if
-                      branches
-                      |> List.exists (fun branch -> branch.MuxSelectorSlot <> Some selector.PoolSlotIndex)
-                  then
-                      ImageTable
-              | _ -> () ]
+    let private align4 value = (value + 3) / 4 * 4
 
     let lower (schema: LinkedSchema) : Result<RuntimeImage, ValidationError list> =
-        let errors = lowerErrors schema
+        let rxPlans = schema.Messages |> List.collect (fun message -> message.Plans)
+
+        let txPlans = schema.TxMessages |> List.collect (fun message -> message.Plans)
+
+        let hasTx = not schema.TxMessages.IsEmpty
+
+        let errors =
+            [ if schema.Messages.Length > MaxMessages || schema.TxMessages.Length > MaxMessages then
+                  ImageLimit "message_count exceeds 4096"
+
+              if rxPlans.Length > MaxPrograms || txPlans.Length > MaxPrograms then
+                  ImageLimit "program_count exceeds 8192"
+
+              if schema.PoolSlots.Length > MaxPrograms then
+                  ImageLimit "pool_slot_count exceeds 8192"
+
+              if hasTx && schema.PoolSlots.IsEmpty then
+                  ImageTable
+
+              if not hasTx then
+                  let slots = rxPlans |> List.map (fun plan -> plan.PoolSlotIndex) |> List.sort
+
+                  let expected = [ for index in 0 .. rxPlans.Length - 1 -> uint16 index ]
+
+                  if slots <> expected || schema.PoolSlots.Length <> rxPlans.Length then
+                      ImageTable
+
+              for slot in schema.PoolSlots do
+                  if nameError slot.Name then
+                      ImageLimit(sprintf "signal name '%s' is not 1..255 UTF-8 bytes" slot.Name)
+
+              for message in schema.Messages do
+                  if not (validCanId message.Id message.IsExtended) || message.Plans.IsEmpty then
+                      ImageTable
+
+                  if nameError message.Name then
+                      ImageLimit(sprintf "message name '%s' is invalid" message.Name)
+
+                  for plan in message.Plans do
+                      if
+                          plan.Length < 1us
+                          || plan.Length > 64us
+                          || uint32 plan.StartBit + uint32 plan.Length > uint32 message.Length * 8u
+                          || int plan.PoolSlotIndex >= schema.PoolSlots.Length
+                      then
+                          ImageTable
+
+                      if
+                          isIntegerStorageValue (storageValue plan.Storage)
+                          && (plan.Factor <> 1.0 || plan.Offset <> 0.0)
+                      then
+                          ImageTable
+
+              let rxIds =
+                  schema.Messages
+                  |> List.map (fun message -> encodedCanId message.Id message.IsExtended)
+
+              if rxIds.Length <> (rxIds |> List.distinct).Length then
+                  ImageTable
+
+              let logicalIds =
+                  schema.TxMessages |> List.map (fun message -> message.LogicalMessageId)
+
+              if logicalIds.Length <> (logicalIds |> List.distinct).Length then
+                  ImageTable
+
+              for message in schema.TxMessages do
+                  if
+                      not (validCanId message.CanId message.IsExtended)
+                      || not (validPayloadLength (uint8 message.Length))
+                  then
+                      ImageTable
+
+                  if message.Plans.IsEmpty && message.Counter.IsNone then
+                      ImageTable
+
+                  for plan in message.Plans do
+                      if
+                          plan.Length < 1us
+                          || plan.Length > 64us
+                          || uint32 plan.StartBit + uint32 plan.Length > uint32 message.Length * 8u
+                          || int plan.PoolSlotIndex >= schema.PoolSlots.Length
+                      then
+                          ImageTable
+
+                      if
+                          isIntegerStorageValue (storageValue plan.Storage)
+                          && (plan.Factor <> 1.0 || plan.Offset <> 0.0)
+                      then
+                          ImageTable ]
 
         if not errors.IsEmpty then
             Error errors
         else
             let conversions = ResizeArray<ImageConversion>()
-            let conversionIndices = Dictionary<struct (int64 * int64), uint16>()
+            let indices = Dictionary<struct (int64 * int64), uint16>()
             conversions.Add(identityConversion)
-            conversionIndices.Add(conversionKey 1.0 0.0, 0us)
+            indices.Add(conversionKey 1.0 0.0, 0us)
 
+            let intern factor offset =
+                let key = conversionKey factor offset
+
+                match indices.TryGetValue(key) with
+                | true, index -> index
+                | false, _ ->
+                    let index = uint16 conversions.Count
+                    indices.Add(key, index)
+
+                    conversions.Add(
+                        { IsAffine = true
+                          Factor = factor
+                          Offset = offset }
+                    )
+
+                    index
+
+            // RX traversal is intentionally unchanged; TX conversions append afterwards.
             for message in schema.Messages do
                 for plan in message.Plans do
                     if plan.Factor <> 1.0 || plan.Offset <> 0.0 then
-                        let key = conversionKey plan.Factor plan.Offset
+                        intern plan.Factor plan.Offset |> ignore
 
-                        if not (conversionIndices.ContainsKey(key)) then
-                            let index = uint16 conversions.Count
-                            conversionIndices.Add(key, index)
+            let sortedTx =
+                schema.TxMessages |> List.sortBy (fun message -> message.LogicalMessageId)
 
-                            conversions.Add(
-                                { IsAffine = true
-                                  Factor = plan.Factor
-                                  Offset = plan.Offset }
-                            )
+            for message in sortedTx do
+                for plan in orderedEncodePlans message do
+                    if plan.Factor <> 1.0 || plan.Offset <> 0.0 then
+                        intern plan.Factor plan.Offset |> ignore
 
             if conversions.Count > MaxConversions then
                 Error[ImageLimit "conversion_count exceeds 1024"]
             else
-                let symbolPayloadSize =
-                    4
-                    + (schema.Messages
-                       |> List.sumBy (fun message -> 2 + utf8.GetByteCount(message.Name)))
-                    + (schema.Messages
-                       |> List.collect _.Plans
-                       |> List.sumBy (fun plan -> 2 + utf8.GetByteCount(plan.PoolSignalName)))
-
-                let symbolSize = (symbolPayloadSize + 3) / 4 * 4
-
-                let totalSize =
-                    HeaderSize
-                    + DirectorySize
-                    + schema.Messages.Length * 8
-                    + (schema.Messages |> List.sumBy (fun message -> message.Plans.Length)) * 16
-                    + conversions.Count * 24
-                    + symbolSize
-                    + 4
-
-                let conversionIndex (plan: DecodePlan) =
-                    if plan.Factor = 1.0 && plan.Offset = 0.0 then
+                let conversionIndex factor offset =
+                    if factor = 1.0 && offset = 0.0 then
                         0us
                     else
-                        conversionIndices.[conversionKey plan.Factor plan.Offset]
+                        indices.[conversionKey factor offset]
 
-                let mutable nextProgramIndex = 0
-                let programs = ResizeArray<ImageProgram>()
                 let messages = ResizeArray<ImageMessage>()
+                let programs = ResizeArray<ImageProgram>()
                 let messageNames = ResizeArray<string>()
+                let mutable nextRxProgram = 0
 
                 schema.Messages
                 |> List.sortBy (fun message -> encodedCanId message.Id message.IsExtended)
                 |> List.iter (fun message ->
-                    let orderedPlans =
-                        message.Plans
-                        |> List.sortBy (fun plan ->
-                            let selectorRank =
-                                match plan.Mux with
-                                | Selector -> 0
-                                | _ -> 1
-
-                            selectorRank, plan.StartBit, plan.PoolSlotIndex)
+                    let plans = orderedDecodePlans message
 
                     messages.Add(
                         { EncodedCanId = encodedCanId message.Id message.IsExtended
-                          ProgramCount = uint16 orderedPlans.Length
-                          ProgramIndex = uint16 nextProgramIndex }
+                          ProgramCount = uint16 plans.Length
+                          ProgramIndex = uint16 nextRxProgram }
                     )
 
                     messageNames.Add(message.Name)
 
-                    orderedPlans
-                    |> List.iter (fun plan ->
-                        let muxSelectorSlot, muxExpected =
-                            match plan.MuxSelectorSlot, plan.MuxExpected with
-                            | Some slot, Some expected -> slot, expected
-                            | _ -> UInt16.MaxValue, UInt32.MaxValue
-
-                        let orderFlags =
-                            (if plan.ByteOrder = Big then 1uy else 0uy)
-                            ||| (if plan.IsSigned then 2uy else 0uy)
+                    for plan in plans do
+                        let muxSlot, muxExpected = muxFields plan.MuxSelectorSlot plan.MuxExpected
 
                         programs.Add(
-                            { StartBit = plan.StartBit
-                              LengthBits = plan.Length
-                              OrderFlags = orderFlags
-                              Storage = storageValue plan.Storage
-                              ConversionIndex = conversionIndex plan
-                              SlotIndex = plan.PoolSlotIndex
-                              MuxSelectorSlot = muxSelectorSlot
-                              MuxExpected = muxExpected }
-                        ))
+                            imageProgram
+                                (conversionIndex plan.Factor plan.Offset)
+                                plan.StartBit
+                                plan.Length
+                                plan.ByteOrder
+                                plan.IsSigned
+                                plan.Storage
+                                plan.PoolSlotIndex
+                                muxSlot
+                                muxExpected
+                        )
 
-                    nextProgramIndex <- nextProgramIndex + orderedPlans.Length)
+                    nextRxProgram <- nextRxProgram + plans.Length)
+
+                let txPrograms = ResizeArray<ImageProgram>()
+                let txCounters = ResizeArray<ImageTxCounter>()
+                let txMessages = ResizeArray<ImageTxMessage>()
+                let templates = ResizeArray<byte>()
+                let mutable nextTxProgram = 0
+
+                let txMessageTableOffset = TxHeaderSize
+
+                let txProgramTableOffset = txMessageTableOffset + sortedTx.Length * TxMessageSize
+
+                let txProgramCount = sortedTx |> List.sumBy (fun message -> message.Plans.Length)
+
+                let txCounterTableOffset = txProgramTableOffset + txProgramCount * ProgramSize
+
+                let counterCount =
+                    sortedTx |> List.sumBy (fun message -> if message.Counter.IsSome then 1 else 0)
+
+                let txTemplateOffset = txCounterTableOffset + counterCount * CounterSize
+
+                for message in sortedTx do
+                    let plans = orderedEncodePlans message
+
+                    let counterIndex =
+                        match message.Counter with
+                        | None -> UInt16.MaxValue
+                        | Some counter ->
+                            let index = uint16 txCounters.Count
+
+                            txCounters.Add(
+                                { StartBit = counter.StartBit
+                                  LengthBits = counter.Length
+                                  BigEndian = counter.ByteOrder = Big
+                                  Modulus = counter.Modulus
+                                  Increment = counter.Increment
+                                  InitialValue = counter.InitialValue }
+                            )
+
+                            index
+
+                    let frameFlags =
+                        (if message.IsExtended then 1uy else 0uy)
+                        ||| (if message.Length > 8us then 2uy else 0uy)
+
+                    txMessages.Add(
+                        { LogicalMessageId = message.LogicalMessageId
+                          EncodedCanId = encodedCanId message.CanId message.IsExtended
+                          PayloadLength = uint8 message.Length
+                          FrameFlags = frameFlags
+                          ProgramCount = uint16 plans.Length
+                          ProgramIndex = uint16 nextTxProgram
+                          CounterIndex = counterIndex
+                          TemplateOffset = uint32 (txTemplateOffset + templates.Count) }
+                    )
+
+                    for plan in plans do
+                        let muxSlot, muxExpected = muxFields plan.MuxSelectorSlot plan.MuxExpected
+
+                        txPrograms.Add(
+                            imageProgram
+                                (conversionIndex plan.Factor plan.Offset)
+                                plan.StartBit
+                                plan.Length
+                                plan.ByteOrder
+                                plan.IsSigned
+                                plan.Storage
+                                plan.PoolSlotIndex
+                                muxSlot
+                                muxExpected
+                        )
+
+                    for _ in 1 .. int message.Length do
+                        templates.Add(0uy)
+
+                    nextTxProgram <- nextTxProgram + plans.Length
 
                 let signalNames =
-                    schema.Messages
-                    |> List.collect _.Plans
-                    |> List.sortBy _.PoolSlotIndex
-                    |> List.map _.PoolSignalName
+                    if hasTx then
+                        schema.PoolSlots |> List.map (fun slot -> slot.Name)
+                    else
+                        schema.Messages
+                        |> List.collect (fun message -> message.Plans)
+                        |> List.sortBy (fun plan -> plan.PoolSlotIndex)
+                        |> List.map (fun plan -> plan.PoolSignalName)
 
-                if totalSize > MaxImageSize then
-                    Error[ImageLimit "total_size exceeds 1 MiB"]
-                else
-                    Ok
-                        { Messages = messages |> Seq.toList
-                          Programs = programs |> Seq.toList
-                          Conversions = conversions |> Seq.toList
-                          SignalNames = signalNames
-                          MessageNames = messageNames |> Seq.toList }
+                Ok
+                    { Messages = messages |> Seq.toList
+                      Programs = programs |> Seq.toList
+                      Conversions = conversions |> Seq.toList
+                      PoolSlotCount = uint16 schema.PoolSlots.Length
+                      SignalNames = signalNames
+                      MessageNames = messageNames |> Seq.toList
+                      TxMessages = txMessages |> Seq.toList
+                      TxPrograms = txPrograms |> Seq.toList
+                      TxCounters = txCounters |> Seq.toList
+                      TxTemplates = templates.ToArray() }
 
-    let private messageRangeErrors (image: RuntimeImage) =
+    let private messageRangeErrors messages programCount allowEmpty =
         let mutable expectedIndex = 0
 
-        [ for message in image.Messages do
-              if message.ProgramCount = 0us || int message.ProgramIndex <> expectedIndex then
+        [ for message: ImageMessage in messages do
+              if
+                  (not allowEmpty && message.ProgramCount = 0us)
+                  || int message.ProgramIndex <> expectedIndex
+              then
                   ImageTable
 
               let rangeEnd = int message.ProgramIndex + int message.ProgramCount
 
-              if rangeEnd > image.Programs.Length then
+              if rangeEnd > programCount then
                   ImageTable
 
               expectedIndex <- rangeEnd
 
-          if expectedIndex <> image.Programs.Length then
+          if expectedIndex <> programCount then
               ImageTable ]
 
-    let private programErrors (image: RuntimeImage) =
-        let conversionArray = image.Conversions |> List.toArray
-
-        [ for program in image.Programs do
+    let private programErrors slotCount conversionCount (programs: ImageProgram list) =
+        [ for program in programs do
               if
                   program.LengthBits < 1us
                   || program.LengthBits > 64us
@@ -342,110 +491,124 @@ module Scimg =
               if program.OrderFlags > 3uy || program.Storage > 9uy then
                   ImageTable
 
-              if int program.ConversionIndex >= conversionArray.Length then
+              if int program.ConversionIndex >= conversionCount then
                   ImageTable
 
-              if int program.SlotIndex >= image.Programs.Length then
+              if int program.SlotIndex >= slotCount then
                   ImageTable
 
-              let isUnconditional = program.MuxSelectorSlot = UInt16.MaxValue
-              let hasSentinelExpected = program.MuxExpected = UInt32.MaxValue
-
-              if isUnconditional <> hasSentinelExpected then
+              if isIntegerStorageValue program.Storage && program.ConversionIndex <> 0us then
                   ImageTable
 
-              if not isUnconditional then
-                  if int program.MuxSelectorSlot >= image.Programs.Length then
-                      ImageTable
+              let unconditional = program.MuxSelectorSlot = UInt16.MaxValue
+              let sentinelExpected = program.MuxExpected = UInt32.MaxValue
 
-                  if program.MuxSelectorSlot = program.SlotIndex then
-                      ImageTable
+              if unconditional <> sentinelExpected then
+                  ImageTable
 
-              if isIntegerStorageValue program.Storage then
-                  if program.ConversionIndex <> 0us then
-                      ImageTable
-                  elif conversionArray.Length > 0 && conversionArray.[0] <> identityConversion then
+              if not unconditional then
+                  if
+                      int program.MuxSelectorSlot >= slotCount
+                      || program.MuxSelectorSlot = program.SlotIndex
+                  then
                       ImageTable ]
 
-    let private selectorErrors (image: RuntimeImage) =
-        let programs = image.Programs |> List.toArray
+    let private selectorErrors (programs: ImageProgram array) start count =
+        [ if count > 0 && start >= 0 && start + count <= programs.Length then
+              let messagePrograms = programs.[start .. start + count - 1]
 
-        [ for message in image.Messages do
-              let first = int message.ProgramIndex
-              let count = int message.ProgramCount
+              let selectorSlots =
+                  messagePrograms
+                  |> Array.choose (fun program ->
+                      if program.MuxSelectorSlot = UInt16.MaxValue then
+                          None
+                      else
+                          Some program.MuxSelectorSlot)
+                  |> Array.distinct
 
-              if first >= 0 && count > 0 && first + count <= programs.Length then
-                  let messagePrograms = programs.[first .. first + count - 1]
+              if selectorSlots.Length > 1 then
+                  ImageTable
 
-                  let selectorSlots =
+              if selectorSlots.Length = 1 then
+                  let selectorSlot = selectorSlots.[0]
+
+                  let selectorIndex =
                       messagePrograms
-                      |> Array.choose (fun program ->
-                          if program.MuxSelectorSlot = UInt16.MaxValue then
-                              None
-                          else
-                              Some program.MuxSelectorSlot)
-                      |> Array.distinct
+                      |> Array.tryFindIndex (fun program ->
+                          program.SlotIndex = selectorSlot
+                          && program.MuxSelectorSlot = UInt16.MaxValue
+                          && program.MuxExpected = UInt32.MaxValue)
 
-                  if selectorSlots.Length > 1 then
-                      ImageTable
+                  if selectorIndex <> Some 0 then
+                      ImageTable ]
 
-                  if selectorSlots.Length = 1 then
-                      let selectorSlot = selectorSlots.[0]
-
-                      let selectorIndex =
-                          messagePrograms
-                          |> Array.tryFindIndex (fun program ->
-                              program.SlotIndex = selectorSlot
-                              && program.MuxSelectorSlot = UInt16.MaxValue
-                              && program.MuxExpected = UInt32.MaxValue)
-
-                      match selectorIndex with
-                      | Some 0 -> ()
-                      | _ -> ImageTable ]
+    let private rangesOverlap startA lengthA startB lengthB =
+        uint32 startA < uint32 startB + uint32 lengthB
+        && uint32 startB < uint32 startA + uint32 lengthA
 
     let private validateRuntimeImage (image: RuntimeImage) =
+        let hasTx = not image.TxMessages.IsEmpty
+        let slotCount = int image.PoolSlotCount
+        let conversions = image.Conversions |> List.toArray
+        let rxPrograms = image.Programs |> List.toArray
+        let txPrograms = image.TxPrograms |> List.toArray
+
         let conversionErrors =
-            [ if image.Conversions.IsEmpty || image.Conversions.Head <> identityConversion then
+            [ if conversions.Length = 0 || conversions.[0] <> identityConversion then
                   ImageTable
 
-              for conversion in image.Conversions do
-                  if conversion.IsAffine then
-                      if conversion.Factor = 0.0 then
-                          ImageTable
-                  elif conversion.Factor <> 1.0 || conversion.Offset <> 0.0 then
+              for conversion in conversions do
+                  if
+                      not (Double.IsFinite(conversion.Factor))
+                      || not (Double.IsFinite(conversion.Offset))
+                      || (conversion.IsAffine && conversion.Factor = 0.0)
+                      || (not conversion.IsAffine
+                          && (conversion.Factor <> 1.0 || conversion.Offset <> 0.0))
+                  then
                       ImageTable ]
 
-        let slots = image.Programs |> List.map _.SlotIndex |> List.sort
-        let expectedSlots = [ for index in 0 .. image.Programs.Length - 1 -> uint16 index ]
-
-        [ if image.Messages.Length > MaxMessages then
+        [ if image.Messages.Length > MaxMessages || image.TxMessages.Length > MaxMessages then
               ImageLimit "message_count exceeds 4096"
 
-          if image.Programs.Length > MaxPrograms then
-              ImageLimit "signal_count exceeds 8192"
+          if image.Programs.Length > MaxPrograms || image.TxPrograms.Length > MaxPrograms then
+              ImageLimit "program_count exceeds 8192"
 
           if image.Conversions.Length > MaxConversions then
               ImageLimit "conversion_count exceeds 1024"
 
+          if slotCount > MaxPrograms || (hasTx && slotCount = 0) then
+              ImageTable
+
           if
-              image.SignalNames.Length <> image.Programs.Length
-              || image.MessageNames.Length <> image.Messages.Length
+              image.MessageNames.Length <> image.Messages.Length
+              || image.SignalNames.Length <> slotCount
           then
               ImageTable
 
-          if slots <> expectedSlots then
+          if not hasTx then
+              if
+                  image.TxPrograms.Length <> 0
+                  || image.TxCounters.Length <> 0
+                  || image.TxTemplates.Length <> 0
+                  || slotCount <> image.Programs.Length
+              then
+                  ImageTable
+
+              let slots =
+                  image.Programs |> List.map (fun program -> program.SlotIndex) |> List.sort
+
+              let expected = [ for index in 0 .. image.Programs.Length - 1 -> uint16 index ]
+
+              if slots <> expected then
+                  ImageTable
+
+          let rxIds = image.Messages |> List.map (fun message -> message.EncodedCanId)
+
+          if rxIds <> List.sort rxIds || rxIds.Length <> (rxIds |> List.distinct).Length then
               ImageTable
 
-          let ids = image.Messages |> List.map _.EncodedCanId
-
-          if ids <> List.sort ids || ids.Length <> (ids |> List.distinct).Length then
-              ImageTable
-
-          for message in image.Messages do
-              let extended = (message.EncodedCanId &&& 0x80000000u) <> 0u
-              let id = message.EncodedCanId &&& 0x7FFFFFFFu
-
-              if not (validCanId id extended) then
+          for id in rxIds do
+              if not (validEncodedCanId id) then
                   ImageTable
 
           for name in image.SignalNames @ image.MessageNames do
@@ -453,9 +616,159 @@ module Scimg =
                   ImageLimit "a symbol name is not 1..255 UTF-8 bytes"
 
           yield! conversionErrors
-          yield! messageRangeErrors image
-          yield! programErrors image
-          yield! selectorErrors image ]
+          yield! messageRangeErrors image.Messages image.Programs.Length false
+          yield! programErrors slotCount conversions.Length image.Programs
+
+          for message in image.Messages do
+              let start = int message.ProgramIndex
+              let count = int message.ProgramCount
+              yield! selectorErrors rxPrograms start count
+
+          if hasTx then
+              let logicalIds =
+                  image.TxMessages |> List.map (fun message -> message.LogicalMessageId)
+
+              if
+                  logicalIds <> List.sort logicalIds
+                  || logicalIds.Length <> (logicalIds |> List.distinct).Length
+              then
+                  ImageTable
+
+              let mutable expectedProgram = 0
+
+              let mutable expectedTemplate =
+                  TxHeaderSize
+                  + image.TxMessages.Length * TxMessageSize
+                  + image.TxPrograms.Length * ProgramSize
+                  + image.TxCounters.Length * CounterSize
+
+              let counterReferences = Array.zeroCreate image.TxCounters.Length
+
+              for message in image.TxMessages do
+                  if int message.ProgramIndex <> expectedProgram then
+                      ImageTable
+
+                  expectedProgram <- expectedProgram + int message.ProgramCount
+
+                  if expectedProgram > image.TxPrograms.Length then
+                      ImageTable
+
+                  if int message.TemplateOffset <> expectedTemplate then
+                      ImageTable
+
+                  expectedTemplate <- expectedTemplate + int message.PayloadLength
+
+                  if
+                      not (validEncodedCanId message.EncodedCanId)
+                      || not (validPayloadLength message.PayloadLength)
+                  then
+                      ImageTable
+
+                  let extended = (message.EncodedCanId &&& 0x80000000u) <> 0u
+
+                  let expectedFlags =
+                      (if extended then 1uy else 0uy)
+                      ||| (if message.PayloadLength > 8uy then 2uy else 0uy)
+
+                  if message.FrameFlags <> expectedFlags then
+                      ImageTable
+
+                  if message.ProgramCount = 0us && message.CounterIndex = UInt16.MaxValue then
+                      ImageTable
+
+                  if message.CounterIndex <> UInt16.MaxValue then
+                      if int message.CounterIndex >= image.TxCounters.Length then
+                          ImageTable
+                      else
+                          counterReferences.[int message.CounterIndex] <-
+                              counterReferences.[int message.CounterIndex] + 1
+
+                  let first = int message.ProgramIndex
+                  let count = int message.ProgramCount
+                  yield! selectorErrors txPrograms first count
+
+                  if first + count <= txPrograms.Length then
+                      let messagePrograms =
+                          if count = 0 then
+                              [||]
+                          else
+                              txPrograms.[first .. first + count - 1]
+
+                      for program in messagePrograms do
+                          if
+                              uint32 program.StartBit + uint32 program.LengthBits > uint32 message.PayloadLength * 8u
+                          then
+                              ImageTable
+
+                      for leftIndex in 0 .. messagePrograms.Length - 1 do
+                          for rightIndex in leftIndex + 1 .. messagePrograms.Length - 1 do
+                              let left = messagePrograms.[leftIndex]
+                              let right = messagePrograms.[rightIndex]
+
+                              let branchOverlap =
+                                  left.MuxSelectorSlot <> UInt16.MaxValue
+                                  && left.MuxSelectorSlot = right.MuxSelectorSlot
+                                  && left.MuxExpected <> right.MuxExpected
+
+                              if
+                                  rangesOverlap left.StartBit left.LengthBits right.StartBit right.LengthBits
+                                  && not branchOverlap
+                              then
+                                  ImageTable
+
+                      if
+                          message.CounterIndex <> UInt16.MaxValue
+                          && int message.CounterIndex < image.TxCounters.Length
+                      then
+                          let counter = image.TxCounters.[int message.CounterIndex]
+
+                          if
+                              uint32 counter.StartBit + uint32 counter.LengthBits > uint32 message.PayloadLength * 8u
+                          then
+                              ImageTable
+
+                          for program in messagePrograms do
+                              if
+                                  rangesOverlap counter.StartBit counter.LengthBits program.StartBit program.LengthBits
+                              then
+                                  ImageTable
+
+              if expectedProgram <> image.TxPrograms.Length then
+                  ImageTable
+
+              let templateBase =
+                  TxHeaderSize
+                  + image.TxMessages.Length * TxMessageSize
+                  + image.TxPrograms.Length * ProgramSize
+                  + image.TxCounters.Length * CounterSize
+
+              if expectedTemplate <> templateBase + image.TxTemplates.Length then
+                  ImageTable
+
+              if counterReferences |> Array.exists (fun count -> count <> 1) then
+                  ImageTable
+
+              for counter in image.TxCounters do
+                  if counter.LengthBits < 1us || counter.LengthBits > 32us || counter.Increment = 0u then
+                      ImageTable
+
+                  if counter.Modulus = 1u then
+                      ImageTable
+
+                  if counter.Modulus = 0u && counter.LengthBits <> 32us then
+                      ImageTable
+
+                  if counter.Modulus <> 0u then
+                      if counter.Increment >= counter.Modulus || counter.InitialValue >= counter.Modulus then
+                          ImageTable
+
+                      if
+                          counter.LengthBits < 32us
+                          && uint64 counter.Modulus > (1UL <<< int counter.LengthBits)
+                      then
+                          ImageTable
+
+              yield! programErrors slotCount conversions.Length image.TxPrograms ]
 
     let private putU16 (bytes: byte array) offset value =
         BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(offset, 2), value)
@@ -465,6 +778,19 @@ module Scimg =
 
     let private putDouble (bytes: byte array) offset value =
         BinaryPrimitives.WriteInt64LittleEndian(bytes.AsSpan(offset, 8), BitConverter.DoubleToInt64Bits(value))
+
+    let private getU16 (bytes: byte array) offset =
+        BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2))
+
+    let private getU32 (bytes: byte array) offset =
+        BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4))
+
+    let private getDouble (bytes: byte array) offset =
+        BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(offset, 8))
+        |> BitConverter.Int64BitsToDouble
+
+    let private allZero (bytes: byte array) start count =
+        count <= 0 || bytes.AsSpan(start, count).IndexOfAnyExcept(0uy) < 0
 
     let private symbolSection (image: RuntimeImage) =
         use stream = new MemoryStream()
@@ -490,12 +816,23 @@ module Scimg =
             crc <- crc ^^^ uint32 bytes.[index]
 
             for _ in 0..7 do
-                if (crc &&& 1u) <> 0u then
-                    crc <- (crc >>> 1) ^^^ 0xEDB88320u
-                else
-                    crc <- crc >>> 1
+                crc <-
+                    if (crc &&& 1u) <> 0u then
+                        (crc >>> 1) ^^^ 0xEDB88320u
+                    else
+                        crc >>> 1
 
         crc ^^^ UInt32.MaxValue
+
+    let private writeProgram bytes offset (program: ImageProgram) =
+        putU16 bytes offset program.StartBit
+        putU16 bytes (offset + 2) program.LengthBits
+        bytes.[offset + 4] <- program.OrderFlags
+        bytes.[offset + 5] <- program.Storage
+        putU16 bytes (offset + 6) program.ConversionIndex
+        putU16 bytes (offset + 8) program.SlotIndex
+        putU16 bytes (offset + 10) program.MuxSelectorSlot
+        putU32 bytes (offset + 12) program.MuxExpected
 
     let write (image: RuntimeImage) : Result<byte array, ValidationError list> =
         let errors = validateRuntimeImage image
@@ -507,34 +844,55 @@ module Scimg =
             let msgOffset = HeaderSize + DirectorySize
             let msgSize = image.Messages.Length * 8
             let prgOffset = msgOffset + msgSize
-            let prgSize = image.Programs.Length * 16
+            let prgSize = image.Programs.Length * ProgramSize
             let cnvOffset = prgOffset + prgSize
             let cnvSize = image.Conversions.Length * 24
             let symOffset = cnvOffset + cnvSize
             let symSize = symbols.Length
-            let totalSize = symOffset + symSize + 4
+            let hasTx = not image.TxMessages.IsEmpty
+
+            let txOffset = if hasTx then align4 (symOffset + symSize) else 0
+
+            let txUnalignedSize =
+                if hasTx then
+                    TxHeaderSize
+                    + image.TxMessages.Length * TxMessageSize
+                    + image.TxPrograms.Length * ProgramSize
+                    + image.TxCounters.Length * CounterSize
+                    + image.TxTemplates.Length
+                else
+                    0
+
+            let txSize = if hasTx then align4 txUnalignedSize else 0
+
+            let contentEnd = if hasTx then txOffset + txSize else symOffset + symSize
+
+            let totalSize = contentEnd + 4
 
             if totalSize > MaxImageSize then
                 Error[ImageLimit "total_size exceeds 1 MiB"]
             else
                 let bytes = Array.zeroCreate<byte> totalSize
-                Array.Copy(magic, 0, bytes, 0, magic.Length)
+                Array.Copy(magic, bytes, magic.Length)
                 putU16 bytes 8 1us
-                putU16 bytes 10 0us
+                putU16 bytes 10 (if hasTx then 1us else 0us)
                 putU32 bytes 12 (uint32 totalSize)
                 putU16 bytes 16 (uint16 image.Messages.Length)
                 putU16 bytes 18 (uint16 image.Programs.Length)
                 putU16 bytes 20 (uint16 image.Conversions.Length)
-                putU16 bytes 22 0us
+
+                putU16 bytes 22 (if hasTx then image.PoolSlotCount else 0us)
+
+                putU32 bytes 24 (if hasTx then uint32 txOffset else 0u)
+                putU32 bytes 28 (if hasTx then uint32 txSize else 0u)
 
                 [| msgOffset, msgSize
                    prgOffset, prgSize
                    cnvOffset, cnvSize
                    symOffset, symSize |]
                 |> Array.iteri (fun index (offset, size) ->
-                    let entryOffset = HeaderSize + index * 8
-                    putU32 bytes entryOffset (uint32 offset)
-                    putU32 bytes (entryOffset + 4) (uint32 size))
+                    putU32 bytes (HeaderSize + index * 8) (uint32 offset)
+                    putU32 bytes (HeaderSize + index * 8 + 4) (uint32 size))
 
                 image.Messages
                 |> List.iteri (fun index message ->
@@ -544,16 +902,7 @@ module Scimg =
                     putU16 bytes (offset + 6) message.ProgramIndex)
 
                 image.Programs
-                |> List.iteri (fun index program ->
-                    let offset = prgOffset + index * 16
-                    putU16 bytes offset program.StartBit
-                    putU16 bytes (offset + 2) program.LengthBits
-                    bytes.[offset + 4] <- program.OrderFlags
-                    bytes.[offset + 5] <- program.Storage
-                    putU16 bytes (offset + 6) program.ConversionIndex
-                    putU16 bytes (offset + 8) program.SlotIndex
-                    putU16 bytes (offset + 10) program.MuxSelectorSlot
-                    putU32 bytes (offset + 12) program.MuxExpected)
+                |> List.iteri (fun index program -> writeProgram bytes (prgOffset + index * ProgramSize) program)
 
                 image.Conversions
                 |> List.iteri (fun index conversion ->
@@ -563,27 +912,61 @@ module Scimg =
                     putDouble bytes (offset + 16) conversion.Offset)
 
                 Array.Copy(symbols, 0, bytes, symOffset, symbols.Length)
+
+                if hasTx then
+                    putU32 bytes txOffset 0x31305854u
+                    putU16 bytes (txOffset + 4) (uint16 image.TxMessages.Length)
+                    putU16 bytes (txOffset + 6) (uint16 image.TxPrograms.Length)
+                    putU16 bytes (txOffset + 8) (uint16 image.TxCounters.Length)
+                    let txMessageOffset = TxHeaderSize
+
+                    let txProgramOffset = txMessageOffset + image.TxMessages.Length * TxMessageSize
+
+                    let txCounterOffset = txProgramOffset + image.TxPrograms.Length * ProgramSize
+
+                    let txTemplateOffset = txCounterOffset + image.TxCounters.Length * CounterSize
+
+                    putU32 bytes (txOffset + 12) (uint32 txMessageOffset)
+                    putU32 bytes (txOffset + 16) (uint32 txProgramOffset)
+                    putU32 bytes (txOffset + 20) (uint32 txCounterOffset)
+                    putU32 bytes (txOffset + 24) (uint32 txTemplateOffset)
+                    putU32 bytes (txOffset + 28) (uint32 image.TxTemplates.Length)
+
+                    image.TxMessages
+                    |> List.iteri (fun index message ->
+                        let offset = txOffset + txMessageOffset + index * TxMessageSize
+                        putU32 bytes offset message.LogicalMessageId
+                        putU32 bytes (offset + 4) message.EncodedCanId
+                        bytes.[offset + 8] <- message.PayloadLength
+                        bytes.[offset + 9] <- message.FrameFlags
+                        putU16 bytes (offset + 10) message.ProgramCount
+                        putU16 bytes (offset + 12) message.ProgramIndex
+                        putU16 bytes (offset + 14) message.CounterIndex
+                        putU32 bytes (offset + 16) message.TemplateOffset)
+
+                    image.TxPrograms
+                    |> List.iteri (fun index program ->
+                        writeProgram bytes (txOffset + txProgramOffset + index * ProgramSize) program)
+
+                    image.TxCounters
+                    |> List.iteri (fun index counter ->
+                        let offset = txOffset + txCounterOffset + index * CounterSize
+                        putU16 bytes offset counter.StartBit
+                        putU16 bytes (offset + 2) counter.LengthBits
+                        bytes.[offset + 4] <- if counter.BigEndian then 1uy else 0uy
+                        putU32 bytes (offset + 8) counter.Modulus
+                        putU32 bytes (offset + 12) counter.Increment
+                        putU32 bytes (offset + 16) counter.InitialValue)
+
+                    Array.Copy(image.TxTemplates, 0, bytes, txOffset + txTemplateOffset, image.TxTemplates.Length)
+
                 putU32 bytes (totalSize - 4) (crc32 bytes (totalSize - 4))
                 Ok bytes
 
-    let private getU16 (bytes: byte array) offset =
-        BinaryPrimitives.ReadUInt16LittleEndian(bytes.AsSpan(offset, 2))
-
-    let private getU32 (bytes: byte array) offset =
-        BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(offset, 4))
-
-    let private getDouble (bytes: byte array) offset =
-        BinaryPrimitives.ReadInt64LittleEndian(bytes.AsSpan(offset, 8))
-        |> BitConverter.Int64BitsToDouble
-
-    let private allZero (bytes: byte array) start count =
-        count <= 0 || bytes.AsSpan(start, count).IndexOfAnyExcept(0uy) < 0
-
     let private parseSymbols bytes offset size signalCount messageCount =
-        if size < 4 then
-            Error[ImageTable]
-        elif
-            getU16 bytes offset <> uint16 signalCount
+        if
+            size < 4
+            || getU16 bytes offset <> uint16 signalCount
             || getU16 bytes (offset + 2) <> uint16 messageCount
         then
             Error[ImageTable]
@@ -615,66 +998,13 @@ module Scimg =
 
                         cursor <- cursor + length
 
-            let paddingLength = sectionEnd - cursor
+            let padding = sectionEnd - cursor
 
-            if
-                failed
-                || paddingLength < 0
-                || paddingLength > 3
-                || not (allZero bytes cursor paddingLength)
-            then
+            if failed || padding < 0 || padding > 3 || not (allZero bytes cursor padding) then
                 Error[ImageTable]
             else
-                let allNames = names |> Seq.toList
-                Ok(allNames |> List.take signalCount, allNames |> List.skip signalCount)
-
-    let private readDirectory (bytes: byte array) totalSize messageCount signalCount conversionCount =
-        let sections =
-            Array.init 4 (fun index ->
-                let offset = HeaderSize + index * 8
-                getU32 bytes offset, getU32 bytes (offset + 4))
-
-        if sections |> Array.exists (fun (offset, _) -> offset % 4u <> 0u) then
-            Error[ImageAlign]
-        elif
-            sections
-            |> Array.exists (fun (offset, size) ->
-                offset < uint32 (HeaderSize + DirectorySize)
-                || uint64 offset + uint64 size > uint64 (totalSize - 4))
-        then
-            Error[ImageBounds]
-        elif snd sections.[3] % 4u <> 0u then
-            Error[ImageAlign]
-        elif
-            snd sections.[0] <> uint32 (messageCount * 8)
-            || snd sections.[1] <> uint32 (signalCount * 16)
-            || snd sections.[2] <> uint32 (conversionCount * 24)
-        then
-            Error[ImageTable]
-        else
-            let mutable previousEnd = HeaderSize + DirectorySize
-            let mutable badOrder = false
-            let mutable badPadding = false
-
-            for offsetValue, sizeValue in sections do
-                let offset = int offsetValue
-                let size = int sizeValue
-
-                if offset < previousEnd then
-                    badOrder <- true
-                elif not (allZero bytes previousEnd (offset - previousEnd)) then
-                    badPadding <- true
-
-                previousEnd <- offset + size
-
-            if previousEnd > totalSize - 4 then
-                Error[ImageBounds]
-            elif badOrder then
-                Error[ImageBounds]
-            elif badPadding || not (allZero bytes previousEnd (totalSize - 4 - previousEnd)) then
-                Error[ImageTable]
-            else
-                Ok(sections |> Array.map (fun (offset, size) -> int offset, int size))
+                let values = names |> Seq.toList
+                Ok(values |> List.take signalCount, values |> List.skip signalCount)
 
     let private parseMessages bytes offset count =
         [ for index in 0 .. count - 1 do
@@ -687,7 +1017,7 @@ module Scimg =
 
     let private parsePrograms bytes offset count =
         [ for index in 0 .. count - 1 do
-              let entry = offset + index * 16
+              let entry = offset + index * ProgramSize
 
               yield
                   { StartBit = getU16 bytes entry
@@ -700,32 +1030,161 @@ module Scimg =
                     MuxExpected = getU32 bytes (entry + 12) } ]
 
     let private parseConversions (bytes: byte array) offset count =
-        let conversions = ResizeArray<ImageConversion>()
+        let values = ResizeArray<ImageConversion>()
         let mutable failed = false
 
         for index in 0 .. count - 1 do
             let entry = offset + index * 24
             let kind = bytes.[entry]
-            let factor = getDouble bytes (entry + 8)
-            let conversionOffset = getDouble bytes (entry + 16)
 
             if kind > 1uy || not (allZero bytes (entry + 1) 7) then
                 failed <- true
-            elif kind = 0uy && (factor <> 1.0 || conversionOffset <> 0.0) then
-                failed <- true
-            elif kind = 1uy && factor = 0.0 then
-                failed <- true
 
-            conversions.Add(
+            values.Add(
                 { IsAffine = kind = 1uy
-                  Factor = factor
-                  Offset = conversionOffset }
+                  Factor = getDouble bytes (entry + 8)
+                  Offset = getDouble bytes (entry + 16) }
             )
 
         if failed then
             Error[ImageTable]
         else
-            Ok(conversions |> Seq.toList)
+            Ok(values |> Seq.toList)
+
+    let private readDirectory bytes totalSize messageCount programCount conversionCount sectionEnd =
+        let sections =
+            Array.init 4 (fun index ->
+                let entry = HeaderSize + index * 8
+                int (getU32 bytes entry), int (getU32 bytes (entry + 4)))
+
+        if sections |> Array.exists (fun (offset, _) -> offset % 4 <> 0) then
+            Error[ImageAlign]
+        elif
+            sections
+            |> Array.exists (fun (offset, size) ->
+                offset < HeaderSize + DirectorySize
+                || offset > sectionEnd
+                || size < 0
+                || size > sectionEnd - offset)
+        then
+            Error[ImageBounds]
+        elif
+            snd sections.[0] <> messageCount * 8
+            || snd sections.[1] <> programCount * ProgramSize
+            || snd sections.[2] <> conversionCount * 24
+            || snd sections.[3] % 4 <> 0
+        then
+            Error[ImageTable]
+        else
+            let mutable previousEnd = HeaderSize + DirectorySize
+            let mutable error = None
+
+            for offset, size in sections do
+                if error.IsNone then
+                    if offset < previousEnd then
+                        error <- Some ImageBounds
+                    elif not (allZero bytes previousEnd (offset - previousEnd)) then
+                        error <- Some ImageTable
+                    else
+                        previousEnd <- offset + size
+
+            match error with
+            | Some value -> Error[value]
+            | None when previousEnd > sectionEnd -> Error[ImageBounds]
+            | None when not (allZero bytes previousEnd (sectionEnd - previousEnd)) -> Error[ImageTable]
+            | None -> Ok sections
+
+    let private parseTx bytes txOffset txSize =
+        if txSize < TxHeaderSize || getU32 bytes txOffset <> 0x31305854u then
+            Error[ImageTable]
+        elif not (allZero bytes (txOffset + 10) 2) then
+            Error[ImageTable]
+        else
+            let messageCount = int (getU16 bytes (txOffset + 4))
+            let programCount = int (getU16 bytes (txOffset + 6))
+            let counterCount = int (getU16 bytes (txOffset + 8))
+            let messageOffset = int (getU32 bytes (txOffset + 12))
+            let programOffset = int (getU32 bytes (txOffset + 16))
+            let counterOffset = int (getU32 bytes (txOffset + 20))
+            let templateOffset = int (getU32 bytes (txOffset + 24))
+            let templateSize = int (getU32 bytes (txOffset + 28))
+            let expectedMessageOffset = TxHeaderSize
+
+            let expectedProgramOffset = expectedMessageOffset + messageCount * TxMessageSize
+
+            let expectedCounterOffset = expectedProgramOffset + programCount * ProgramSize
+            let expectedTemplateOffset = expectedCounterOffset + counterCount * CounterSize
+            let templateEnd = expectedTemplateOffset + templateSize
+
+            if
+                messageCount < 1
+                || messageCount > MaxMessages
+                || programCount > MaxPrograms
+                || counterCount > MaxMessages
+            then
+                Error[ImageLimit "TX count exceeds v1 limits"]
+            elif
+                messageOffset <> expectedMessageOffset
+                || programOffset <> expectedProgramOffset
+                || counterOffset <> expectedCounterOffset
+                || templateOffset <> expectedTemplateOffset
+            then
+                Error[ImageTable]
+            elif templateEnd > txSize || txSize - templateEnd > 3 then
+                Error[ImageBounds]
+            elif not (allZero bytes (txOffset + templateEnd) (txSize - templateEnd)) then
+                Error[ImageTable]
+            else
+                let messages =
+                    [ for index in 0 .. messageCount - 1 do
+                          let entry = txOffset + messageOffset + index * TxMessageSize
+
+                          if not (allZero bytes (entry + 20) 4) then
+                              ()
+
+                          yield
+                              { LogicalMessageId = getU32 bytes entry
+                                EncodedCanId = getU32 bytes (entry + 4)
+                                PayloadLength = bytes.[entry + 8]
+                                FrameFlags = bytes.[entry + 9]
+                                ProgramCount = getU16 bytes (entry + 10)
+                                ProgramIndex = getU16 bytes (entry + 12)
+                                CounterIndex = getU16 bytes (entry + 14)
+                                TemplateOffset = getU32 bytes (entry + 16) } ]
+
+                let reservedBad =
+                    [ 0 .. messageCount - 1 ]
+                    |> List.exists (fun index ->
+                        let entry = txOffset + messageOffset + index * TxMessageSize
+                        not (allZero bytes (entry + 20) 4))
+
+                let programs = parsePrograms bytes (txOffset + programOffset) programCount
+
+                let counters =
+                    [ for index in 0 .. counterCount - 1 do
+                          let entry = txOffset + counterOffset + index * CounterSize
+
+                          yield
+                              { StartBit = getU16 bytes entry
+                                LengthBits = getU16 bytes (entry + 2)
+                                BigEndian = bytes.[entry + 4] = 1uy
+                                Modulus = getU32 bytes (entry + 8)
+                                Increment = getU32 bytes (entry + 12)
+                                InitialValue = getU32 bytes (entry + 16) } ]
+
+                let counterReservedBad =
+                    [ 0 .. counterCount - 1 ]
+                    |> List.exists (fun index ->
+                        let entry = txOffset + counterOffset + index * CounterSize
+
+                        bytes.[entry + 4] > 1uy
+                        || not (allZero bytes (entry + 5) 3)
+                        || not (allZero bytes (entry + 20) 4))
+
+                if reservedBad || counterReservedBad then
+                    Error[ImageTable]
+                else
+                    Ok(messages, programs, counters, bytes.[txOffset + templateOffset .. txOffset + templateEnd - 1])
 
     let read (bytes: byte array) : Result<RuntimeImage, ValidationError list> =
         if isNull bytes || bytes.Length < HeaderSize + DirectorySize + 4 then
@@ -736,32 +1195,58 @@ module Scimg =
             Error[ImageBadVersion]
         else
             let totalSize = int (getU32 bytes 12)
+            let flags = getU16 bytes 10
 
             if totalSize <> bytes.Length then
                 Error[ImageSize]
             elif totalSize > MaxImageSize then
                 Error[ImageLimit "total_size exceeds 1 MiB"]
-            elif getU16 bytes 10 <> 0us || getU16 bytes 22 <> 0us || not (allZero bytes 24 8) then
-                Error[ImageTable]
+            elif (flags &&& ~~~1us) <> 0us then
+                Error[ImageFeature]
             else
+                let hasTx = (flags &&& 1us) <> 0us
                 let messageCount = int (getU16 bytes 16)
-                let signalCount = int (getU16 bytes 18)
+                let programCount = int (getU16 bytes 18)
                 let conversionCount = int (getU16 bytes 20)
 
-                if messageCount > MaxMessages then
-                    Error[ImageLimit "message_count exceeds 4096"]
-                elif signalCount > MaxPrograms then
-                    Error[ImageLimit "signal_count exceeds 8192"]
-                elif conversionCount > MaxConversions then
-                    Error[ImageLimit "conversion_count exceeds 1024"]
+                let poolSlotCount = if hasTx then int (getU16 bytes 22) else programCount
+
+                let txOffset = if hasTx then int (getU32 bytes 24) else totalSize - 4
+
+                let txSize = if hasTx then int (getU32 bytes 28) else 0
+
+                let crcOffset = totalSize - 4
+
+                if not hasTx && (getU16 bytes 22 <> 0us || not (allZero bytes 24 8)) then
+                    Error[ImageTable]
+                elif hasTx && poolSlotCount = 0 then
+                    Error[ImageTable]
+                elif
+                    messageCount > MaxMessages
+                    || programCount > MaxPrograms
+                    || conversionCount > MaxConversions
+                then
+                    Error[ImageLimit "count exceeds v1 limits"]
+                elif conversionCount = 0 then
+                    Error[ImageTable]
+                elif hasTx && txOffset % 4 <> 0 then
+                    Error[ImageAlign]
+                elif
+                    hasTx
+                    && (txOffset < HeaderSize + DirectorySize
+                        || txOffset > crcOffset
+                        || txSize > crcOffset - txOffset)
+                then
+                    Error[ImageBounds]
+                elif hasTx && crcOffset - (txOffset + txSize) > 3 then
+                    Error[ImageBounds]
+                elif hasTx && not (allZero bytes (txOffset + txSize) (crcOffset - txOffset - txSize)) then
+                    Error[ImageTable]
                 else
-                    match readDirectory bytes totalSize messageCount signalCount conversionCount with
+                    match readDirectory bytes totalSize messageCount programCount conversionCount txOffset with
                     | Error errors -> Error errors
                     | Ok sections ->
-                        let storedCrc = getU32 bytes (totalSize - 4)
-                        let actualCrc = crc32 bytes (totalSize - 4)
-
-                        if storedCrc <> actualCrc then
+                        if crc32 bytes crcOffset <> getU32 bytes crcOffset then
                             Error[ImageCrc]
                         else
                             let msgOffset, _ = sections.[0]
@@ -769,32 +1254,45 @@ module Scimg =
                             let cnvOffset, _ = sections.[2]
                             let symOffset, symSize = sections.[3]
                             let messages = parseMessages bytes msgOffset messageCount
-                            let programs = parsePrograms bytes prgOffset signalCount
+                            let programs = parsePrograms bytes prgOffset programCount
 
                             match parseConversions bytes cnvOffset conversionCount with
                             | Error errors -> Error errors
                             | Ok conversions ->
-                                match parseSymbols bytes symOffset symSize signalCount messageCount with
+                                match parseSymbols bytes symOffset symSize poolSlotCount messageCount with
                                 | Error errors -> Error errors
                                 | Ok(signalNames, messageNames) ->
-                                    let image =
-                                        { Messages = messages
-                                          Programs = programs
-                                          Conversions = conversions
-                                          SignalNames = signalNames
-                                          MessageNames = messageNames }
+                                    let txResult =
+                                        if hasTx then
+                                            parseTx bytes txOffset txSize
+                                        else
+                                            Ok([], [], [], [||])
 
-                                    let errors = validateRuntimeImage image
+                                    match txResult with
+                                    | Error errors -> Error errors
+                                    | Ok(txMessages, txPrograms, txCounters, txTemplates) ->
+                                        let image =
+                                            { Messages = messages
+                                              Programs = programs
+                                              Conversions = conversions
+                                              PoolSlotCount = uint16 poolSlotCount
+                                              SignalNames = signalNames
+                                              MessageNames = messageNames
+                                              TxMessages = txMessages
+                                              TxPrograms = txPrograms
+                                              TxCounters = txCounters
+                                              TxTemplates = txTemplates }
 
-                                    if errors.IsEmpty then Ok image else Error errors
+                                        let errors = validateRuntimeImage image
+
+                                        if errors.IsEmpty then Ok image else Error errors
 
     let inspect (bytes: byte array) : Result<string, ValidationError list> =
         match read bytes with
         | Error errors -> Error errors
         | Ok image ->
             use stream = new MemoryStream()
-            let options = JsonWriterOptions(Indented = true)
-            use writer = new Utf8JsonWriter(stream, options)
+            use writer = new Utf8JsonWriter(stream, JsonWriterOptions(Indented = true))
             writer.WriteStartObject()
             writer.WriteNumber("formatVersion", 1)
             writer.WriteNumber("totalSize", bytes.Length)
@@ -802,44 +1300,25 @@ module Scimg =
             writer.WriteBoolean("crcValid", true)
             writer.WriteNumber("messageCount", image.Messages.Length)
             writer.WriteNumber("signalCount", image.Programs.Length)
+            writer.WriteNumber("poolSlotCount", int image.PoolSlotCount)
             writer.WriteNumber("conversionCount", image.Conversions.Length)
+            writer.WriteNumber("txMessageCount", image.TxMessages.Length)
+            writer.WriteNumber("txProgramCount", image.TxPrograms.Length)
+            writer.WriteNumber("txCounterCount", image.TxCounters.Length)
             writer.WritePropertyName("messages")
             writer.WriteStartArray()
 
             (image.Messages, image.MessageNames)
             ||> List.iter2 (fun message name ->
-                let extended = (message.EncodedCanId &&& 0x80000000u) <> 0u
-                let canId = message.EncodedCanId &&& 0x7FFFFFFFu
                 writer.WriteStartObject()
                 writer.WriteString("name", name)
-                writer.WriteNumber("canId", canId)
-                writer.WriteBoolean("extended", extended)
+                writer.WriteString("encodedCanIdHex", sprintf "0x%08X" message.EncodedCanId)
                 writer.WriteNumber("programCount", int message.ProgramCount)
-                writer.WriteNumber("firstProgramIndex", int message.ProgramIndex)
-                writer.WriteEndObject())
-
-            writer.WriteEndArray()
-            writer.WritePropertyName("signals")
-            writer.WriteStartArray()
-
-            image.Programs
-            |> List.sortBy _.SlotIndex
-            |> List.iter (fun program ->
-                let name = image.SignalNames.[int program.SlotIndex]
-                writer.WriteStartObject()
-                writer.WriteNumber("slot", int program.SlotIndex)
-                writer.WriteString("name", name)
-                writer.WriteNumber("startBit", int program.StartBit)
-                writer.WriteNumber("lengthBits", int program.LengthBits)
-                writer.WriteBoolean("bigEndian", (program.OrderFlags &&& 1uy) <> 0uy)
-                writer.WriteBoolean("signed", (program.OrderFlags &&& 2uy) <> 0uy)
-                writer.WriteNumber("storage", int program.Storage)
-                writer.WriteNumber("conversionIndex", int program.ConversionIndex)
+                writer.WriteNumber("programIndex", int message.ProgramIndex)
                 writer.WriteEndObject())
 
             writer.WriteEndArray()
             writer.WriteEndObject()
             writer.Flush()
 
-            let json = Encoding.UTF8.GetString(stream.ToArray()).Replace("\r\n", "\n")
-            Ok(json + "\n")
+            Ok(Encoding.UTF8.GetString(stream.ToArray()).Replace("\r\n", "\n") + "\n")

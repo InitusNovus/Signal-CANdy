@@ -90,9 +90,9 @@ module Wire =
             [ if endBit > frameBits then
                   SignalExceedsFrame(message.Name, signal.Name, endBit, frameBits)
 
-              // DBC parsing retains legacy name-based IsCrc/IsCounter hints. Only
-              // configured profile metadata gives those hints runtime semantics.
-              if signal.CrcMeta.IsSome || signal.CounterMeta.IsSome then
+              // CRC remains outside runtime image v1. Counter metadata may pass
+              // through normalization; only an explicit TX binding gives it state.
+              if signal.CrcMeta.IsSome then
                   UnsupportedFeature "CRC/counter signals are not supported in Wire IR v1"
 
               match muxRole signal with
@@ -133,6 +133,7 @@ module Wire =
     /// Adapt the source Ir to Wire IR v1, normalizing bit coordinates and accumulating every diagnostic.
     let toWireModel (ir: Ir) : Result<WireModel, ValidationError list> =
         let messages, errors = ir.Messages |> List.map normalizeMessage |> List.unzip
+
         let allErrors = List.concat errors
 
         if List.isEmpty allErrors then

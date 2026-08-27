@@ -59,7 +59,8 @@ module LinkedTests =
                 [ { PoolSignalName = "Speed"
                     MessageName = "VehicleStatus"
                     WireSignalName = "RawSpeed"
-                    Conversion = Affine(0.5, 2.0) } ] }
+                    Conversion = Affine(0.5, 2.0) } ]
+              TxMessages = [] }
 
         match link pool wire bindings with
         | Error errors -> failwithf "Unexpected errors: %A" errors
@@ -80,7 +81,8 @@ module LinkedTests =
                   { PoolSignalName = "Speed"
                     MessageName = "VehicleStatus"
                     WireSignalName = "MissingWire"
-                    Conversion = Identity } ] }
+                    Conversion = Identity } ]
+              TxMessages = [] }
 
         match link pool wire bindings with
         | Ok _ -> failwith "Expected unresolved binding diagnostics."
@@ -92,4 +94,5 @@ module LinkedTests =
             |> String.concat "\n"
             |> fun messages ->
                 messages.Contains("MissingPool") |> should equal true
+
                 messages.Contains("MissingWire") |> should equal true
