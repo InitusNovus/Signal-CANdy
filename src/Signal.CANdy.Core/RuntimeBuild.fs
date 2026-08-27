@@ -7,6 +7,7 @@ open System.Text.Json
 open System.Text.RegularExpressions
 open Signal.CANdy.Core.Binding
 open Signal.CANdy.Core.Linked
+open Signal.CANdy.Core.ImageDocuments
 open Signal.CANdy.Core.Pool
 open Signal.CANdy.Core.PoolAbi
 open Signal.CANdy.Core.ProjectManifest
@@ -44,7 +45,9 @@ module RuntimeBuild =
           PoolAbiHash: PoolAbiHash
           Requirements: RuntimeRequirements
           Activation: ActivationDescriptor
-          ActivationJson: string }
+          ActivationJson: string
+          MapDocument: MapDocument option
+          MapJson: string option }
 
     type RuntimeBuildError = RuntimeBuildError of string
 
@@ -293,7 +296,9 @@ module RuntimeBuild =
                   PoolAbiHash = hash
                   Requirements = requirements
                   Activation = activation
-                  ActivationJson = activationJson }
+                  ActivationJson = activationJson
+                  MapDocument = None
+                  MapJson = None }
         }
 
     let private limitCases (limits: RuntimeLimits) (required: RuntimeRequirements) =
@@ -403,5 +408,43 @@ module RuntimeBuild =
                 |> Result.mapError (List.map RuntimeFailure)
 
             let! valid = validateTarget target compiled |> Result.mapError (List.map TargetMismatch)
-            return valid, target
+
+            let! mapped =
+                match project.Outputs.Map with
+                | None -> Ok valid
+                | Some _ ->
+                    let layout =
+                        Scimg.readDetailed valid.ImageBytes
+                        |> Result.map _.Layout
+                        |> Result.mapError (fun errors -> [ InputValidation(sprintf "%A" errors) ])
+
+                    layout
+                    |> Result.bind (fun imageLayout ->
+                        let sources =
+                            (project.WireSources, wires)
+                            ||> List.map2 (fun source (_, wire) ->
+                                { Key = source.Name
+                                  Path = Path.GetRelativePath(project.RootDirectory, source.Path).Replace('\\', '/')
+                                  Wire = wire })
+
+                        ImageDocuments.createMap
+                            pool
+                            valid.Linked
+                            valid.Image
+                            valid.ImageBytes
+                            imageLayout
+                            valid.PoolAbiHash
+                            valid.Requirements
+                            target
+                            sources
+                        |> Result.mapError (fun errors -> [ InputValidation(sprintf "%A" errors) ])
+                        |> Result.bind (fun mapDocument ->
+                            ImageDocuments.writeMap mapDocument
+                            |> Result.mapError (fun errors -> [ InputValidation(sprintf "%A" errors) ])
+                            |> Result.map (fun mapJson ->
+                                { valid with
+                                    MapDocument = Some mapDocument
+                                    MapJson = Some mapJson })))
+
+            return mapped, target
         }

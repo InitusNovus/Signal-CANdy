@@ -18,6 +18,7 @@ module ProjectManifest =
         { Image: string
           Header: string option
           Inspect: string option
+          Map: string option
           Activation: string option }
 
     type ProjectManifest =
@@ -38,6 +39,7 @@ module ProjectManifest =
         { Image: string
           Header: string option
           Inspect: string option
+          Map: string option
           Activation: string option }
 
     type ResolvedProject =
@@ -202,7 +204,10 @@ module ProjectManifest =
                     let! binding = requiredScalar "Project" "binding" root
                     let! target = requiredScalar "Project" "target" root
                     let! outputNode = required "Project" "outputs" root
-                    let! outputMap = mapping "Project.outputs" [ "image"; "header"; "inspect"; "activation" ] outputNode
+
+                    let! outputMap =
+                        mapping "Project.outputs" [ "image"; "header"; "inspect"; "map"; "activation" ] outputNode
+
                     let! image = requiredScalar "Project.outputs" "image" outputMap
 
                     let! header =
@@ -214,6 +219,11 @@ module ProjectManifest =
                         match Map.tryFind "inspect" outputMap with
                         | None -> Ok None
                         | Some node -> scalar "Project.outputs.inspect" node |> Result.map Some
+
+                    let! mapOutput =
+                        match Map.tryFind "map" outputMap with
+                        | None -> Ok None
+                        | Some node -> scalar "Project.outputs.map" node |> Result.map Some
 
                     let! activation =
                         match Map.tryFind "activation" outputMap with
@@ -236,6 +246,12 @@ module ProjectManifest =
                         return! Error "Inspect output must end in .json."
 
                     if
+                        mapOutput
+                        |> Option.exists (fun p -> not (p.EndsWith(".map.json", StringComparison.OrdinalIgnoreCase)))
+                    then
+                        return! Error "Map output must end in .map.json."
+
+                    if
                         activation
                         |> Option.exists (fun p ->
                             not (p.EndsWith(".activation.json", StringComparison.OrdinalIgnoreCase)))
@@ -252,6 +268,7 @@ module ProjectManifest =
                              { Image = image
                                Header = header
                                Inspect = inspect
+                               Map = mapOutput
                                Activation = activation } }
                         : ProjectManifest)
                 }
@@ -356,6 +373,11 @@ module ProjectManifest =
                     | None -> Ok None
                     | Some p -> resolveOne "outputs.inspect" p |> Result.map Some
 
+                let! mapOutput =
+                    match manifest.Outputs.Map with
+                    | None -> Ok None
+                    | Some p -> resolveOne "outputs.map" p |> Result.map Some
+
                 let! activation =
                     match manifest.Outputs.Activation with
                     | None -> Ok None
@@ -366,6 +388,7 @@ module ProjectManifest =
                 let outputs =
                     image :: (header |> Option.toList)
                     @ (inspect |> Option.toList)
+                    @ (mapOutput |> Option.toList)
                     @ (activation |> Option.toList)
 
                 let comparer = StringComparer.OrdinalIgnoreCase
@@ -424,6 +447,7 @@ module ProjectManifest =
                         { Image = image
                           Header = header
                           Inspect = inspect
+                          Map = mapOutput
                           Activation = activation } }
             }
         with ex ->

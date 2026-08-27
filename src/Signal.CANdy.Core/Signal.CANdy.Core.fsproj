@@ -36,7 +36,9 @@
   <Compile Include="RuntimeCapabilities.fs" />
   <Compile Include="ProjectManifest.fs" />
   <Compile Include="RuntimeRequirements.fs" />
+  <Compile Include="ImageDocuments.fs" />
   <Compile Include="RuntimeBuild.fs" />
+  <Compile Include="RuntimeDiff.fs" />
   <Compile Include="ArtifactWriter.fs" />
   <Compile Include="Codegen.fs" />
   <Compile Include="Api.fs" />

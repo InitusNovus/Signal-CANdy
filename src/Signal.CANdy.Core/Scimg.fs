@@ -156,6 +156,53 @@ module Scimg =
           RxCounters: ImageRxCounter list
           CoverageSpans: ImageCoverageSpan list }
 
+    type ImageRange = { Start: uint32; End: uint32 }
+
+    type ImageRegions =
+        { Header: ImageRange
+          Directory: ImageRange
+          RxMessages: ImageRange
+          RxPrograms: ImageRange
+          Conversions: ImageRange
+          Symbols: ImageRange
+          ExtensionHeader: ImageRange option
+          NestedMuxRecords: ImageRange option
+          QualityEntries: ImageRange option
+          ProtectionHeader: ImageRange option
+          RxProtectionPlans: ImageRange option
+          TxProtectionPlans: ImageRange option
+          RxCounters: ImageRange option
+          CoverageSpans: ImageRange option
+          TxHeader: ImageRange option
+          TxMessages: ImageRange option
+          TxPrograms: ImageRange option
+          TxCounters: ImageRange option
+          TxTemplates: ImageRange option
+          Footer: ImageRange }
+
+    type ImageLayout =
+        { Regions: ImageRegions
+          SymbolRanges: ImageRange list
+          RxMessageRanges: ImageRange list
+          RxProgramRanges: ImageRange list
+          ConversionRanges: ImageRange list
+          NestedMuxRecordRanges: ImageRange list
+          QualityEntryRanges: ImageRange list
+          RxProtectionPlanRanges: ImageRange list
+          TxProtectionPlanRanges: ImageRange list
+          RxCounterRanges: ImageRange list
+          CoverageSpanRanges: ImageRange list
+          TxMessageRanges: ImageRange list
+          TxProgramRanges: ImageRange list
+          TxCounterRanges: ImageRange list
+          TxTemplateRanges: ImageRange list }
+
+    type LoweringTrace = private LoweringTrace of unit
+
+    type ValidatedImage =
+        { Image: RuntimeImage
+          Layout: ImageLayout }
+
     let private identityConversion =
         { IsAffine = false
           Factor = 1.0
@@ -252,7 +299,7 @@ module Scimg =
 
     let private align4 value = (value + 3) / 4 * 4
 
-    let lower (schema: LinkedSchema) : Result<RuntimeImage, ValidationError list> =
+    let private lowerCore (schema: LinkedSchema) : Result<RuntimeImage, ValidationError list> =
         let rxPlans = schema.Messages |> List.collect (fun message -> message.Plans)
 
         let txPlans = schema.TxMessages |> List.collect (fun message -> message.Plans)
@@ -659,6 +706,11 @@ module Scimg =
                       TxProtectionPlans = txProtectionPlans |> Seq.toList
                       RxCounters = rxCounters |> Seq.toList
                       CoverageSpans = coverageSpans |> Seq.toList }
+
+    let lowerDetailed schema =
+        lowerCore schema |> Result.map (fun image -> image, LoweringTrace())
+
+    let lower schema = lowerCore schema
 
     let private messageRangeErrors messages programCount allowEmpty =
         let mutable expectedIndex = 0
@@ -1258,7 +1310,7 @@ module Scimg =
         putU16 bytes (offset + 10) program.MuxSelectorSlot
         putU32 bytes (offset + 12) program.MuxExpected
 
-    let write (image: RuntimeImage) : Result<byte array, ValidationError list> =
+    let private writeCore (image: RuntimeImage) : Result<byte array, ValidationError list> =
         let errors = validateRuntimeImage image
 
         if not errors.IsEmpty then
@@ -1543,6 +1595,194 @@ module Scimg =
 
                 putU32 bytes (totalSize - 4) (crc32 bytes (totalSize - 4))
                 Ok bytes
+
+    let private imageLayout (image: RuntimeImage) =
+        let symbols = symbolSection image
+
+        let makeRange start size =
+            { Start = uint32 start
+              End = uint32 (start + size) }
+
+        let records start size count =
+            [ for index in 0 .. count - 1 -> makeRange (start + index * size) size ]
+
+        let msgOffset = HeaderSize + DirectorySize
+        let prgOffset = msgOffset + image.Messages.Length * 8
+        let cnvOffset = prgOffset + image.Programs.Length * ProgramSize
+        let symOffset = cnvOffset + image.Conversions.Length * 24
+        let legacyEnd = symOffset + symbols.Length
+        let hasTx = not image.TxMessages.IsEmpty
+        let hasRxq = not image.NestedMuxRecords.IsEmpty || not image.QualityEntries.IsEmpty
+
+        let hasProtection =
+            not image.RxProtectionPlans.IsEmpty || not image.TxProtectionPlans.IsEmpty
+
+        let hasExtension = hasRxq || hasProtection
+        let extensionOffset = if hasExtension then align4 legacyEnd else 0
+        let nestedOffset = ExtensionHeaderSize
+
+        let qualityOffset =
+            nestedOffset + image.NestedMuxRecords.Length * NestedMuxRecordSize
+
+        let profileOffset = qualityOffset + image.QualityEntries.Length * 4
+
+        let profileSize =
+            if hasProtection then
+                ProtectionHeaderSize
+                + image.RxProtectionPlans.Length * ProtectionPlanSize
+                + image.TxProtectionPlans.Length * ProtectionPlanSize
+                + image.RxCounters.Length * RxCounterSize
+                + image.CoverageSpans.Length * CoverageSpanSize
+            else
+                0
+
+        let embeddedTxOffset = profileOffset + profileSize
+
+        let txUnalignedSize =
+            if hasTx then
+                TxHeaderSize
+                + image.TxMessages.Length * TxMessageSize
+                + image.TxPrograms.Length * ProgramSize
+                + image.TxCounters.Length * CounterSize
+                + image.TxTemplates.Length
+            else
+                0
+
+        let txSize = if hasTx then align4 txUnalignedSize else 0
+        let extensionSize = if hasExtension then embeddedTxOffset + txSize else 0
+
+        let txOffset =
+            if hasExtension && hasTx then
+                extensionOffset + embeddedTxOffset
+            elif hasTx then
+                align4 legacyEnd
+            else
+                0
+
+        let contentEnd =
+            if hasExtension then extensionOffset + extensionSize
+            elif hasTx then txOffset + txSize
+            else legacyEnd
+
+        let footer = makeRange contentEnd 4
+        let absoluteExtension relative = extensionOffset + relative
+        let profile = absoluteExtension profileOffset
+        let rxPlanStart = profile + ProtectionHeaderSize
+        let txPlanStart = rxPlanStart + image.RxProtectionPlans.Length * ProtectionPlanSize
+
+        let rxCounterStart =
+            txPlanStart + image.TxProtectionPlans.Length * ProtectionPlanSize
+
+        let spanStart = rxCounterStart + image.RxCounters.Length * RxCounterSize
+        let txMessageStart = txOffset + TxHeaderSize
+        let txProgramStart = txMessageStart + image.TxMessages.Length * TxMessageSize
+        let txCounterStart = txProgramStart + image.TxPrograms.Length * ProgramSize
+        let txTemplateStart = txCounterStart + image.TxCounters.Length * CounterSize
+        let mutable symbolCursor = symOffset + 4
+
+        let symbolRanges =
+            image.SignalNames @ image.MessageNames
+            |> List.map (fun name ->
+                let size = 2 + utf8.GetByteCount(name)
+                let value = makeRange symbolCursor size
+                symbolCursor <- symbolCursor + size
+                value)
+
+        let mutable templateCursor = txTemplateStart
+
+        let templateRanges =
+            image.TxMessages
+            |> List.map (fun message ->
+                let value = makeRange templateCursor (int message.PayloadLength)
+                templateCursor <- templateCursor + int message.PayloadLength
+                value)
+
+        let optionalRange condition start size =
+            if condition then Some(makeRange start size) else None
+
+        { Regions =
+            { Header = makeRange 0 HeaderSize
+              Directory = makeRange HeaderSize DirectorySize
+              RxMessages = makeRange msgOffset (image.Messages.Length * 8)
+              RxPrograms = makeRange prgOffset (image.Programs.Length * ProgramSize)
+              Conversions = makeRange cnvOffset (image.Conversions.Length * 24)
+              Symbols = makeRange symOffset symbols.Length
+              ExtensionHeader = optionalRange hasExtension extensionOffset ExtensionHeaderSize
+              NestedMuxRecords =
+                optionalRange
+                    hasExtension
+                    (absoluteExtension nestedOffset)
+                    (image.NestedMuxRecords.Length * NestedMuxRecordSize)
+              QualityEntries =
+                optionalRange hasExtension (absoluteExtension qualityOffset) (image.QualityEntries.Length * 4)
+              ProtectionHeader = optionalRange hasProtection profile ProtectionHeaderSize
+              RxProtectionPlans =
+                optionalRange hasProtection rxPlanStart (image.RxProtectionPlans.Length * ProtectionPlanSize)
+              TxProtectionPlans =
+                optionalRange hasProtection txPlanStart (image.TxProtectionPlans.Length * ProtectionPlanSize)
+              RxCounters = optionalRange hasProtection rxCounterStart (image.RxCounters.Length * RxCounterSize)
+              CoverageSpans = optionalRange hasProtection spanStart (image.CoverageSpans.Length * CoverageSpanSize)
+              TxHeader = optionalRange hasTx txOffset TxHeaderSize
+              TxMessages = optionalRange hasTx txMessageStart (image.TxMessages.Length * TxMessageSize)
+              TxPrograms = optionalRange hasTx txProgramStart (image.TxPrograms.Length * ProgramSize)
+              TxCounters = optionalRange hasTx txCounterStart (image.TxCounters.Length * CounterSize)
+              TxTemplates = optionalRange hasTx txTemplateStart image.TxTemplates.Length
+              Footer = footer }
+          SymbolRanges = symbolRanges
+          RxMessageRanges = records msgOffset 8 image.Messages.Length
+          RxProgramRanges = records prgOffset ProgramSize image.Programs.Length
+          ConversionRanges = records cnvOffset 24 image.Conversions.Length
+          NestedMuxRecordRanges =
+            if hasExtension then
+                records (absoluteExtension nestedOffset) NestedMuxRecordSize image.NestedMuxRecords.Length
+            else
+                []
+          QualityEntryRanges =
+            if hasExtension then
+                records (absoluteExtension qualityOffset) 4 image.QualityEntries.Length
+            else
+                []
+          RxProtectionPlanRanges =
+            if hasProtection then
+                records rxPlanStart ProtectionPlanSize image.RxProtectionPlans.Length
+            else
+                []
+          TxProtectionPlanRanges =
+            if hasProtection then
+                records txPlanStart ProtectionPlanSize image.TxProtectionPlans.Length
+            else
+                []
+          RxCounterRanges =
+            if hasProtection then
+                records rxCounterStart RxCounterSize image.RxCounters.Length
+            else
+                []
+          CoverageSpanRanges =
+            if hasProtection then
+                records spanStart CoverageSpanSize image.CoverageSpans.Length
+            else
+                []
+          TxMessageRanges =
+            if hasTx then
+                records txMessageStart TxMessageSize image.TxMessages.Length
+            else
+                []
+          TxProgramRanges =
+            if hasTx then
+                records txProgramStart ProgramSize image.TxPrograms.Length
+            else
+                []
+          TxCounterRanges =
+            if hasTx then
+                records txCounterStart CounterSize image.TxCounters.Length
+            else
+                []
+          TxTemplateRanges = templateRanges }
+
+    let writeDetailed image =
+        writeCore image |> Result.map (fun bytes -> bytes, imageLayout image)
+
+    let write image = writeCore image
 
     let private parseSymbols bytes offset size signalCount messageCount =
         if
@@ -1967,7 +2207,7 @@ module Scimg =
                 else
                     Ok(nested, quality, offset + profileOffset, profileSize, offset + txOffset, txSize)
 
-    let read (bytes: byte array) : Result<RuntimeImage, ValidationError list> =
+    let private readCore (bytes: byte array) : Result<RuntimeImage, ValidationError list> =
         if isNull bytes || bytes.Length < HeaderSize + DirectorySize + 4 then
             Error[ImageSize]
         elif not (bytes.AsSpan(0, magic.Length).SequenceEqual(magic)) then
@@ -2127,6 +2367,20 @@ module Scimg =
                                                 let errors = validateRuntimeImage image
 
                                                 if errors.IsEmpty then Ok image else Error errors
+
+    let readDetailed bytes =
+        readCore bytes
+        |> Result.bind (fun image ->
+            writeCore image
+            |> Result.bind (fun canonical ->
+                if canonical.AsSpan().SequenceEqual(bytes) then
+                    Ok
+                        { Image = image
+                          Layout = imageLayout image }
+                else
+                    Error[ImageTable]))
+
+    let read bytes = readCore bytes
 
     let inspect (bytes: byte array) : Result<string, ValidationError list> =
         match read bytes with

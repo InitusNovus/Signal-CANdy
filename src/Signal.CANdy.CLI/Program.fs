@@ -242,6 +242,195 @@ module ScimgCli =
                 eprintfn "\n%s" (Cli.usage ())
                 2
 
+module ImageCli =
+    open System.IO
+    open System.Text
+    open Signal.CANdy.Core.ArtifactWriter
+    open Signal.CANdy.Core.ImageDocuments
+    open Signal.CANdy.Core.RuntimeBuild
+    open Signal.CANdy.Core.RuntimeDiff
+
+    let private help =
+        String.concat
+            "\n"
+            [ "Image commands:"
+              "  image inspect <image.scimg> [--out <inspect.json>]"
+              "  image diff <before.scimg> <after.scimg> [--before-map <map.json>] [--after-map <map.json>] [--before-activation <activation.json>] [--after-activation <activation.json>] [--out <diff.json>]" ]
+
+    let private inspectHelp =
+        "Usage: image inspect <image.scimg> [--out <inspect.json>]"
+
+    let private diffHelp =
+        "Usage: image diff <before.scimg> <after.scimg> [--before-map <map.json>] [--after-map <map.json>] [--before-activation <activation.json>] [--after-activation <activation.json>] [--out <diff.json>]"
+
+    let private publish (kind: string) (path: string) (json: string) =
+        match
+            writeAtomic
+                [ { Kind = Inspect
+                    Destination = path
+                    Content = Encoding.UTF8.GetBytes(json) } ]
+        with
+        | Ok() ->
+            printfn "Wrote %s: %s" kind path
+            0
+        | Error errors ->
+            eprintfn "error[SC2404] %A" errors
+            4
+
+    let private readBytes path =
+        try
+            if File.Exists(path) && not (Directory.Exists(path)) then
+                Ok(File.ReadAllBytes(path))
+            else
+                Error(sprintf "Input does not exist: %s" path)
+        with ex ->
+            Error ex.Message
+
+    let private readText path =
+        try
+            if File.Exists(path) && not (Directory.Exists(path)) then
+                Ok(File.ReadAllText(path))
+            else
+                Error(sprintf "Input does not exist: %s" path)
+        with ex ->
+            Error ex.Message
+
+    let private inspect imagePath output =
+        match readBytes imagePath with
+        | Error message ->
+            eprintfn "error[SC2404] %s" message
+            4
+        | Ok bytes ->
+            match ImageDocuments.inspect bytes |> Result.bind writeInspect with
+            | Error errors ->
+                eprintfn "error[SC2403] %A" errors
+                3
+            | Ok json ->
+                match output with
+                | None ->
+                    printf "%s" json
+                    0
+                | Some path -> publish "inspect" path json
+
+    let private loadOptional parser path =
+        match path with
+        | None -> Ok None
+        | Some value ->
+            readText value
+            |> Result.mapError (fun message -> 4, message)
+            |> Result.bind (fun text ->
+                parser text
+                |> Result.map Some
+                |> Result.mapError (fun errors -> 3, sprintf "%A" errors))
+
+    let private diffImages beforePath afterPath beforeMap afterMap beforeActivation afterActivation output =
+        match readBytes beforePath, readBytes afterPath with
+        | Error message, _
+        | _, Error message ->
+            eprintfn "error[SC2404] %s" message
+            4
+        | Ok beforeBytes, Ok afterBytes ->
+            let loaded =
+                ImageDocuments.inspect beforeBytes
+                |> Result.mapError (fun e -> 3, sprintf "%A" e)
+                |> Result.bind (fun beforeInspect ->
+                    ImageDocuments.inspect afterBytes
+                    |> Result.mapError (fun e -> 3, sprintf "%A" e)
+                    |> Result.map (fun afterInspect -> beforeInspect, afterInspect))
+                |> Result.bind (fun (beforeInspect, afterInspect) ->
+                    loadOptional parseMap beforeMap
+                    |> Result.bind (fun bm ->
+                        loadOptional parseMap afterMap
+                        |> Result.bind (fun am ->
+                            loadOptional parseActivationDescriptor beforeActivation
+                            |> Result.bind (fun ba ->
+                                loadOptional parseActivationDescriptor afterActivation
+                                |> Result.map (fun aa -> beforeInspect, afterInspect, bm, am, ba, aa)))))
+
+            match loaded with
+            | Error(code, message) ->
+                eprintfn "error[SC240%d] %s" code message
+                code
+            | Ok(beforeInspect, afterInspect, bm, am, ba, aa) ->
+                match
+                    RuntimeDiff.diff
+                        { BeforeInspect = beforeInspect
+                          AfterInspect = afterInspect
+                          BeforeMap = bm
+                          AfterMap = am
+                          BeforeActivation = ba
+                          AfterActivation = aa }
+                    |> Result.bind writeDiff
+                with
+                | Error errors ->
+                    eprintfn "error[SC2403] %A" errors
+                    3
+                | Ok json ->
+                    match output with
+                    | None ->
+                        printf "%s" json
+                        0
+                    | Some path -> publish "diff" path json
+
+    let private options (values: string list) =
+        let rec loop remaining result =
+            match remaining with
+            | [] -> Ok result
+            | key :: value :: rest when
+                Set.contains
+                    key
+                    (Set.ofList
+                        [ "--out"
+                          "--before-map"
+                          "--after-map"
+                          "--before-activation"
+                          "--after-activation" ])
+                && not (result |> Map.containsKey key)
+                ->
+                loop rest (result |> Map.add key value)
+            | _ -> Error()
+
+        loop values Map.empty
+
+    let run argv =
+        match Array.toList argv with
+        | [ "--help" ]
+        | [ "-h" ] ->
+            printfn "%s" help
+            0
+        | [ "inspect"; "--help" ]
+        | [ "inspect"; "-h" ] ->
+            printfn "%s" inspectHelp
+            0
+        | [ "diff"; "--help" ]
+        | [ "diff"; "-h" ] ->
+            printfn "%s" diffHelp
+            0
+        | "inspect" :: image :: rest ->
+            match options rest with
+            | Ok parsed when parsed |> Map.forall (fun key _ -> key = "--out") ->
+                inspect image (Map.tryFind "--out" parsed)
+            | _ ->
+                eprintfn "%s" inspectHelp
+                2
+        | "diff" :: beforeImage :: afterImage :: rest ->
+            match options rest with
+            | Error _ ->
+                eprintfn "%s" diffHelp
+                2
+            | Ok parsed ->
+                diffImages
+                    beforeImage
+                    afterImage
+                    (Map.tryFind "--before-map" parsed)
+                    (Map.tryFind "--after-map" parsed)
+                    (Map.tryFind "--before-activation" parsed)
+                    (Map.tryFind "--after-activation" parsed)
+                    (Map.tryFind "--out" parsed)
+        | _ ->
+            eprintfn "%s" help
+            2
+
 module ProjectCli =
     open System.IO
     open System.Text
@@ -293,6 +482,13 @@ module ProjectCli =
                             Destination = path
                             Content = Encoding.UTF8.GetBytes(compiled.InspectJson) }
                   | None -> ()
+                  match project.Outputs.Map, compiled.MapJson with
+                  | Some path, Some json ->
+                      yield
+                          { Kind = Map
+                            Destination = path
+                            Content = Encoding.UTF8.GetBytes(json) }
+                  | _ -> ()
                   match project.Outputs.Activation with
                   | Some path ->
                       yield
@@ -378,6 +574,9 @@ module ProjectCli =
                                     project.Outputs.Inspect
                                     |> Option.iter (relative project.RootDirectory >> printfn "Wrote inspect: %s")
 
+                                    project.Outputs.Map
+                                    |> Option.iter (relative project.RootDirectory >> printfn "Wrote map: %s")
+
                                     project.Outputs.Activation
                                     |> Option.iter (relative project.RootDirectory >> printfn "Wrote activation: %s")
 
@@ -406,6 +605,8 @@ let main argv : int =
         ScimgCli.run argv.[1..]
     elif argv.Length > 0 && argv.[0] = "project" then
         ProjectCli.run argv.[1..]
+    elif argv.Length > 0 && argv.[0] = "image" then
+        ImageCli.run argv.[1..]
     elif args.ShowHelp then
         printfn "%s" (Cli.usage ())
         0

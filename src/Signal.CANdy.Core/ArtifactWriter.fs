@@ -14,6 +14,7 @@ module ArtifactWriter =
         | Image
         | Header
         | Inspect
+        | Map
         | Activation
 
     type Artifact =
@@ -298,7 +299,8 @@ module ArtifactWriter =
         | Image -> 0
         | Header -> 1
         | Inspect -> 2
-        | Activation -> 3
+        | Map -> 3
+        | Activation -> 4
 
     let writeAtomicWith (fs: IArtifactFileSystem) (artifacts: Artifact list) =
         let ordered = artifacts |> List.sortBy (fun artifact -> rank artifact.Kind)
