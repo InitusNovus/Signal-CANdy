@@ -53,5 +53,14 @@ module EntrypointGateTests =
         let workflow =
             File.ReadAllText(Path.Combine(TestSupport.repoRoot, ".github", "workflows", "ci.yml"))
 
+        let restore =
+            "dotnet restore tools/Signal.CANdy.Hardening/Signal.CANdy.Hardening.fsproj --nologo"
+        let hardening = "pwsh -NoProfile -File scripts/hardening.ps1 -Mode Ci"
+
         Assert.Contains("SC_HARDENING_REQUIRE_SANITIZERS: '1'", workflow)
-        Assert.Contains("pwsh -NoProfile -File scripts/hardening.ps1 -Mode Ci", workflow)
+        Assert.Contains(restore, workflow)
+        Assert.Contains(hardening, workflow)
+        Assert.True(
+            workflow.IndexOf(restore) < workflow.IndexOf(hardening),
+            "the hardening tool must be restored before its --no-restore build runs"
+        )

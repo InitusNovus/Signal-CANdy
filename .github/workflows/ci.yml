@@ -186,6 +186,9 @@ jobs:
         with:
           dotnet-version: '8.0.x'
 
+      - name: Restore hardening tool
+        run: dotnet restore tools/Signal.CANdy.Hardening/Signal.CANdy.Hardening.fsproj --nologo
+
       - name: Install Clang and verify PowerShell
         run: |
           sudo apt-get update
