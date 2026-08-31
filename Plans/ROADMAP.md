@@ -19,26 +19,26 @@
 - 근거: `tests/oracle/CATEGORY_C_EXCEPTIONS.md` Exception 4, `tests/oracle/ORACLE_RESULTS.md`
 - 후속 판단 과제: 다른 reference decoder를 도입할지, 현행 Category C 정책을 유지할지 결정
 
-### 2. Runtime-loadable schema architecture RFC
+### 2. Runtime-schema v1 종결 및 다음 staged IR/AST 정책
 
-- 추적 이슈: #17 — `[RFC] Shared semantic IR and pool-bound runtime schema images`
-- 설계 원자료: `Plans/Runtime_Schema_Architecture.md`
-- v1 결정 기록: `Plans/Runtime_Schema_Decisions.md` (D-01~D-25, RFC §31 전 그룹 DECIDED/DEFERRED)
-- 현 상태: vertical slice 구현 완료 (decisions → pool → wire → binding/linked → scimg → C99 RX → differential). 엄격 binding JSON 파서, CLI compile/inspect, 결정론 검증, allocation-free C99 differential harness까지 working tree 기준으로 연결됨
-- 문서 성격: `Runtime_Schema_Architecture.md`는 exhaustive design handoff, `Runtime_Schema_Decisions.md`는 그 결정 계약
-- 다음 판단 과제:
-  - terminology와 staged IR 경계 확정
-  - 기존 `Ir.fs` 및 AOT C backend migration/compatibility 정책 확정
-  - 최소 Pool/Wire/Binding/Target input contract 확정
-  - runtime image v1 invariants와 Pool ABI 전략 확정
-  - vertical slice와 child issue 순서 확정
-- 운영 원칙: 설계 문서 PR merge만으로 #17을 자동 close하지 않고, accepted architecture와 child issue 링크를 이슈에 기록한 뒤 close
+- GitHub 상태: #17과 child #19-#25는 모두 CLOSED (2026-08-27). #17은 더 이상 활성 RFC/분할 작업의 추적 항목이 아니다.
+- 완료된 7개 runtime-schema capability:
+  1. #19: logical message ID 기반 allocation-free TX encode와 성공 시에만 counter를 commit하는 semantics
+  2. #20: bounded nested mux RX와 caller-clock 기반 freshness/quality state
+  3. #21: precomputed CRC/counter protection plan의 RX 검증 및 TX 생성
+  4. #22: strict Target Capability 및 Project Manifest 기반의 deterministic runtime-image build
+  5. #23: caller-owned transactional activation hot-swap과 deterministic state reset
+  6. #24: canonical `sc.inspect/v1`, `sc.map/v1`, `sc.diff/v1` 및 activation compatibility 설명
+  7. #25: deterministic malformed-image cross-oracle/sanitizer hardening과 resource gates
+- canonical close-out evidence: `Reports/20260827-1645_CC1A_TX_HIL_검증.md`, `Reports/20260827-1756_CC1A_RXQ_HIL_검증.md`, `Reports/20260827-1904_CC1A_Protection_HIL_검증.md`, `Reports/20260827-2005_CC1A_Project_Manifest_HIL_검증.md`, `Reports/20260827-2120_CC1A_Activation_HIL_검증.md`, `Reports/20260827-2229_Inspect_Map_Diff_HIL_증거.md`; 최신 종결 근거는 `Reports/20260828-0000_Hardening_CC1A_HIL_검증.md`이다.
+- v1 설계/결정 기록: `Plans/Runtime_Schema_Architecture.md`, `Plans/Runtime_Schema_Decisions.md` (D-01~D-25). 이 기록은 완료된 v1의 근거이며 새 작업 지시는 아니다.
+- 현재 활성 설계 질문: legacy `Ir.fs`와 string+Scriban AOT C backend, typed `WireIr`/`LinkedSchema`와 runtime-image plan이 함께 존재하는 현재 구조를 어떤 명시적이고 일관된 staged IR/AST policy로 정렬할 것인가.
+- 이 refactor의 구체 설계는 아직 승인되거나 작성되지 않았다. 다음 작업은 기존 representation, public/API/backend compatibility contract, 각 stage의 ownership을 대조해 successor design을 세우는 것이며, 그 결론을 미리 가정한 migration 구현은 범위가 아니다.
 
 ## 다음 세션 진입점
 
-1. 최신 close-out / verification 보고서를 먼저 확인한다.
-2. Runtime schema 후속 작업은 #17과 `Plans/Runtime_Schema_Architecture.md`를 함께 읽고, 정보 손실 없이 정제하는 단계부터 시작한다.
-3. 구현 전 terminology, IR boundary, Pool ABI, runtime-image v1 scope를 명시적으로 결정하거나 defer한다.
-4. 구현 항목은 RFC가 안정된 뒤 child issue로 분할한다. 초기 대화 원자료를 곧바로 세부 issue 여러 개로 흩뜨리지 않는다.
-5. Oracle reference decoder 항목은 실제 제품 우선순위가 생기면 별도 successor plan으로 승격한다.
-6. 새 계획을 시작할 때는 archive 문서를 수정하지 않고, 이 문서 또는 `Plans/` 하위 successor roadmap에서 이어간다.
+1. `Reports/20260828-0000_Hardening_CC1A_HIL_검증.md`와 위의 capability별 canonical evidence를 먼저 확인한다.
+2. staged IR/AST policy를 검토할 때 `src/Signal.CANdy.Core/Ir.fs`, `Wire.fs`, `Linked.fs`, `Codegen.fs`와 `Plans/Runtime_Schema_Architecture.md`를 함께 읽어 legacy AOT 및 runtime-schema representation의 실제 경계와 compatibility contract를 inventory한다.
+3. inventory를 근거로 explicit staged IR/AST policy의 successor design을 제안한다. 구현/migration의 shape나 일정은 그 설계가 합의되기 전에는 확정하지 않는다.
+4. Oracle reference decoder 항목은 실제 제품 우선순위가 생기면 별도 successor plan으로 승격한다.
+5. 새 계획을 시작할 때는 archive 문서를 수정하지 않고, 이 문서 또는 `Plans/` 하위 successor roadmap에서 이어간다.
