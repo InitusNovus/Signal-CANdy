@@ -47,7 +47,7 @@
   <ItemGroup>
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
     <PackageReference Include="DbcParserLib" Version="1.7.0" />
-    <PackageReference Include="Scriban" Version="6.2.1" />
+    <PackageReference Include="Scriban" Version="7.2.2" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="8.0.0" PrivateAssets="All" />
   </ItemGroup>
 
