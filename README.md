@@ -1,4 +1,4 @@
-# Signal CANdy — DBC to C Code Generator (F#)
+# Signal CANdy — Portable C99 Backends for CAN DBC (F#)
 
 [![CI](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml/badge.svg)](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/InitusNovus/Signal-CANdy.svg)](https://github.com/InitusNovus/Signal-CANdy/blob/main/LICENSE)
@@ -14,7 +14,12 @@
 
 Languages: This README is in English. For Korean, see README.ko.md.
 
-This project generates portable C99 parser modules (headers/sources) from a `.dbc` file using an F# code generator.
+Signal CANdy provides two portable C99 products from CAN DBC inputs:
+
+- **Legacy AOT code generation:** compile a `.dbc` into per-message C99 headers and sources for a fixed firmware schema.
+- **Runtime-loadable SCIMG:** compile a `.dbc`, pool contract, and bindings into a validated `.scimg` schema consumed by the `runtime/c99` interpreter.
+
+The AOT output and SCIMG output serve different integration models: AOT emits C sources for a fixed schema, while SCIMG keeps schema data loadable behind the C99 runtime and caller-owned pool/state storage.
 
 ## 📦 NuGet Packages
 
@@ -27,6 +32,53 @@ Install:
 dotnet add package SignalCandy.Core --version 0.5.0-alpha.1
 dotnet add package SignalCandy --version 0.5.0-alpha.1
 ```
+
+## Runtime-image (SCIMG) workflow
+
+### Direct SCIMG compile
+
+The `scimg` command compiles a DBC, pool definition, and binding definition directly into a runtime image. The command below uses the checked-in `scimg_demo` inputs; choose output paths that do not already exist because the command writes its requested files.
+
+```bash
+dotnet run --project src/Signal.CANdy.CLI -- scimg \
+  -d examples/scimg_demo/demo.dbc \
+  -p examples/scimg_demo/pool.json \
+  -b examples/scimg_demo/binding.json \
+  -o demo.scimg \
+  --inspect demo.inspect.json
+```
+
+This is not AOT code generation: the result is a `.scimg` runtime image, not generated per-message C sources.
+
+### Project build, inspect, and diff
+
+For target compatibility and complete artifact publication, use the manifest workflow demonstrated by `examples/scimg_activation_demo/README.md`:
+
+```bash
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  project validate examples/scimg_activation_demo/project_a.yaml
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  project build examples/scimg_activation_demo/project_a.yaml
+```
+
+`project validate` resolves and compiles the manifest without writing files. `project build` first validates, then atomically writes the manifest-declared image, generated C header, inspection JSON, `sc.map/v1` source map, and activation descriptor. Inspect an image or produce a fully attributed diff with the matching map and activation artifacts:
+
+```bash
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  image inspect examples/scimg_activation_demo/build/schema_a.scimg
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  image diff \
+  examples/scimg_activation_demo/build/schema_a.scimg \
+  examples/scimg_activation_demo/build/schema_b.scimg \
+  --before-map examples/scimg_activation_demo/build/schema_a.map.json \
+  --after-map examples/scimg_activation_demo/build/schema_b.map.json \
+  --before-activation examples/scimg_activation_demo/build/schema_a.activation.json \
+  --after-activation examples/scimg_activation_demo/build/schema_b.activation.json
+```
+
+The activation fixture demonstrates transactional hot-swap: prepare B while A stays active, abort safely, then prepare and commit B. A successful commit publishes B and resets runtime state; a malformed candidate is rejected without changing the active schema. The C99 runtime is allocation-free: firmware supplies the image/schema storage, `sc_runtime_state_t`, `sc_slot_t` pool, scratch capacity, activation controller, and activation storage. At commit, establish the documented quiescent point before replacing the borrowed active view.
+
+CLI exits are `0` for success, `2` for grammar/usage, `3` for malformed or semantically invalid documents, and `4` for missing input, existing destination, or other I/O failure. See [`examples/scimg_activation_demo/README.md`](examples/scimg_activation_demo/README.md) for the exact activation sequence and artifact behavior.
 
 ## ⚡ Quick Start (5 minutes)
 
@@ -62,6 +114,7 @@ Note: Step 3 is optional but recommended for validation. The generated C files u
 
 - Getting Started
 - Usage
+- Runtime-image (SCIMG) workflow
 - Supported features
 - Configuration (overview)
 - How code is generated
@@ -738,15 +791,16 @@ CRC/Counter note
 
 ## Project Structure
 
-- `src/Signal.CANdy.Core`: Core F# library (DBC parsing, IR, config, validation, codegen)
+- `src/Signal.CANdy.Core`: Core F# library for DBC, AOT codegen, SCIMG compilation, manifests, artifacts, and diffs
 - `src/Signal.CANdy`: C#-friendly facade (maps `Result` → exceptions)
-- `src/Signal.CANdy.CLI`: CLI tool (argument parsing, harness generation)
-- `src/Generator`: Legacy standalone generator (Exe)
-- `templates`: Scriban templates for C code generation
-- `examples`: Sample DBC files, YAML configs, and a main C file for testing
-- `tests/Signal.CANdy.Core.Tests`: xUnit + FsUnit tests for Core library
-- `tests/Generator.Tests`: xUnit + FsUnit tests for legacy Generator
-- `gen`: Output directory for generated C code (ignored by Git)
+- `src/Signal.CANdy.CLI`: CLI for legacy AOT generation, direct `scimg`, `project`, and `image` commands
+- `src/Generator`: legacy standalone AOT generator (Exe)
+- `runtime/c99`: allocation-free SCIMG C99 runtime and native runtime tests
+- `templates`: Scriban templates for legacy AOT C code generation
+- `examples/scimg_demo`: direct SCIMG DBC, pool, and binding inputs
+- `examples/scimg_{quality,protection,tx,activation}_demo`: runtime-image feature and activation fixtures
+- `tests/Signal.CANdy.Core.Tests`, `tests/Generator.Tests`, `tests/Signal.CANdy.Hardening.Tests`: Core, AOT generator, and hardening tests
+- `gen`: output directory for generated AOT C code (ignored by Git)
 
 ## License, third-party, and AI provenance
 

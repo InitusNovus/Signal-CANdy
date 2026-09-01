@@ -1,4 +1,4 @@
-# Signal CANdy — DBC to C 코드 생성기 (F#)
+# Signal CANdy — CAN DBC용 이식 가능한 C99 백엔드 (F#)
 
 [![CI](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml/badge.svg)](https://github.com/InitusNovus/Signal-CANdy/actions/workflows/ci.yml)
 [![License](https://img.shields.io/github/license/InitusNovus/Signal-CANdy.svg)](https://github.com/InitusNovus/Signal-CANdy/blob/main/LICENSE)
@@ -14,7 +14,12 @@
 
 언어: 이 문서는 한국어 번역본입니다. 원문(영어)은 `README.md`를 참고하세요.
 
-이 프로젝트는 F# 기반 코드 생성기를 사용해 `.dbc` 파일로부터 이식성 높은 C99 파서 모듈(헤더/소스)을 생성합니다.
+Signal CANdy는 CAN DBC 입력으로부터 두 가지 이식 가능한 C99 제품을 제공합니다:
+
+- **레거시 AOT 코드 생성:** 고정 펌웨어 스키마를 위해 `.dbc`를 메시지별 C99 헤더와 소스로 컴파일합니다.
+- **런타임 로드형 SCIMG:** `.dbc`, 풀 계약, 바인딩을 `runtime/c99` 인터프리터가 소비하는 검증된 `.scimg` 스키마로 컴파일합니다.
+
+AOT 출력과 SCIMG 출력은 통합 모델이 다릅니다. AOT는 고정 스키마용 C 소스를 생성하고, SCIMG는 호출자 소유 풀/상태 저장소 뒤의 C99 런타임에서 스키마 데이터를 로드 가능하게 유지합니다.
 
 ## 📦 NuGet 패키지
 
@@ -27,6 +32,53 @@
 dotnet add package SignalCandy.Core --version 0.5.0-alpha.1
 dotnet add package SignalCandy --version 0.5.0-alpha.1
 ```
+
+## 런타임 이미지(SCIMG) 워크플로
+
+### 직접 SCIMG 컴파일
+
+`scimg` 명령은 DBC, 풀 정의, 바인딩 정의를 런타임 이미지로 직접 컴파일합니다. 아래 명령은 저장소의 `scimg_demo` 입력을 사용합니다. 명령이 요청한 파일을 쓰므로 아직 존재하지 않는 출력 경로를 선택하세요.
+
+```bash
+dotnet run --project src/Signal.CANdy.CLI -- scimg \
+  -d examples/scimg_demo/demo.dbc \
+  -p examples/scimg_demo/pool.json \
+  -b examples/scimg_demo/binding.json \
+  -o demo.scimg \
+  --inspect demo.inspect.json
+```
+
+이는 AOT 코드 생성이 아닙니다. 결과는 메시지별 생성 C 소스가 아니라 `.scimg` 런타임 이미지입니다.
+
+### 프로젝트 빌드, 검사, diff
+
+타겟 호환성 검사와 전체 산출물 발행에는 `examples/scimg_activation_demo/README.md`에 있는 매니페스트 워크플로를 사용합니다:
+
+```bash
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  project validate examples/scimg_activation_demo/project_a.yaml
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  project build examples/scimg_activation_demo/project_a.yaml
+```
+
+`project validate`는 파일을 쓰지 않고 매니페스트를 해석하고 컴파일합니다. `project build`는 먼저 검증한 뒤 매니페스트가 선언한 이미지, 생성 C 헤더, 검사 JSON, `sc.map/v1` 소스 맵, 활성화 디스크립터를 원자적으로 씁니다. 매칭되는 맵과 활성화 산출물로 이미지를 검사하거나 전체 속성이 포함된 diff를 생성할 수 있습니다:
+
+```bash
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  image inspect examples/scimg_activation_demo/build/schema_a.scimg
+dotnet run --project src/Signal.CANdy.CLI -c Release -- \
+  image diff \
+  examples/scimg_activation_demo/build/schema_a.scimg \
+  examples/scimg_activation_demo/build/schema_b.scimg \
+  --before-map examples/scimg_activation_demo/build/schema_a.map.json \
+  --after-map examples/scimg_activation_demo/build/schema_b.map.json \
+  --before-activation examples/scimg_activation_demo/build/schema_a.activation.json \
+  --after-activation examples/scimg_activation_demo/build/schema_b.activation.json
+```
+
+활성화 픽스처는 트랜잭션 핫 스왑을 보입니다. A가 활성인 상태에서 B를 prepare하고 안전하게 abort한 뒤, B를 다시 prepare하여 commit합니다. 성공한 commit은 B를 발행하고 런타임 상태를 재설정합니다. 잘못된 후보는 활성 스키마를 바꾸지 않고 거부됩니다. C99 런타임은 할당을 하지 않습니다. 펌웨어가 이미지/스키마 저장소, `sc_runtime_state_t`, `sc_slot_t` 풀, scratch 용량, 활성화 컨트롤러, 활성화 저장소를 제공합니다. commit 시에는 빌려온 활성 뷰를 교체하기 전에 문서화된 quiescent point를 확보해야 합니다.
+
+CLI 종료 코드는 성공 `0`, 문법/사용법 `2`, 잘못되었거나 의미적으로 유효하지 않은 문서 `3`, 누락 입력/기존 목적지/기타 I/O 실패 `4`입니다. 정확한 활성화 순서와 산출물 동작은 [`examples/scimg_activation_demo/README.md`](examples/scimg_activation_demo/README.md)를 참고하세요.
 
 ## ⚡ 빠른 시작 (5분)
 
@@ -62,6 +114,7 @@ make -C gen build
 
 - 시작하기
 - 사용법
+- 런타임 이미지(SCIMG) 워크플로
 - 지원 기능
 - 구성 (개요)
 - 코드 생성 방식
@@ -676,15 +729,16 @@ CRC/Counter 참고
 
 ## 프로젝트 구조
 
-- `src/Signal.CANdy.Core`: 핵심 F# 라이브러리 (DBC 파싱, IR, 설정, 검증, 코드 생성)
+- `src/Signal.CANdy.Core`: DBC, AOT 코드 생성, SCIMG 컴파일, 매니페스트, 산출물, diff를 위한 핵심 F# 라이브러리
 - `src/Signal.CANdy`: C# 친화 파사드 (`Result` → 예외 변환)
-- `src/Signal.CANdy.CLI`: CLI 도구 (인자 파싱, 하네스 생성)
-- `src/Generator`: 레거시 독립형 생성기 (Exe)
-- `templates`: C 코드 생성을 위한 Scriban 템플릿
-- `examples`: 샘플 DBC/설정/테스트용 main C 파일
-- `tests/Signal.CANdy.Core.Tests`: Core 라이브러리 xUnit + FsUnit 테스트
-- `tests/Generator.Tests`: 레거시 Generator xUnit + FsUnit 테스트
-- `gen`: 생성된 C 코드 출력 디렉터리 (gitignore)
+- `src/Signal.CANdy.CLI`: 레거시 AOT 생성, 직접 `scimg`, `project`, `image` 명령을 제공하는 CLI
+- `src/Generator`: 레거시 독립형 AOT 생성기 (Exe)
+- `runtime/c99`: 할당 없는 SCIMG C99 런타임과 네이티브 런타임 테스트
+- `templates`: 레거시 AOT C 코드 생성을 위한 Scriban 템플릿
+- `examples/scimg_demo`: 직접 SCIMG용 DBC, 풀, 바인딩 입력
+- `examples/scimg_{quality,protection,tx,activation}_demo`: 런타임 이미지 기능과 활성화 픽스처
+- `tests/Signal.CANdy.Core.Tests`, `tests/Generator.Tests`, `tests/Signal.CANdy.Hardening.Tests`: Core, AOT 생성기, 하드닝 테스트
+- `gen`: 생성된 AOT C 코드 출력 디렉터리 (gitignore)
 
 ## 라이선스, 서드파티, AI 출처
 
