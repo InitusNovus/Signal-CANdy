@@ -616,7 +616,7 @@ int main(void)
     frame.flags = SC_FRAME_FD;
     passed = passed &&
              sc_decode_state(kat_schema, NULL, &frame, pool, 1u) ==
-                 SC_OK_NO_MATCH &&
+                 SC_ERR_BOUNDS &&
              memcmp(pool_before, pool, sizeof(pool)) == 0;
     report("29-bit extended CAN-FD RX matches only the normalized key",
            passed);
@@ -811,6 +811,39 @@ int main(void)
              sc_rx_counter_resync(schema, state, RX_CAN_ID,
                                   UINT8_C(0x80)) == SC_ERR_VALUE;
     report("RX resync miss and invalid flags are mutation free", passed);
+
+    sc_runtime_reset(schema, state, state_bytes, pool, COMBINED_POOL_COUNT);
+    set_rx_frame(&frame, 0u, UINT16_C(0x8000), 0u);
+    memcpy(pool_before, pool, sizeof(pool));
+    memcpy(state_before, state, state_bytes);
+    {
+        uint32_t normalized_id = frame.id;
+        frame.id = normalized_id | UINT32_C(0x80000000);
+        frame.flags = 0u;
+        passed = sc_decode_state(schema, state, &frame, pool,
+                                 COMBINED_POOL_COUNT) == SC_ERR_BOUNDS &&
+                 memcmp(pool_before, pool, sizeof(pool)) == 0 &&
+                 memcmp(state_before, state, state_bytes) == 0;
+        frame.id = UINT32_C(0x7FFFFFFF);
+        frame.flags = SC_FRAME_EXTENDED;
+        passed = passed &&
+                 sc_decode_state(schema, state, &frame, pool,
+                                 COMBINED_POOL_COUNT) == SC_ERR_BOUNDS &&
+                 memcmp(pool_before, pool, sizeof(pool)) == 0 &&
+                 memcmp(state_before, state, state_bytes) == 0;
+        frame.id = normalized_id;
+        frame.flags = SC_FRAME_EXTENDED;
+        passed = passed &&
+                 sc_decode_state(schema, state, &frame, pool,
+                                 COMBINED_POOL_COUNT) == SC_OK_NO_MATCH &&
+                 memcmp(pool_before, pool, sizeof(pool)) == 0;
+        frame.flags = 0u;
+        passed = passed &&
+                 sc_decode_state(schema, state, &frame, pool,
+                                 COMBINED_POOL_COUNT) == SC_OK;
+    }
+    report("decode rejects unnormalized and out-of-range frame IDs atomically",
+           passed);
 
     if (failure_count != 0u) {
         printf("FAILED (%u of %u tests)\n", failure_count, test_count);
