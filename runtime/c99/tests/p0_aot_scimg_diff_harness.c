@@ -160,6 +160,20 @@ static void decode_runtime(const sc_schema_t *schema,
             "SCIMG RX decode");
 }
 
+static void require_frame_identity(const sc_frame_t *frame, uint32_t can_id,
+                                   int fd, const char *name)
+{
+    int same = frame->id == can_id &&
+               ((frame->flags & SC_FRAME_FD) != 0u) == (fd != 0) &&
+               (frame->flags & SC_FRAME_EXTENDED) == 0u;
+    if (!same) {
+        printf("DETAIL %s id=%lu flags=%u expected id=%lu fd=%d\n", name,
+               (unsigned long)frame->id, (unsigned)frame->flags,
+               (unsigned long)can_id, fd);
+    }
+    require(same, name);
+}
+
 static void classic_fd_classes(const sc_schema_t *schema,
                                sc_runtime_state_t *state)
 {
@@ -180,6 +194,7 @@ static void classic_fd_classes(const sc_schema_t *schema,
             "AOT classic encode");
     frame = runtime_encode(schema, state, LOGICAL_CLASSIC, &token);
     require_same_payload(&frame, aot, length, "classic exact TX bytes");
+    require_frame_identity(&frame, UINT32_C(256), 0, "classic TX CAN identity");
     require(frame.len == 8u && (frame.flags & SC_FRAME_FD) == 0u,
             "classic frame shape");
     require(sc_encode_commit(&token, 1) == SC_OK, "classic commit");
@@ -200,6 +215,7 @@ static void classic_fd_classes(const sc_schema_t *schema,
     require(DIFF_FD_TX_encode(aot, &length, &fd_tx), "AOT FD encode");
     frame = runtime_encode(schema, state, LOGICAL_FD, &token);
     require_same_payload(&frame, aot, length, "FD exact TX bytes");
+    require_frame_identity(&frame, UINT32_C(272), 1, "FD TX CAN identity");
     require(frame.len == 12u && (frame.flags & SC_FRAME_FD) != 0u,
             "FD frame shape");
     require(sc_encode_commit(&token, 1) == SC_OK, "FD commit");
@@ -241,6 +257,8 @@ static void signed_scaled_class(const sc_schema_t *schema,
             "AOT signed scaled encode");
     frame = runtime_encode(schema, state, LOGICAL_SCALED, &token);
     require_same_payload(&frame, aot, length, "signed scaled exact TX bytes");
+    require_frame_identity(&frame, UINT32_C(288), 0,
+                           "signed scaled TX CAN identity");
     require(sc_encode_commit(&token, 1) == SC_OK, "scaled commit");
     memset(&rx, 0, sizeof(rx));
     require(DIFF_SCALED_RX_decode(&rx, frame.data, frame.len),
@@ -275,6 +293,7 @@ static void mux_class(const sc_schema_t *schema, sc_runtime_state_t *state)
     require(DIFF_MUX_TX_encode(aot, &length, &tx), "AOT mux encode");
     frame = runtime_encode(schema, state, LOGICAL_MUX, &token);
     require_same_payload(&frame, aot, length, "mux exact TX bytes");
+    require_frame_identity(&frame, UINT32_C(304), 0, "mux TX CAN identity");
     require(sc_encode_commit(&token, 1) == SC_OK, "mux commit");
     memset(&rx, 0, sizeof(rx));
     require(DIFF_MUX_RX_decode(&rx, frame.data, frame.len), "AOT mux decode");
@@ -316,6 +335,7 @@ static void protected_classes(const sc_schema_t *schema,
     sc_frame_t first;
     sc_frame_t repeated;
     sc_frame_t advanced;
+    sc_frame_t corrupted;
     sc_tx_token_t token;
     DIFF_PROTECTED_RX_t rx;
     DIFF_PROTECTED_RX_counter_state_t aot_counter;
@@ -324,6 +344,8 @@ static void protected_classes(const sc_schema_t *schema,
     set_u64_slot(SLOT_PROTECTED_TX, UINT64_C(51966));
     memset(&aot_counter, 0, sizeof(aot_counter));
     first = protected_prepare(schema, state, 0u, &token);
+    require_frame_identity(&first, UINT32_C(320), 0,
+                           "protected TX CAN identity");
     memset(&rx, 0, sizeof(rx));
     require(DIFF_PROTECTED_RX_decode(&rx, first.data, first.len),
             "AOT protected CRC decode");
@@ -335,6 +357,11 @@ static void protected_classes(const sc_schema_t *schema,
                 pool[SLOT_PROTECTED_RX].flags ==
                     (SC_SLOT_VALID | SC_SLOT_UPDATED),
             "protected RX raw physical slot state");
+    corrupted = first;
+    corrupted.data[4] ^= UINT8_C(0x40);
+    memset(&rx, 0, sizeof(rx));
+    require(!DIFF_PROTECTED_RX_decode(&rx, corrupted.data, corrupted.len),
+            "AOT corrupted CRC rejected");
     report_class("crc-counter", before);
 
     before = failures;
@@ -354,6 +381,10 @@ static void protected_classes(const sc_schema_t *schema,
     require(DIFF_PROTECTED_RX_decode(&rx, advanced.data, advanced.len) &&
                 DIFF_PROTECTED_RX_check_counter(&aot_counter, &rx),
             "AOT advanced counter decode");
+    memset(&rx, 0, sizeof(rx));
+    require(DIFF_PROTECTED_RX_decode(&rx, first.data, first.len) &&
+                !DIFF_PROTECTED_RX_check_counter(&aot_counter, &rx),
+            "AOT duplicate counter rejected");
     decode_runtime(schema, state, advanced, UINT32_C(321));
     require(pool[SLOT_PROTECTED_RX].raw == UINT64_C(51966),
             "SCIMG advanced counter decode");

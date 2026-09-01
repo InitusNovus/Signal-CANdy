@@ -41,15 +41,21 @@ module P0DifferentialTests =
                 startInfo.RedirectStandardError <- true
                 arguments |> List.iter startInfo.ArgumentList.Add
                 use childProcess = Process.Start(startInfo)
-                let stdout = childProcess.StandardOutput.ReadToEnd()
-                childProcess.WaitForExit()
+                let stdoutTask = childProcess.StandardOutput.ReadToEndAsync()
 
-                if childProcess.ExitCode = 0 then
-                    stdout.Split([| '\r'; '\n' |], StringSplitOptions.RemoveEmptyEntries)
-                    |> Array.tryHead
-                    |> Option.filter File.Exists
-                else
+                if not (childProcess.WaitForExit(10_000)) then
+                    childProcess.Kill(entireProcessTree = true)
+                    childProcess.WaitForExit()
                     None
+                else
+                    let stdout = stdoutTask.Result
+
+                    if childProcess.ExitCode = 0 then
+                        stdout.Split([| '\r'; '\n' |], StringSplitOptions.RemoveEmptyEntries)
+                        |> Array.tryHead
+                        |> Option.filter File.Exists
+                    else
+                        None
             with _ ->
                 None
 
@@ -60,9 +66,16 @@ module P0DifferentialTests =
         startInfo.RedirectStandardError <- true
         arguments |> List.iter startInfo.ArgumentList.Add
         use childProcess = Process.Start(startInfo)
-        let stdout = childProcess.StandardOutput.ReadToEnd()
-        let stderr = childProcess.StandardError.ReadToEnd()
-        childProcess.WaitForExit()
+        let stdoutTask = childProcess.StandardOutput.ReadToEndAsync()
+        let stderrTask = childProcess.StandardError.ReadToEndAsync()
+
+        if not (childProcess.WaitForExit(120_000)) then
+            childProcess.Kill(entireProcessTree = true)
+            childProcess.WaitForExit()
+            failwith $"process did not exit within the bounded timeout: {executable}"
+
+        let stdout = stdoutTask.Result
+        let stderr = stderrTask.Result
         childProcess.ExitCode, stdout, stderr
 
     [<Fact>]
