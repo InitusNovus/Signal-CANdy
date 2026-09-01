@@ -1,6 +1,7 @@
 namespace Signal.CANdy.Hardening.Tests
 
 open System.IO
+open System.Text.RegularExpressions
 open Xunit
 
 module EntrypointGateTests =
@@ -66,3 +67,33 @@ module EntrypointGateTests =
             workflow.IndexOf(restore) < workflow.IndexOf(hardening),
             "the hardening tool must be restored before its --no-restore build runs"
         )
+
+    [<Fact>]
+    let ``Release workflow publishes and releases from the selected tag`` () =
+        let workflow =
+            File.ReadAllText(Path.Combine(TestSupport.repoRoot, ".github", "workflows", "release.yml"))
+
+        Assert.Contains("echo \"tag=$TAG_NAME\" >> $GITHUB_OUTPUT", workflow)
+        Assert.Contains("echo \"prerelease=$IS_PRERELEASE\" >> $GITHUB_OUTPUT", workflow)
+        Assert.Contains("if [[ \"$VERSION\" == *-* ]]; then", workflow)
+
+        let stepBoundary = "(?:(?!\\r?\\n      - name:).)*?"
+
+        let publishPattern =
+            "(?s)if: \\$\\{\\{ steps\\.gate\\.outputs\\.skip == 'false' \\}\\}"
+            + stepBoundary
+            + "dotnet nuget push"
+
+        Assert.Matches(Regex(publishPattern), workflow)
+
+        let releasePattern prerelease =
+            "(?s)if: \\$\\{\\{ steps\\.gate\\.outputs\\.skip == 'false' && steps\\.ver\\.outputs\\.prerelease == '"
+            + prerelease
+            + "' \\}\\}"
+            + stepBoundary
+            + "uses: softprops/action-gh-release@v2"
+            + stepBoundary
+            + "tag_name: \\$\\{\\{ steps\\.ver\\.outputs\\.tag \\}\\}"
+
+        Assert.Matches(Regex(releasePattern "false"), workflow)
+        Assert.Matches(Regex(releasePattern "true"), workflow)

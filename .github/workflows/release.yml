@@ -71,8 +71,15 @@ jobs:
             echo "Invalid version derived from tag: '$VERSION' (tag='$TAG_NAME')" >&2
             exit 1
           fi
+          if [[ "$VERSION" == *-* ]]; then
+            IS_PRERELEASE=true
+          else
+            IS_PRERELEASE=false
+          fi
           echo "Detected version: $VERSION"
+          echo "tag=$TAG_NAME" >> $GITHUB_OUTPUT
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "prerelease=$IS_PRERELEASE" >> $GITHUB_OUTPUT
 
       - name: Setup .NET
         if: ${{ steps.gate.outputs.skip == 'false' }}
@@ -114,8 +121,8 @@ jobs:
           fi
           echo "Packages to publish:" ${files[@]}
 
-      - name: Publish NuGet packages (stable only)
-        if: ${{ steps.gate.outputs.skip == 'false' && !contains(github.ref_name, '-') }}
+      - name: Publish NuGet packages
+        if: ${{ steps.gate.outputs.skip == 'false' }}
         env:
           NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
         run: |
@@ -131,19 +138,19 @@ jobs:
           done
 
       - name: Create GitHub Release (stable)
-        if: ${{ steps.gate.outputs.skip == 'false' && !contains(github.ref_name, '-') }}
+        if: ${{ steps.gate.outputs.skip == 'false' && steps.ver.outputs.prerelease == 'false' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.tag }}
           generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Create GitHub Prerelease (preview tags)
-        if: ${{ steps.gate.outputs.skip == 'false' && contains(github.ref_name, '-') }}
+        if: ${{ steps.gate.outputs.skip == 'false' && steps.ver.outputs.prerelease == 'true' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ inputs.tag != '' && inputs.tag || github.ref_name }}
+          tag_name: ${{ steps.ver.outputs.tag }}
           generate_release_notes: true
           prerelease: true
         env:
