@@ -128,6 +128,19 @@ outputs:
          Path.Combine(secondRoot, "build", "schema_b.activation.json"))
 
     [<Fact>]
+    let ``Root help exposes the complete image command grammar`` () =
+        withRoot (fun root ->
+            let result = runCli root [ "--help" ]
+            Assert.Equal(0, result.ExitCode)
+            Assert.Empty(result.Stderr)
+            Assert.Contains("image inspect <image.scimg> [--out <inspect.json>]", result.Stdout)
+
+            Assert.Contains(
+                "image diff <before.scimg> <after.scimg> [--before-map <map.json>] [--after-map <map.json>] [--before-activation <activation.json>] [--after-activation <activation.json>] [--out <diff.json>]",
+                result.Stdout
+            ))
+
+    [<Fact>]
     let ``Image command help is exposed at every real CLI grammar level`` () =
         withRoot (fun root ->
             [ [ "image"; "--help" ], [ "image inspect"; "image diff" ]

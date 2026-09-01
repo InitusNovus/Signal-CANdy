@@ -31,6 +31,8 @@ module Cli =
               "  signal-candy scimg -d <dbc> -p <pool.json> -b <binding.json> -o <out.scimg> [--inspect <out.json>]"
               "  signal-candy project validate <manifest.yaml>"
               "  signal-candy project build <manifest.yaml>"
+              "  signal-candy image inspect <image.scimg> [--out <inspect.json>]"
+              "  signal-candy image diff <before.scimg> <after.scimg> [--before-map <map.json>] [--after-map <map.json>] [--before-activation <activation.json>] [--after-activation <activation.json>] [--out <diff.json>]"
               "  signal-candy --version"
               "  signal-candy --help"
               ""
