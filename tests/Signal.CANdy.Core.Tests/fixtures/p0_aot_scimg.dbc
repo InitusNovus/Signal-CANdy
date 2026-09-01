@@ -1,0 +1,33 @@
+VERSION ""
+
+NS_ :
+BS_:
+
+BO_ 256 DIFF_CLASSIC_TX: 8 Vector__XXX
+ SG_ LeValue : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
+BO_ 257 DIFF_CLASSIC_RX: 8 Vector__XXX
+ SG_ LeValue : 0|16@1+ (1,0) [0|65535] "" Vector__XXX
+BO_ 272 DIFF_FD_TX: 12 Vector__XXX
+ SG_ MotoValue : 0|8@0+ (1,0) [0|255] "" Vector__XXX
+BO_ 273 DIFF_FD_RX: 12 Vector__XXX
+ SG_ MotoValue : 0|8@0+ (1,0) [0|255] "" Vector__XXX
+BO_ 288 DIFF_SCALED_TX: 8 Vector__XXX
+ SG_ SignedScaled : 0|12@1- (0.25,-10) [-522|501.75] "unit" Vector__XXX
+BO_ 289 DIFF_SCALED_RX: 8 Vector__XXX
+ SG_ SignedScaled : 0|12@1- (0.25,-10) [-522|501.75] "unit" Vector__XXX
+BO_ 304 DIFF_MUX_TX: 8 Vector__XXX
+ SG_ Selector M : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ BaseValue : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BranchValue m1 : 16|16@1+ (1,0) [0|65535] "" Vector__XXX
+BO_ 305 DIFF_MUX_RX: 8 Vector__XXX
+ SG_ Selector M : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ BaseValue : 8|8@1+ (1,0) [0|255] "" Vector__XXX
+ SG_ BranchValue m1 : 16|16@1+ (1,0) [0|65535] "" Vector__XXX
+BO_ 320 DIFF_PROTECTED_TX: 8 Vector__XXX
+ SG_ Alive : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ ProtectedValue : 8|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ Crc8 : 56|8@1+ (1,0) [0|255] "" Vector__XXX
+BO_ 321 DIFF_PROTECTED_RX: 8 Vector__XXX
+ SG_ Alive : 0|4@1+ (1,0) [0|15] "" Vector__XXX
+ SG_ ProtectedValue : 8|16@1+ (1,0) [0|65535] "" Vector__XXX
+ SG_ Crc8 : 56|8@1+ (1,0) [0|255] "" Vector__XXX

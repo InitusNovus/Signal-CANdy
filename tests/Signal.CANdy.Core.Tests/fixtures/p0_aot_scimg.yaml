@@ -1,0 +1,28 @@
+phys_type: float
+phys_mode: float
+range_check: false
+dispatch: direct_map
+motorola_start_bit: lsb
+file_prefix: p0_
+crc_counter_check: true
+crc_counter:
+  mode: validate
+  messages:
+    DIFF_PROTECTED_TX:
+      crc:
+        signal: Crc8
+        algorithm: CRC8_SAE_J1850
+        byte_range: [0, 6]
+      counter:
+        signal: Alive
+        modulus: 16
+        increment: 1
+    DIFF_PROTECTED_RX:
+      crc:
+        signal: Crc8
+        algorithm: CRC8_SAE_J1850
+        byte_range: [0, 6]
+      counter:
+        signal: Alive
+        modulus: 16
+        increment: 1

@@ -1,0 +1,38 @@
+{
+  "version": "1",
+  "bindings": [
+    { "poolSignal": "ClassicTx", "message": "DIFF_CLASSIC_TX", "wireSignal": "LeValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "ClassicRx", "message": "DIFF_CLASSIC_RX", "wireSignal": "LeValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "FdTx", "message": "DIFF_FD_TX", "wireSignal": "MotoValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "FdRx", "message": "DIFF_FD_RX", "wireSignal": "MotoValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "ScaledTx", "message": "DIFF_SCALED_TX", "wireSignal": "SignedScaled", "conversion": { "kind": "identity" } },
+    { "poolSignal": "ScaledRx", "message": "DIFF_SCALED_RX", "wireSignal": "SignedScaled", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxSelectorTx", "message": "DIFF_MUX_TX", "wireSignal": "Selector", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxBaseTx", "message": "DIFF_MUX_TX", "wireSignal": "BaseValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxBranchTx", "message": "DIFF_MUX_TX", "wireSignal": "BranchValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxSelectorRx", "message": "DIFF_MUX_RX", "wireSignal": "Selector", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxBaseRx", "message": "DIFF_MUX_RX", "wireSignal": "BaseValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "MuxBranchRx", "message": "DIFF_MUX_RX", "wireSignal": "BranchValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "ProtectedTx", "message": "DIFF_PROTECTED_TX", "wireSignal": "ProtectedValue", "conversion": { "kind": "identity" } },
+    { "poolSignal": "ProtectedRx", "message": "DIFF_PROTECTED_RX", "wireSignal": "ProtectedValue", "conversion": { "kind": "identity" } }
+  ],
+  "rxMessages": [
+    {
+      "message": "DIFF_PROTECTED_RX",
+      "crc": { "wireSignal": "Crc8", "algorithm": "crc8-sae-j1850", "byteRange": { "start": 0, "end": 7 } },
+      "counter": { "wireSignal": "Alive", "modulus": 16, "increment": 1 }
+    }
+  ],
+  "txMessages": [
+    { "message": "DIFF_CLASSIC_TX", "logicalMessageId": 1001 },
+    { "message": "DIFF_FD_TX", "logicalMessageId": 1002 },
+    { "message": "DIFF_SCALED_TX", "logicalMessageId": 1003 },
+    { "message": "DIFF_MUX_TX", "logicalMessageId": 1004 },
+    {
+      "message": "DIFF_PROTECTED_TX",
+      "logicalMessageId": 1005,
+      "crc": { "wireSignal": "Crc8", "algorithm": "crc8-sae-j1850", "byteRange": { "start": 0, "end": 7 } },
+      "counter": { "wireSignal": "Alive", "modulus": 16, "increment": 1, "initialValue": 0 }
+    }
+  ]
+}

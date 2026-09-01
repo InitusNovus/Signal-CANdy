@@ -40,6 +40,7 @@
     <Compile Include="ProjectCliTests.fs" />
     <Compile Include="ImageCliTests.fs" />
     <Compile Include="DifferentialTests.fs" />
+    <Compile Include="P0DifferentialTests.fs" />
   </ItemGroup>
 
   <ItemGroup>

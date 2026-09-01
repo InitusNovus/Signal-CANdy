@@ -1,0 +1,20 @@
+{
+  "name": "p0_aot_scimg_pool",
+  "version": "1",
+  "signals": [
+    { "name": "ClassicTx", "semanticId": 1, "storage": "u16", "unit": "", "direction": "tx" },
+    { "name": "ClassicRx", "semanticId": 2, "storage": "u16", "unit": "", "direction": "rx" },
+    { "name": "FdTx", "semanticId": 3, "storage": "u16", "unit": "", "direction": "tx" },
+    { "name": "FdRx", "semanticId": 4, "storage": "u16", "unit": "", "direction": "rx" },
+    { "name": "ScaledTx", "semanticId": 5, "storage": "f64", "unit": "unit", "direction": "tx" },
+    { "name": "ScaledRx", "semanticId": 6, "storage": "f64", "unit": "unit", "direction": "rx" },
+    { "name": "MuxSelectorTx", "semanticId": 7, "storage": "u8", "unit": "", "direction": "tx" },
+    { "name": "MuxBaseTx", "semanticId": 8, "storage": "u8", "unit": "", "direction": "tx" },
+    { "name": "MuxBranchTx", "semanticId": 9, "storage": "u16", "unit": "", "direction": "tx" },
+    { "name": "MuxSelectorRx", "semanticId": 10, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "MuxBaseRx", "semanticId": 11, "storage": "u8", "unit": "", "direction": "rx" },
+    { "name": "MuxBranchRx", "semanticId": 12, "storage": "u16", "unit": "", "direction": "rx" },
+    { "name": "ProtectedTx", "semanticId": 13, "storage": "u16", "unit": "", "direction": "tx" },
+    { "name": "ProtectedRx", "semanticId": 14, "storage": "u16", "unit": "", "direction": "rx" }
+  ]
+}
