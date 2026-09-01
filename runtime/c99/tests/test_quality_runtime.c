@@ -20,6 +20,20 @@
 #define TX_OFFSET 144u
 #define TX_SIZE 104u
 
+#define DEPTH_IMAGE_SIZE 376u
+#define DEPTH_MESSAGE_OFFSET 64u
+#define DEPTH_PROGRAM_OFFSET 72u
+#define DEPTH_CONVERSION_OFFSET 152u
+#define DEPTH_SYMBOL_OFFSET 176u
+#define DEPTH_EXTENSION_OFFSET 204u
+#define DEPTH_QUALITY_OFFSET 148u
+#define DEPTH_CRC_OFFSET 372u
+#define DEPTH_SLOT_COUNT 5u
+#define DEPTH_PROGRAM_COUNT 5u
+#define DEPTH_NESTED_COUNT 3u
+/* UINT32_MAX is the SCIMG v1 unconditional-program sentinel. */
+#define V1_MAX_BRANCH_VALUE UINT32_C(0xFFFFFFFE)
+
 #define RX_QUALITY_MASK                                                       \
     (SC_SLOT_VALID | SC_SLOT_UPDATED | SC_SLOT_CHANGED | SC_SLOT_STALE)
 
@@ -100,6 +114,22 @@ static void put_nested_record(uint8_t *entry, uint16_t target,
     entry[3] = 0u;
     put_predicate(entry + 4, 0u, 0u, 1u);
     put_predicate(entry + 12, 1u, 1u, inner_expected);
+}
+
+static void put_nested_path_record(uint8_t *entry, uint16_t target,
+                                   uint8_t depth)
+{
+    uint8_t predicate;
+
+    memset(entry, 0xFF, NESTED_RECORD_SIZE);
+    put_u16(entry, target);
+    entry[2] = depth;
+    entry[3] = 0u;
+    for (predicate = 0u; predicate < depth && predicate < 4u;
+         ++predicate) {
+        put_predicate(entry + 4u + (size_t)predicate * 8u,
+                      predicate, predicate, V1_MAX_BRANCH_VALUE);
+    }
 }
 
 static void append_name(uint8_t *image, size_t *cursor, const char *name)
@@ -226,6 +256,90 @@ static void build_fixture(uint8_t *image)
     put_u32(image + CRC_OFFSET, fixture_crc32(image, CRC_OFFSET));
 }
 
+static void build_depth_four_fixture(uint8_t *image)
+{
+    uint8_t *extension;
+    size_t cursor;
+    unsigned i;
+
+    memset(image, 0, DEPTH_IMAGE_SIZE);
+    memcpy(image, "SCIMG01\0", 8u);
+    put_u16(image + 8u, 1u);
+    put_u16(image + 10u, 2u);
+    put_u32(image + 12u, DEPTH_IMAGE_SIZE);
+    put_u16(image + 16u, 1u);
+    put_u16(image + 18u, DEPTH_PROGRAM_COUNT);
+    put_u16(image + 20u, 1u);
+    put_u16(image + 22u, DEPTH_SLOT_COUNT);
+    put_u32(image + 24u, DEPTH_EXTENSION_OFFSET);
+    put_u32(image + 28u,
+            DEPTH_IMAGE_SIZE - DEPTH_EXTENSION_OFFSET - 4u);
+
+    put_u32(image + 32u, DEPTH_MESSAGE_OFFSET);
+    put_u32(image + 36u, 8u);
+    put_u32(image + 40u, DEPTH_PROGRAM_OFFSET);
+    put_u32(image + 44u, 16u * DEPTH_PROGRAM_COUNT);
+    put_u32(image + 48u, DEPTH_CONVERSION_OFFSET);
+    put_u32(image + 52u, 24u);
+    put_u32(image + 56u, DEPTH_SYMBOL_OFFSET);
+    put_u32(image + 60u, DEPTH_EXTENSION_OFFSET - DEPTH_SYMBOL_OFFSET);
+
+    put_u32(image + DEPTH_MESSAGE_OFFSET, UINT32_C(0x325));
+    put_u16(image + DEPTH_MESSAGE_OFFSET + 4u, DEPTH_PROGRAM_COUNT);
+    put_u16(image + DEPTH_MESSAGE_OFFSET + 6u, 0u);
+
+    put_program(image + DEPTH_PROGRAM_OFFSET, 0u, 32u, 0u,
+                UINT16_MAX, UINT32_MAX);
+    for (i = 1u; i < DEPTH_PROGRAM_COUNT; ++i) {
+        uint16_t start = i == DEPTH_PROGRAM_COUNT - 1u
+            ? 128u : (uint16_t)(i * 32u);
+        uint16_t length = i == DEPTH_PROGRAM_COUNT - 1u ? 8u : 32u;
+        put_program(image + DEPTH_PROGRAM_OFFSET + i * 16u,
+                    start, length, (uint16_t)i, 0u,
+                    V1_MAX_BRANCH_VALUE);
+    }
+
+    image[DEPTH_CONVERSION_OFFSET] = 0u;
+    put_u64(image + DEPTH_CONVERSION_OFFSET + 8u,
+            UINT64_C(0x3FF0000000000000));
+    put_u64(image + DEPTH_CONVERSION_OFFSET + 16u, 0u);
+
+    put_u16(image + DEPTH_SYMBOL_OFFSET, DEPTH_SLOT_COUNT);
+    put_u16(image + DEPTH_SYMBOL_OFFSET + 2u, 1u);
+    cursor = DEPTH_SYMBOL_OFFSET + 4u;
+    for (i = 0u; i < DEPTH_SLOT_COUNT; ++i) {
+        char name[3];
+        name[0] = 'd';
+        name[1] = (char)('0' + i);
+        name[2] = '\0';
+        append_name(image, &cursor, name);
+    }
+    append_name(image, &cursor, "m4");
+
+    extension = image + DEPTH_EXTENSION_OFFSET;
+    put_u32(extension, UINT32_C(0x31305845));
+    put_u16(extension + 4u, 3u);
+    extension[6] = 4u;
+    extension[7] = 0u;
+    put_u16(extension + 8u, DEPTH_NESTED_COUNT);
+    put_u16(extension + 10u, DEPTH_SLOT_COUNT);
+    put_u32(extension + 12u, EX_HEADER_SIZE);
+    put_u32(extension + 16u, DEPTH_QUALITY_OFFSET);
+    put_u32(extension + 20u,
+            DEPTH_QUALITY_OFFSET + DEPTH_SLOT_COUNT * 4u);
+    put_u32(extension + 24u, 0u);
+
+    put_nested_path_record(extension + EX_HEADER_SIZE, 2u, 2u);
+    put_nested_path_record(extension + EX_HEADER_SIZE + NESTED_RECORD_SIZE,
+                           3u, 3u);
+    put_nested_path_record(extension + EX_HEADER_SIZE +
+                               2u * NESTED_RECORD_SIZE,
+                           4u, 4u);
+
+    put_u32(image + DEPTH_CRC_OFFSET,
+            fixture_crc32(image, DEPTH_CRC_OFFSET));
+}
+
 static void set_mux_frame(sc_frame_t *frame, uint8_t outer, uint8_t inner,
                           uint8_t nested, uint8_t outer_value,
                           uint8_t disabled, uint8_t gated)
@@ -254,13 +368,21 @@ static void report(const char *name, int passed)
 int main(void)
 {
     uint8_t image[IMAGE_SIZE];
+    uint8_t depth_image[DEPTH_IMAGE_SIZE];
+    uint8_t depth_five_image[DEPTH_IMAGE_SIZE];
     aligned_storage_t schema_storage;
     aligned_storage_t other_schema_storage;
+    aligned_storage_t depth_schema_storage;
+    aligned_storage_t depth_reject_schema_storage;
     aligned_storage_t state_storage;
     aligned_storage_t wrap_state_storage;
     aligned_storage_t foreign_state_storage;
     sc_schema_t *schema = (sc_schema_t *)(void *)schema_storage.bytes;
     sc_schema_t *other = (sc_schema_t *)(void *)other_schema_storage.bytes;
+    sc_schema_t *depth_schema =
+        (sc_schema_t *)(void *)depth_schema_storage.bytes;
+    sc_schema_t *depth_reject_schema =
+        (sc_schema_t *)(void *)depth_reject_schema_storage.bytes;
     sc_runtime_state_t *state =
         (sc_runtime_state_t *)(void *)state_storage.bytes;
     sc_runtime_state_t *wrap_state =
@@ -269,12 +391,16 @@ int main(void)
         (sc_runtime_state_t *)(void *)foreign_state_storage.bytes;
     sc_slot_t pool[SLOT_COUNT];
     sc_slot_t snapshot[SLOT_COUNT];
+    sc_slot_t depth_pool[DEPTH_SLOT_COUNT];
     sc_frame_t frame;
     size_t state_bytes;
     uint8_t state_snapshot[512];
     uint64_t raw_snapshot[SLOT_COUNT];
     unsigned i;
     int passed;
+    int first_cycle_passed;
+    int first_refresh_passed;
+    int depth_decode_passed;
 
     build_fixture(image);
     memset(&schema_storage, 0, sizeof(schema_storage));
@@ -340,12 +466,14 @@ int main(void)
              sc_expire(schema, state, 132u, pool, SLOT_COUNT) == SC_OK &&
              (pool[2].flags & SC_SLOT_STALE) != 0u &&
              pool[2].raw == UINT64_C(0xAA);
-    report("freshness threshold minus one and exact threshold", passed);
+    first_cycle_passed = passed;
+    report("exact freshness expiry boundary", passed);
 
     set_mux_frame(&frame, 1u, 1u, 0xAAu, 0x48u, 0x59u, 0x6Au);
     passed = sc_decode_at(schema, state, 140u, &frame, pool, SLOT_COUNT) ==
                  SC_OK &&
              pool[2].raw == UINT64_C(0xAA) && pool[2].flags == 3u;
+    first_refresh_passed = passed;
     report("same value refresh clears stale without changed", passed);
 
     passed = sc_expire(schema, state, 172u, pool, SLOT_COUNT) == SC_OK &&
@@ -355,7 +483,8 @@ int main(void)
              sc_decode_at(schema, state, 180u, &frame, pool, SLOT_COUNT) ==
                  SC_OK &&
              pool[2].raw == UINT64_C(0xAB) && pool[2].flags == 7u;
-    report("changed value refresh clears stale and sets changed", passed);
+    passed = first_cycle_passed && first_refresh_passed && passed;
+    report("repeated stale/refresh cycles", passed);
 
     snapshot[5] = pool[5];
     pool[6].flags = SC_SLOT_VALID;
@@ -388,7 +517,7 @@ int main(void)
              sc_expire(schema, wrap_state, UINT32_C(0x00000010), pool,
                        SLOT_COUNT) == SC_OK &&
              (pool[2].flags & SC_SLOT_STALE) != 0u;
-    report("u32 wrap computes inclusive freshness age", passed);
+    report("uint32 now_ms wrap boundary", passed);
 
     memcpy(snapshot, pool, sizeof(pool));
     memcpy(state_snapshot, wrap_state, state_bytes);
@@ -396,7 +525,7 @@ int main(void)
                        SLOT_COUNT) == SC_ERR_TIME &&
              memcmp(snapshot, pool, sizeof(pool)) == 0 &&
              memcmp(state_snapshot, wrap_state, state_bytes) == 0;
-    report("time regression is mutation free", passed);
+    report("uint32 now_ms regression handling", passed);
 
     memcpy(snapshot, pool, sizeof(pool));
     memcpy(state_snapshot, wrap_state, state_bytes);
@@ -454,6 +583,50 @@ int main(void)
              (pool[2].flags & SC_SLOT_STALE) != 0u &&
              memcmp(state_snapshot, state, state_bytes) == 0;
     report("plain decode preserves stale and freshness state", passed);
+
+    build_depth_four_fixture(depth_image);
+    memset(&depth_schema_storage, 0, sizeof(depth_schema_storage));
+    passed = sc_schema_open(depth_schema, depth_image,
+                            sizeof(depth_image)) == SC_OK &&
+             sc_schema_message_count(depth_schema) == 1u &&
+             sc_schema_signal_count(depth_schema) == DEPTH_SLOT_COUNT;
+    report("open runtime depth-four v1 image", passed);
+
+    memset(depth_pool, 0, sizeof(depth_pool));
+    memset(&frame, 0, sizeof(frame));
+    frame.id = UINT32_C(0x325);
+    frame.len = 17u;
+    for (i = 0u; i < 4u; ++i) {
+        put_u32(frame.data + i * 4u, V1_MAX_BRANCH_VALUE);
+    }
+    frame.data[16] = UINT8_C(0xA5);
+    depth_decode_passed =
+        passed && sc_decode(depth_schema, &frame, depth_pool,
+                            DEPTH_SLOT_COUNT) == SC_OK;
+    passed = depth_decode_passed;
+    for (i = 0u; i < 4u; ++i) {
+        passed = passed &&
+                 depth_pool[i].raw == V1_MAX_BRANCH_VALUE &&
+                 depth_pool[i].flags ==
+                     (SC_SLOT_VALID | SC_SLOT_UPDATED);
+    }
+    report("v1 maximum 32-bit selector and branch value", passed);
+    passed = depth_decode_passed &&
+             depth_pool[4].raw == UINT64_C(0xA5) &&
+             depth_pool[4].flags ==
+                 (SC_SLOT_VALID | SC_SLOT_UPDATED);
+    report("runtime depth-four nested mux happy path", passed);
+
+    memcpy(depth_five_image, depth_image, sizeof(depth_image));
+    depth_five_image[DEPTH_EXTENSION_OFFSET + EX_HEADER_SIZE +
+                     2u * NESTED_RECORD_SIZE + 2u] = 5u;
+    put_u32(depth_five_image + DEPTH_CRC_OFFSET,
+            fixture_crc32(depth_five_image, DEPTH_CRC_OFFSET));
+    memset(&depth_reject_schema_storage, 0,
+           sizeof(depth_reject_schema_storage));
+    report("runtime rejects nested mux depth five",
+           sc_schema_open(depth_reject_schema, depth_five_image,
+                          sizeof(depth_five_image)) == SC_ERR_TABLE);
 
     if (failure_count != 0u) {
         printf("FAILED (%u of %u tests)\n", failure_count, test_count);
