@@ -32,6 +32,21 @@ jobs:
         run: |
           dotnet test -v minimal --nologo --configuration Release
 
+      - name: Install Clang for runtime C99 suites
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes clang
+
+      - name: Run runtime C99 boundary suites
+        run: |
+          bash runtime/c99/tests/run_quality_tests.sh
+          bash runtime/c99/tests/run_protection_tests.sh
+          bash runtime/c99/tests/run_activation_tests.sh
+          bash runtime/c99/tests/run_activation_tests_sanitized.sh
+          bash runtime/c99/tests/run_tx_tests.sh
+          bash runtime/c99/tests/run_schema_open_harness.sh --representatives hardening/bases/activation-a.scimg
+          bash runtime/c99/tests/run_schema_open_harness_sanitized.sh --representatives hardening/bases/activation-a.scimg
+
       - name: Codegen C (fixed_suite)
         run: |
           dotnet run --project src/Generator -- --dbc examples/fixed_suite.dbc --out gen --config examples/config_directmap_fixed.yaml --prefix sc_ --emit-main true
