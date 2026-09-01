@@ -14,22 +14,11 @@ module PropertyGateTests =
             let pack = Path.Combine(temporary, "deterministic.scorp")
             let summary = Path.Combine(temporary, "properties.json")
 
-            let driver =
-                Path.Combine(
-                    TestSupport.repoRoot,
-                    "tools",
-                    "Signal.CANdy.Hardening",
-                    "bin",
-                    "Release",
-                    "net8.0",
-                    "Signal.CANdy.Hardening.dll"
-                )
-
             let result =
                 TestSupport.runProcess
                     TestSupport.repoRoot
                     "dotnet"
-                    [ driver
+                    [ TestSupport.hardeningDriverPath
                       "generate"
                       "--seed"
                       sprintf "0x%016X" Contract.RootSeed
@@ -57,20 +46,12 @@ module PropertyGateTests =
     let ``replay and minimization commands preserve a stable case identity`` () =
         let plan = Contract.cases.[417]
 
-        let driver =
-            Path.Combine(
-                TestSupport.repoRoot,
-                "tools",
-                "Signal.CANdy.Hardening",
-                "bin",
-                "Release",
-                "net8.0",
-                "Signal.CANdy.Hardening.dll"
-            )
-
         for command in [ "replay"; "minimize" ] do
             let result =
-                TestSupport.runProcess TestSupport.repoRoot "dotnet" [ driver; command; "--case-id"; plan.Id ]
+                TestSupport.runProcess
+                    TestSupport.repoRoot
+                    "dotnet"
+                    [ TestSupport.hardeningDriverPath; command; "--case-id"; plan.Id ]
 
             Assert.True(result.ExitCode = 0, result.StandardError)
             Assert.Contains(plan.Id, result.StandardOutput)

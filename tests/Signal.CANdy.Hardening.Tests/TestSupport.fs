@@ -8,6 +8,9 @@ module TestSupport =
 
     let repoRoot = Path.GetFullPath(Path.Combine(__SOURCE_DIRECTORY__, "..", ".."))
 
+    let hardeningDriverPath =
+        Path.Combine(AppContext.BaseDirectory, "Signal.CANdy.Hardening.dll")
+
     type ProcessResult =
         { ExitCode: int
           StandardOutput: string
