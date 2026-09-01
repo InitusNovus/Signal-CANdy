@@ -973,7 +973,10 @@ int main(void)
     {
         sc_activation_controller_t controller_before = controller;
         sc_activation_token_t token_before = token;
+        sc_activation_slot_t previous_before;
         sc_slot_t before_pool[ACT_POOL_COUNT];
+        memset(&previous_before, 0xA5, sizeof(previous_before));
+        previous = previous_before;
         memcpy(before_pool, pool, sizeof(before_pool));
         passed = passed &&
                  sc_activation_commit(&controller, &token, &previous) ==
@@ -981,6 +984,7 @@ int main(void)
                  memcmp(&controller_before, &controller,
                         sizeof(controller)) == 0 &&
                  memcmp(&token_before, &token, sizeof(token)) == 0 &&
+                 memcmp(&previous_before, &previous, sizeof(previous)) == 0 &&
                  memcmp(before_pool, pool, sizeof(before_pool)) == 0 &&
                  sc_activation_view(&controller, &view) == SC_OK &&
                  view.descriptor == &descriptor_a && view.generation == 1u &&
@@ -988,6 +992,25 @@ int main(void)
     }
     report(&tests, &failures,
            "commit rejects outstanding TX reservation without mutation",
+           passed);
+    {
+        sc_activation_controller_t controller_before = controller;
+        sc_activation_token_t token_before = token;
+        sc_activation_slot_t previous_before;
+        uint16_t saved_counter_count = storage_a.state->counter_count;
+        memset(&previous_before, 0x5A, sizeof(previous_before));
+        previous = previous_before;
+        storage_a.state->counter_count = UINT16_MAX;
+        passed = sc_activation_commit(&controller, &token, &previous) ==
+                     SC_ERR_STATE &&
+                 memcmp(&controller_before, &controller,
+                        sizeof(controller)) == 0 &&
+                 memcmp(&token_before, &token, sizeof(token)) == 0 &&
+                 memcmp(&previous_before, &previous, sizeof(previous)) == 0;
+        storage_a.state->counter_count = saved_counter_count;
+    }
+    report(&tests, &failures,
+           "commit rejects corrupted active state without scanning or mutation",
            passed);
     for (i = 0u; i < ACT_POOL_COUNT; ++i) {
         pool[i].raw = UINT64_C(0xFFEEDDCCBBAA0000) + i;

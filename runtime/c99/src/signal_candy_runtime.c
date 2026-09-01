@@ -677,6 +677,9 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
                     if (expected_width == 0u || plan[2] != expected_width ||
                         sc_read_u16(plan + 4u) == UINT16_C(0xFFFF) ||
                         (sc_read_u16(plan + 4u) & 7u) != 0u || count == 0u ||
+                        (uint32_t)sc_read_u16(plan + 4u) +
+                                (uint32_t)expected_width * 8u >
+                            512u ||
                         count > 2u || first_span != expected_span ||
                         (uint32_t)first_span + count > span_count) {
                         return SC_ERR_TABLE;
@@ -724,6 +727,7 @@ sc_status_t sc_schema_open(sc_schema_t *schema, const void *image,
                 uint32_t increment = sc_read_u32(counter + 12u);
                 if (length == 0u || length > 32u || counter[4] > 1u ||
                     !sc_bytes_are_zero(counter, 5u, 8u) || increment == 0u ||
+                    (uint32_t)sc_read_u16(counter) + length > 512u ||
                     modulus == 1u || (modulus == 0u && length != 32u) ||
                     (modulus != 0u && increment >= modulus) ||
                     (length < 32u && modulus != 0u &&
@@ -1412,7 +1416,12 @@ SC_LOCAL sc_status_t sc_decode_impl(const sc_schema_t *schema,
 
     wanted_id = frame->id;
     if ((frame->flags & SC_FRAME_EXTENDED) != 0u) {
+        if (wanted_id > UINT32_C(0x1FFFFFFF)) {
+            return SC_ERR_BOUNDS;
+        }
         wanted_id |= UINT32_C(0x80000000);
+    } else if (wanted_id > UINT32_C(0x7FF)) {
+        return SC_ERR_BOUNDS;
     }
     for (i = 0u; i < schema->message_count; ++i) {
         const uint8_t *candidate = schema->image + schema->msg_offset +
@@ -2662,9 +2671,14 @@ SC_LOCAL int sc_activation_has_pending_tx(
     const sc_activation_controller_t *controller)
 {
     const sc_runtime_state_t *state = controller->active.storage.state;
+    const sc_schema_t *schema = controller->active.storage.schema;
     uint16_t i;
 
     if (state == NULL) return 0;
+    if (state->schema != schema ||
+        state->counter_count != schema->counter_count) {
+        return -1;
+    }
     for (i = 0u; i < state->counter_count; ++i) {
         if (state->counters[i].pending_generation != 0u) return 1;
     }
@@ -2684,7 +2698,8 @@ sc_status_t sc_activation_commit(sc_activation_controller_t *controller,
                            sizeof(*token))) return SC_ERR_VALUE;
     status = sc_validate_activation_token(controller, token);
     if (status != SC_OK) return status;
-    if (sc_activation_has_pending_tx(controller)) return SC_ERR_BUSY;
+    if (sc_activation_has_pending_tx(controller) < 0) return SC_ERR_STATE;
+    if (sc_activation_has_pending_tx(controller) > 0) return SC_ERR_BUSY;
 
     old = controller->active;
     sc_reset_pool_flags(controller->pending.storage.schema, controller->pool);
