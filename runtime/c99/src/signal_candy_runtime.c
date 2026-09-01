@@ -2460,6 +2460,7 @@ SC_LOCAL sc_status_t sc_preflight_descriptor(
     if (descriptor->pool_slots != parsed->pool_slot_count) return SC_ERR_POOL;
     if (descriptor->runtime_scratch_bytes > scratch_capacity) return SC_ERR_SCRATCH;
     if (descriptor->pool_slots > pool_count) return SC_ERR_POOL;
+    if (pool_count > (size_t)-1 / sizeof(sc_slot_t)) return SC_ERR_POOL;
     return sc_validate_storage(parsed, storage);
 }
 

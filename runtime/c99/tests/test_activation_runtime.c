@@ -701,6 +701,11 @@ int main(void)
            init_failure_is_atomic(&controller, &target, &descriptor_a,
                                   &storage_a, SC_ERR_POOL));
     target = make_target(pool, pool_hash);
+    target.pool_count = (size_t)-1 / sizeof(sc_slot_t) + 1u;
+    report(&tests, &failures, "initial pool span wrap failure is atomic",
+           init_failure_is_atomic(&controller, &target, &descriptor_a,
+                                  &storage_a, SC_ERR_POOL));
+    target = make_target(pool, pool_hash);
     target.supported_features &= ~SC_RUNTIME_FEATURE_TX_COUNTER;
     report(&tests, &failures, "initial feature capacity failure is atomic",
            init_failure_is_atomic(&controller, &target, &descriptor_a,
