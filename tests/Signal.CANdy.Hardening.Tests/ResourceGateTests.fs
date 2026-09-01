@@ -220,20 +220,13 @@ module ResourceGateTests =
                 writer.WriteEndObject()
                 writer.Flush()
 
-            let project =
-                Path.Combine(TestSupport.repoRoot, "tools", "Signal.CANdy.Hardening", "Signal.CANdy.Hardening.fsproj")
-
             let receipt = fixturePath "cc1a-activation-receipt.json"
 
             let result =
                 TestSupport.runProcess
                     TestSupport.repoRoot
                     "dotnet"
-                    [ "run"
-                      "--no-restore"
-                      "--project"
-                      project
-                      "--"
+                    [ TestSupport.hardeningDriverPath
                       "verify-budget"
                       "--manifest"
                       manifestPath
@@ -260,18 +253,11 @@ module ResourceGateTests =
     [<Fact>]
     [<Trait("Issue25Gate", "Resources")>]
     let ``C runtime object has no heap references or mutable static storage`` () =
-        let project =
-            Path.Combine(TestSupport.repoRoot, "tools", "Signal.CANdy.Hardening", "Signal.CANdy.Hardening.fsproj")
-
         let result =
             TestSupport.runProcess
                 TestSupport.repoRoot
                 "dotnet"
-                [ "run"
-                  "--no-restore"
-                  "--project"
-                  project
-                  "--"
+                [ TestSupport.hardeningDriverPath
                   "scan-runtime"
                   "--source"
                   "runtime/c99/src/signal_candy_runtime.c" ]
@@ -283,9 +269,6 @@ module ResourceGateTests =
     [<Fact>]
     [<Trait("Issue25Gate", "Resources")>]
     let ``strict verifier rejects duplicate unknown and malformed manifest fields`` () =
-        let project =
-            Path.Combine(TestSupport.repoRoot, "tools", "Signal.CANdy.Hardening", "Signal.CANdy.Hardening.fsproj")
-
         for name, text in
             [ "duplicate", "{\"format\":\"sc.build-budget/v1\",\"format\":\"sc.build-budget/v1\"}"
               "unknown", "{\"format\":\"sc.build-budget/v1\",\"unknown\":0}"
@@ -298,14 +281,7 @@ module ResourceGateTests =
                     TestSupport.runProcess
                         TestSupport.repoRoot
                         "dotnet"
-                        [ "run"
-                          "--no-restore"
-                          "--project"
-                          project
-                          "--"
-                          "verify-budget"
-                          "--manifest"
-                          path ]
+                        [ TestSupport.hardeningDriverPath; "verify-budget"; "--manifest"; path ]
 
                 Assert.NotEqual(0, result.ExitCode)
                 Assert.Contains("SCBUDGET002", result.StandardError))
