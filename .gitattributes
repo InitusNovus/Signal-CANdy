@@ -1,2 +1,3 @@
-Signal.CANdy.sln whitespace=cr-at-eol
-src/Signal.CANdy/Library.fs whitespace=cr-at-eol
+Signal.CANdy.sln text eol=crlf whitespace=cr-at-eol
+src/Signal.CANdy/Library.fs text eol=crlf whitespace=cr-at-eol
+src/Signal.CANdy/Signal.CANdy.fsproj text eol=crlf whitespace=cr-at-eol
