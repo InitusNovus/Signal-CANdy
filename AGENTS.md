@@ -184,7 +184,7 @@ let ``Validation fails for duplicate message IDs`` () =
 | YamlDotNet | 16.3.0 | Core — YAML config loading |
 | Scriban | 7.2.2 | Core — C code generation templates |
 | FsUnit.xUnit | 7.1.1 | Tests — assertion matchers |
-| xunit | 2.5.3 | Tests — test framework |
+| xunit | 2.6.6 | Tests — test framework |
 | Microsoft.NET.Test.Sdk | 17.8.0 | Tests — test SDK |
 
 ## Things to Avoid
