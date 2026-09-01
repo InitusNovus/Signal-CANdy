@@ -8,8 +8,11 @@ open Signal.CANdy.Core.ProjectManifest
 
 module ProjectManifestTests =
 
+    let private normalizeLf (text: string) = text.Replace("\r\n", "\n")
+
     let private validYaml =
-        """format: sc.project/v1
+        normalizeLf
+            """format: sc.project/v1
 name: scimg-protection-demo
 pool:
   definition: pool.json

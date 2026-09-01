@@ -8,6 +8,8 @@ open Signal.CANdy.Core.RuntimeCapabilities
 
 module RuntimeCapabilitiesTests =
 
+    let private normalizeLf (text: string) = text.Replace("\r\n", "\n")
+
     let private limitNames =
         [ "maxImageBytes"
           "maxRuntimeStateBytes"
@@ -29,7 +31,8 @@ module RuntimeCapabilitiesTests =
           "maxPayloadBytes" ]
 
     let private validJson =
-        """{
+        normalizeLf
+            """{
   "format": "sc.runtime-capabilities/v1",
   "runtimeImageMajor": 1,
   "runtimeImageMinor": 0,
@@ -294,7 +297,8 @@ module RuntimeCapabilitiesTests =
               Limits = limits }
 
         let expected =
-            """{
+            normalizeLf
+                """{
   "format": "sc.runtime-capabilities/v1",
   "runtimeImageMajor": 1,
   "runtimeImageMinor": 0,
