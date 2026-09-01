@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/../../.."
 if [[ $# -lt 1 ]]; then
-  echo "usage: run_schema_open_harness.sh (--pack corpus.scorp | --image case-id image.scimg)" >&2
+  echo "usage: run_schema_open_harness.sh (--pack corpus.scorp | --representatives valid.scimg | --image case-id image.scimg)" >&2
   exit 2
 fi
 work="$(mktemp -d)"

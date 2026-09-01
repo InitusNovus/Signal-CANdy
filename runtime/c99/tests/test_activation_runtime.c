@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "malformed_image_representatives.h"
+
 #define ACT_IMAGE_SIZE 428u
 #define ACT_EXTENSION_OFFSET 144u
 #define ACT_PROFILE_OFFSET 56u
@@ -559,8 +561,7 @@ int main(void)
 {
     uint8_t image_a[ACT_IMAGE_SIZE];
     uint8_t image_b[ACT_IMAGE_SIZE];
-    uint8_t image_c[ACT_IMAGE_SIZE];
-    uint8_t unsupported_image[ACT_IMAGE_SIZE];
+    uint8_t malformed_image[ACT_IMAGE_SIZE];
     uint8_t pool_hash[32];
     aligned_storage_t schema_a_storage;
     aligned_storage_t schema_b_storage;
@@ -572,7 +573,6 @@ int main(void)
     sc_activation_controller_t foreign_controller;
     sc_activation_descriptor_t descriptor_a;
     sc_activation_descriptor_t descriptor_b;
-    sc_activation_descriptor_t descriptor_c;
     sc_activation_descriptor_t bad;
     sc_activation_target_t target;
     sc_activation_target_t foreign_target;
@@ -605,12 +605,8 @@ int main(void)
                              ACT_SCHEMA_A_TX_ID, 0u);
     build_activation_fixture(image_b, ACT_SCHEMA_B_RX_ID,
                              ACT_SCHEMA_B_TX_ID, 9u);
-    memcpy(image_c, image_b, sizeof(image_c));
-    image_c[64] ^= UINT8_C(0x01);
     descriptor_a = make_descriptor(image_a, pool_hash);
     descriptor_b = make_descriptor(image_b, pool_hash);
-    descriptor_c = descriptor_b;
-    descriptor_c.image = image_c;
 
     report(&tests, &failures, "public activation constants are exact",
            SC_ACTIVATION_DESCRIPTOR_VERSION_MAJOR == UINT16_C(1) &&
@@ -649,6 +645,22 @@ int main(void)
     target = make_target(pool, pool_hash);
     storage_a = make_storage(&schema_a_storage, &state_a_storage,
                              sizeof(state_a_storage.bytes));
+
+    target.runtime_abi += 1u;
+    report(&tests, &failures, "target runtime ABI mismatch is atomic",
+           init_failure_is_atomic(&controller, &target, &descriptor_a,
+                                  &storage_a, SC_ERR_VERSION));
+    target = make_target(pool, pool_hash);
+    target.runtime_image_major += 1u;
+    report(&tests, &failures, "target image major mismatch is atomic",
+           init_failure_is_atomic(&controller, &target, &descriptor_a,
+                                  &storage_a, SC_ERR_VERSION));
+    target = make_target(pool, pool_hash);
+    target.pool_abi_sha256[0] ^= 1u;
+    report(&tests, &failures, "target pool hash mismatch is atomic",
+           init_failure_is_atomic(&controller, &target, &descriptor_a,
+                                  &storage_a, SC_ERR_POOL));
+    target = make_target(pool, pool_hash);
 
     bad = descriptor_a;
     bad.image_sha256[0] ^= 1u;
@@ -770,7 +782,12 @@ int main(void)
                                      pool, SC_ERR_VERSION));
     bad = descriptor_b;
     bad.runtime_image_major += 1u;
-    report(&tests, &failures, "runtime image version failure is atomic",
+    report(&tests, &failures, "runtime image major failure is atomic",
+           prepare_failure_is_atomic(&controller, &bad, &storage_b, &token,
+                                     pool, SC_ERR_VERSION));
+    bad = descriptor_b;
+    bad.runtime_image_minor += 1u;
+    report(&tests, &failures, "runtime image minor failure is atomic",
            prepare_failure_is_atomic(&controller, &bad, &storage_b, &token,
                                      pool, SC_ERR_VERSION));
     bad = descriptor_b;
@@ -818,15 +835,6 @@ int main(void)
     report(&tests, &failures, "candidate pool resource failure is atomic",
            prepare_failure_is_atomic(&controller, &bad, &storage_b, &token,
                                      pool, SC_ERR_POOL));
-
-    memcpy(unsupported_image, image_b, sizeof(unsupported_image));
-    put_u16(unsupported_image + 10u, UINT16_C(0x8007));
-    fix_footer(unsupported_image);
-    bad = make_descriptor(unsupported_image, pool_hash);
-    bad.image_feature_flags = UINT16_C(0x8007);
-    report(&tests, &failures, "unknown SCIMG feature failure is atomic",
-           prepare_failure_is_atomic(&controller, &bad, &storage_b, &token,
-                                     pool, SC_ERR_FEATURE));
 
     short_storage = storage_b;
     short_storage.schema_capacity = sc_schema_size() - 1u;
@@ -952,6 +960,35 @@ int main(void)
     passed = sc_activation_prepare(&controller, &descriptor_b, &storage_b,
                                    &token) == SC_OK;
     copied = token;
+    memset(&frame, 0, sizeof(frame));
+    memset(&tx_token, 0, sizeof(tx_token));
+    pool[1].raw = UINT64_C(0x1234);
+    pool[2].raw = UINT64_C(0xA5);
+    pool[1].flags |= SC_SLOT_VALID;
+    pool[2].flags |= SC_SLOT_VALID;
+    passed = passed &&
+             sc_encode_prepare(view.schema, view.state, ACT_LOGICAL_TX_ID,
+                               pool, ACT_POOL_COUNT, &frame, scratch,
+                               sizeof(scratch), &tx_token) == SC_OK;
+    {
+        sc_activation_controller_t controller_before = controller;
+        sc_activation_token_t token_before = token;
+        sc_slot_t before_pool[ACT_POOL_COUNT];
+        memcpy(before_pool, pool, sizeof(before_pool));
+        passed = passed &&
+                 sc_activation_commit(&controller, &token, &previous) ==
+                     SC_ERR_BUSY &&
+                 memcmp(&controller_before, &controller,
+                        sizeof(controller)) == 0 &&
+                 memcmp(&token_before, &token, sizeof(token)) == 0 &&
+                 memcmp(before_pool, pool, sizeof(before_pool)) == 0 &&
+                 sc_activation_view(&controller, &view) == SC_OK &&
+                 view.descriptor == &descriptor_a && view.generation == 1u &&
+                 sc_encode_commit(&tx_token, 0) == SC_OK;
+    }
+    report(&tests, &failures,
+           "commit rejects outstanding TX reservation without mutation",
+           passed);
     for (i = 0u; i < ACT_POOL_COUNT; ++i) {
         pool[i].raw = UINT64_C(0xFFEEDDCCBBAA0000) + i;
         raw_before[i] = pool[i].raw;
@@ -994,29 +1031,52 @@ int main(void)
     report(&tests, &failures,
            "stale copied and reused zero tokens fail without mutation", passed);
 
-    controller.generation = UINT32_MAX;
-    memset(&state_a_storage, 0xA2, sizeof(state_a_storage));
+    memset(&state_a_storage, 0xA3, sizeof(state_a_storage));
+    for (i = 0u; i < ACT_POOL_COUNT; ++i) {
+        pool[i].flags = SC_SLOT_VALID | SC_SLOT_UPDATED | SC_SLOT_CHANGED |
+                        SC_SLOT_STALE | (ACT_PRIVATE_FLAG << i);
+    }
     memset(&token, 0, sizeof(token));
     passed = sc_activation_prepare(&controller, &descriptor_a, &storage_a,
                                    &token) == SC_OK &&
-             token.prepared_generation == UINT32_MAX &&
              sc_activation_commit(&controller, &token, &previous) == SC_OK &&
              previous.descriptor == &descriptor_b &&
-             controller.generation == 1u &&
              sc_activation_view(&controller, &view) == SC_OK &&
-             view.descriptor == &descriptor_a && view.generation == 1u;
+             view.descriptor == &descriptor_a && view.generation == 3u &&
+             exact_initialized_state(&storage_a, native_state_bytes, 0u,
+                                     UINT8_C(0xA3));
+    for (i = 0u; i < ACT_POOL_COUNT; ++i) {
+        uint32_t expected_flags = ACT_PRIVATE_FLAG << i;
+        if (i != 0u) expected_flags |= SC_SLOT_VALID;
+        passed = passed && pool[i].flags == expected_flags;
+    }
     report(&tests, &failures,
-           "generation wraps from UINT32_MAX to one and skips zero", passed);
+           "A-B-A activation increments generation and resets state pool",
+           passed);
 
-    memset(&state_b_storage, 0xB2, sizeof(state_b_storage));
+    controller.generation = UINT32_MAX;
+    memset(&state_b_storage, 0xB3, sizeof(state_b_storage));
     memset(&token, 0, sizeof(token));
     passed = sc_activation_prepare(&controller, &descriptor_b, &storage_b,
                                    &token) == SC_OK &&
+             token.prepared_generation == UINT32_MAX &&
+             sc_activation_commit(&controller, &token, &previous) == SC_OK &&
+             previous.descriptor == &descriptor_a &&
+             controller.generation == 1u &&
+             sc_activation_view(&controller, &view) == SC_OK &&
+             view.descriptor == &descriptor_b && view.generation == 1u;
+    report(&tests, &failures,
+           "generation wraps from UINT32_MAX to one and skips zero", passed);
+
+    memset(&state_a_storage, 0xA4, sizeof(state_a_storage));
+    memset(&token, 0, sizeof(token));
+    passed = sc_activation_prepare(&controller, &descriptor_a, &storage_a,
+                                   &token) == SC_OK &&
              sc_activation_commit(&controller, &token, &previous) == SC_OK &&
              sc_activation_view(&controller, &view) == SC_OK &&
-             view.descriptor == &descriptor_b && view.generation == 2u;
+             view.descriptor == &descriptor_a && view.generation == 2u;
     report(&tests, &failures,
-           "returned B buffers are reusable only after prior commit returns",
+           "returned A buffers are reusable only after prior commit returns",
            passed);
 
     memset(&frame, 0, sizeof(frame));
@@ -1028,20 +1088,40 @@ int main(void)
     passed = sc_encode_prepare(view.schema, view.state, ACT_LOGICAL_TX_ID,
                                pool, ACT_POOL_COUNT, &frame, scratch,
                                sizeof(scratch), &tx_token) == SC_OK &&
-             frame.id == ACT_SCHEMA_B_TX_ID && frame.data[0] == 9u &&
+             frame.id == ACT_SCHEMA_A_TX_ID && frame.data[0] == 0u &&
              sc_encode_commit(&tx_token, 0) == SC_OK;
     report(&tests, &failures,
-           "combined B schema exposes reset TX counter after publication",
+           "recovered A schema exposes reset TX counter after publication",
            passed);
 
-    memset(&token, 0x7C, sizeof(token));
-    report(&tests, &failures,
-           "generated malformed C hash and CRC leave active B untouched",
-           prepare_failure_is_atomic(&controller, &descriptor_c, &storage_a,
-                                     &token, pool, SC_ERR_CRC));
-    report(&tests, &failures, "malformed C did not change active view",
-           sc_activation_view(&controller, &view) == SC_OK &&
-               view.descriptor == &descriptor_b && view.generation == 2u);
+    for (i = 0u; i < SC_TEST_MALFORMED_REPRESENTATIVE_COUNT; ++i) {
+        const sc_test_malformed_representative_t *representative =
+            &sc_test_malformed_representatives[i];
+        size_t malformed_size = 0u;
+
+        passed = sc_test_make_malformed_representative(
+            malformed_image, sizeof(malformed_image), &malformed_size,
+            image_b, sizeof(image_b), i);
+        bad = make_descriptor(malformed_image, pool_hash);
+        bad.image_size = malformed_size;
+        fixture_sha256(malformed_image, malformed_size, bad.image_sha256);
+        bad.image_feature_flags =
+            (uint16_t)((uint16_t)malformed_image[10] |
+                       ((uint16_t)malformed_image[11] << 8));
+        memset(&token, 0x7C, sizeof(token));
+        passed = passed &&
+                 prepare_failure_is_atomic(
+                     &controller, &bad, &storage_b, &token, pool,
+                     representative->expected) &&
+                 sc_activation_view(&controller, &view) == SC_OK &&
+                 view.descriptor == &descriptor_a && view.generation == 2u &&
+                 sc_activation_prepare(&controller, &descriptor_b, &storage_b,
+                                       &token) == SC_OK &&
+                 sc_activation_abort(&controller, &token, &released) == SC_OK &&
+                 sc_activation_view(&controller, &view) == SC_OK &&
+                 view.descriptor == &descriptor_a && view.generation == 2u;
+        report(&tests, &failures, representative->id, passed);
+    }
 
     if (failures != 0u) {
         printf("FAILED (%u of %u tests)\n", failures, tests);

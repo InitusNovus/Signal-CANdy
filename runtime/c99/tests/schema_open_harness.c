@@ -10,6 +10,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "malformed_image_representatives.h"
+
 #define HARNESS_IMAGE_LIMIT ((size_t)1048576u)
 #define CORPUS_MAGIC_SIZE ((size_t)8u)
 
@@ -67,7 +69,8 @@ static void print_null_fields(void)
           ",\"stateBytes\":null,\"scratchBytes\":null", stdout);
 }
 
-static int emit_result(const char *id, const uint8_t *image, size_t image_size)
+static int emit_result(const char *id, const uint8_t *image, size_t image_size,
+                       sc_status_t *actual)
 {
     struct sc_schema schema;
     unsigned char canary[sizeof(schema)];
@@ -76,6 +79,7 @@ static int emit_result(const char *id, const uint8_t *image, size_t image_size)
     memset(&schema, 0xA5, sizeof(schema));
     memcpy(canary, &schema, sizeof(schema));
     status = sc_schema_open(&schema, image, image_size);
+    if (actual != NULL) *actual = status;
 
     if (status != SC_OK && memcmp(canary, &schema, sizeof(schema)) != 0) {
         fprintf(stderr, "schema canary changed after rejection: %s\n", id);
@@ -184,7 +188,7 @@ static int run_pack(const char *path)
             success = 0;
             break;
         }
-        success = emit_result(id, image, image_size);
+        success = emit_result(id, image, image_size, NULL);
         free(image);
         free(id);
     }
@@ -218,10 +222,62 @@ static int load_image(const char *path, uint8_t **image, size_t *image_size)
     return 1;
 }
 
+static int run_representatives(const char *path)
+{
+    uint8_t *valid;
+    uint8_t *malformed;
+    size_t valid_size;
+    size_t index;
+    int success = 1;
+
+    if (!load_image(path, &valid, &valid_size)) {
+        fprintf(stderr, "could not read representative base image: %s\n", path);
+        return 0;
+    }
+    malformed = (uint8_t *)malloc(valid_size == 0u ? 1u : valid_size);
+    if (malformed == NULL) {
+        free(valid);
+        return 0;
+    }
+
+    for (index = 0u;
+         index < SC_TEST_MALFORMED_REPRESENTATIVE_COUNT && success;
+         ++index) {
+        const sc_test_malformed_representative_t *representative =
+            &sc_test_malformed_representatives[index];
+        size_t malformed_size;
+        sc_status_t actual = SC_OK;
+
+        success = sc_test_make_malformed_representative(
+            malformed, valid_size, &malformed_size, valid, valid_size, index);
+        if (success) {
+            success = emit_result(representative->id, malformed,
+                                  malformed_size, &actual);
+        }
+        if (success && actual != representative->expected) {
+            fprintf(stderr, "representative %s: expected %d, got %d\n",
+                    representative->id, (int)representative->expected,
+                    (int)actual);
+            success = 0;
+        }
+    }
+
+    free(malformed);
+    free(valid);
+    if (success) {
+        printf("ALL PASS (%u malformed representatives)\n",
+               (unsigned)SC_TEST_MALFORMED_REPRESENTATIVE_COUNT);
+    }
+    return success;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 3 && strcmp(argv[1], "--pack") == 0) {
         return run_pack(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (argc == 3 && strcmp(argv[1], "--representatives") == 0) {
+        return run_representatives(argv[2]) ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     if (argc == 4 && strcmp(argv[1], "--image") == 0) {
         uint8_t *image;
@@ -231,11 +287,12 @@ int main(int argc, char **argv)
             fprintf(stderr, "could not read image: %s\n", argv[3]);
             return EXIT_FAILURE;
         }
-        success = emit_result(argv[2], image, image_size);
+        success = emit_result(argv[2], image, image_size, NULL);
         free(image);
         return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
     fprintf(stderr, "usage: schema_open_harness --pack corpus.scorp\n"
+                    "       schema_open_harness --representatives valid.scimg\n"
                     "       schema_open_harness --image case-id image.scimg\n");
     return 2;
 }

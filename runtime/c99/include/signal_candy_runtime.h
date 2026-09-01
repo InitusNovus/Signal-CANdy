@@ -247,7 +247,8 @@ sc_status_t sc_encode_commit(sc_tx_token_t *token, int transmitted);
  * establish a quiescent point before commit: no runtime operation or borrowed
  * activation view may be in use, no ISR may enter the runtime, captured frames
  * for the old schema must be drained or discarded, and no TX reservation may
- * remain. A view is borrowed and expires when the next successful commit
+ * remain. Commit returns SC_ERR_BUSY while a stateful TX reservation is
+ * pending. A view is borrowed and expires when the next successful commit
  * begins. All descriptors, images, storage, pool, tokens, and the controller
  * remain caller-owned for their documented active or pending lifetime.
  */

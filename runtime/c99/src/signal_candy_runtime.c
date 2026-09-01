@@ -2658,6 +2658,19 @@ sc_status_t sc_activation_abort(sc_activation_controller_t *controller,
     return SC_OK;
 }
 
+SC_LOCAL int sc_activation_has_pending_tx(
+    const sc_activation_controller_t *controller)
+{
+    const sc_runtime_state_t *state = controller->active.storage.state;
+    uint16_t i;
+
+    if (state == NULL) return 0;
+    for (i = 0u; i < state->counter_count; ++i) {
+        if (state->counters[i].pending_generation != 0u) return 1;
+    }
+    return 0;
+}
+
 sc_status_t sc_activation_commit(sc_activation_controller_t *controller,
                                  sc_activation_token_t *token,
                                  sc_activation_slot_t *previous)
@@ -2671,6 +2684,7 @@ sc_status_t sc_activation_commit(sc_activation_controller_t *controller,
                            sizeof(*token))) return SC_ERR_VALUE;
     status = sc_validate_activation_token(controller, token);
     if (status != SC_OK) return status;
+    if (sc_activation_has_pending_tx(controller)) return SC_ERR_BUSY;
 
     old = controller->active;
     sc_reset_pool_flags(controller->pending.storage.schema, controller->pool);
