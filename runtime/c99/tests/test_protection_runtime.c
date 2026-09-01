@@ -12,6 +12,9 @@
 #define KAT_IMAGE_SIZE 248u
 #define KAT_EXTENSION_OFFSET 136u
 #define KAT_PROFILE_OFFSET 40u
+#define COUNTER_IMAGE_SIZE 260u
+#define COUNTER_EXTENSION_OFFSET 136u
+#define COUNTER_PROFILE_OFFSET 40u
 #define PR_HEADER_SIZE 48u
 #define PR_PLAN_SIZE 16u
 #define TX_HEADER_SIZE 32u
@@ -21,6 +24,9 @@
 #define LOGICAL_PROTECTED UINT32_C(33)
 #define RX_CAN_ID UINT32_C(0x326)
 #define TX_CAN_ID UINT32_C(0x325)
+#define KAT_CAN_ID UINT32_C(0x100)
+#define COUNTER_CAN_ID UINT32_C(0x210)
+#define EXTENDED_CAN_ID UINT32_C(0x1FFFFFFF)
 
 typedef union {
     void *pointer_alignment;
@@ -316,9 +322,10 @@ static void build_combined_fixture(uint8_t *image)
     fix_footer(image);
 }
 
-static void build_kat_fixture(uint8_t *image, uint8_t algorithm,
-                              uint8_t width, uint16_t crc_start,
-                              uint8_t span_count, uint16_t data_id)
+static void build_kat_fixture(uint8_t *image, uint32_t encoded_can_id,
+                              uint8_t algorithm, uint8_t width,
+                              uint8_t crc_order, uint16_t crc_start,
+                              uint8_t data_id_count, uint16_t data_id)
 {
     uint8_t *extension;
     uint8_t *profile;
@@ -328,7 +335,7 @@ static void build_kat_fixture(uint8_t *image, uint8_t algorithm,
                       1u, 1u, 1u, 64u, 72u, 88u, 112u, 24u,
                       KAT_EXTENSION_OFFSET,
                       KAT_IMAGE_SIZE - KAT_EXTENSION_OFFSET - 4u);
-    put_u32(image + 64u, UINT32_C(0x100));
+    put_u32(image + 64u, encoded_can_id);
     put_u16(image + 68u, 1u);
     put_u16(image + 70u, 0u);
     put_program(image + 72u, 0u, 8u, 0u);
@@ -345,11 +352,116 @@ static void build_kat_fixture(uint8_t *image, uint8_t algorithm,
                          KAT_PROFILE_OFFSET, 68u);
     profile = extension + KAT_PROFILE_OFFSET;
     put_profile_header(profile, 1u, 0u, 0u, 1u, 64u, 64u, 64u, 68u);
-    put_plan(profile + 48u, 1u, algorithm, width, 0u, crc_start, 0u, 1u,
-             span_count, UINT16_C(0xFFFF), data_id);
+    put_plan(profile + 48u, 1u, algorithm, width, crc_order, crc_start,
+             0u, 1u, data_id_count, UINT16_C(0xFFFF), data_id);
     profile[64] = 0u;
     profile[65] = (uint8_t)(crc_start / 8u);
     fix_footer(image);
+}
+
+static void build_counter_fixture(uint8_t *image, uint32_t encoded_can_id,
+                                  uint16_t width, uint8_t order)
+{
+    uint8_t *extension;
+    uint8_t *profile;
+    uint8_t *counter;
+    uint32_t modulus = width == 32u ? 0u : UINT32_C(1) << width;
+
+    memset(image, 0, COUNTER_IMAGE_SIZE);
+    put_common_header(image, COUNTER_IMAGE_SIZE, SC_FEATURE_PROTECTION,
+                      1u, 1u, 1u, 64u, 72u, 88u, 112u, 24u,
+                      COUNTER_EXTENSION_OFFSET,
+                      COUNTER_IMAGE_SIZE - COUNTER_EXTENSION_OFFSET - 4u);
+    put_u32(image + 64u, encoded_can_id);
+    put_u16(image + 68u, 1u);
+    put_u16(image + 70u, 0u);
+    put_program(image + 72u, 32u, 8u, 0u);
+    put_conversion(image + 88u);
+    put_u16(image + 112u, 1u);
+    put_u16(image + 114u, 1u);
+    put_u16(image + 116u, 5u);
+    memcpy(image + 118u, "value", 5u);
+    put_u16(image + 123u, 3u);
+    memcpy(image + 125u, "ctr", 3u);
+
+    extension = image + COUNTER_EXTENSION_OFFSET;
+    put_extension_header(extension, 8u, 0u, 40u, 120u, 0u,
+                         COUNTER_PROFILE_OFFSET, 80u);
+    profile = extension + COUNTER_PROFILE_OFFSET;
+    put_profile_header(profile, 1u, 0u, 1u, 0u, 64u, 64u, 80u, 80u);
+    put_plan(profile + 48u, 2u, 0u, 0u, 0u, UINT16_C(0xFFFF),
+             UINT16_C(0xFFFF), 0u, 0u, 0u, 0u);
+    counter = profile + 64u;
+    put_u16(counter, 0u);
+    put_u16(counter + 2u, width);
+    counter[4] = order;
+    put_u32(counter + 8u, modulus);
+    put_u32(counter + 12u, 1u);
+    fix_footer(image);
+}
+
+static void put_profile_value(uint8_t *data, uint16_t start_bit,
+                              uint16_t length_bits, uint8_t order,
+                              uint32_t value)
+{
+    uint16_t i;
+
+    for (i = 0u; i < length_bits; ++i) {
+        uint16_t target = (uint16_t)(start_bit + i);
+        uint16_t source = order == 0u ? i :
+                          (uint16_t)(length_bits - 1u - i);
+        uint8_t mask = (uint8_t)(1u << (target % 8u));
+        if (((value >> source) & 1u) != 0u) {
+            data[target / 8u] |= mask;
+        } else {
+            data[target / 8u] &= (uint8_t)~mask;
+        }
+    }
+}
+
+static void set_kat_frame(sc_frame_t *frame, uint32_t can_id,
+                          uint8_t flags, uint8_t length,
+                          uint8_t algorithm, uint8_t width,
+                          uint8_t crc_order, uint16_t crc_start,
+                          uint8_t data_id_count, uint16_t data_id,
+                          uint8_t seed)
+{
+    uint8_t input[66];
+    size_t input_count = 0u;
+    uint8_t covered = (uint8_t)(crc_start / 8u);
+    uint8_t i;
+    uint32_t crc;
+
+    memset(frame, 0, sizeof(*frame));
+    frame->id = can_id;
+    frame->flags = flags;
+    frame->len = length;
+    for (i = 0u; i < covered; ++i) {
+        frame->data[i] = (uint8_t)(seed + i);
+    }
+    if (data_id_count == 2u) {
+        input[input_count++] = (uint8_t)(data_id >> 8);
+        input[input_count++] = (uint8_t)data_id;
+    }
+    memcpy(input + input_count, frame->data, covered);
+    input_count += covered;
+    crc = algorithm == 1u ? crc8_j1850(input, input_count) :
+                           crc16_ccitt_false(input, input_count);
+    put_profile_value(frame->data, crc_start, (uint16_t)width * 8u,
+                      crc_order, crc);
+}
+
+static void set_counter_frame(sc_frame_t *frame, uint32_t can_id,
+                              uint8_t flags, uint16_t width,
+                              uint8_t order, uint32_t counter,
+                              uint8_t value)
+{
+    memset(frame, 0, sizeof(*frame));
+    frame->id = can_id;
+    frame->flags = flags;
+    frame->len = 8u;
+    put_profile_value(frame->data, 0u, width, order, counter);
+    frame->data[4] = value;
 }
 
 static void set_rx_frame(sc_frame_t *frame, uint8_t counter,
@@ -405,6 +517,7 @@ int main(void)
     };
     uint8_t image[COMBINED_IMAGE_SIZE];
     uint8_t kat_image[KAT_IMAGE_SIZE];
+    uint8_t counter_image[COUNTER_IMAGE_SIZE];
     aligned_storage_t schema_storage;
     aligned_storage_t kat_schema_storage;
     aligned_storage_t state_storage;
@@ -433,44 +546,149 @@ int main(void)
                crc16_ccitt_false(check_text, sizeof(check_text)) ==
                    UINT16_C(0x29B1));
 
+    passed = 1;
+    {
+        uint8_t algorithm;
+        for (algorithm = 1u; algorithm <= 2u; ++algorithm) {
+            uint8_t order;
+            for (order = 0u; order <= 1u; ++order) {
+                uint8_t data_id_count;
+                for (data_id_count = 0u; data_id_count <= 2u;
+                     data_id_count = (uint8_t)(data_id_count + 2u)) {
+                    uint8_t width = algorithm == 1u ? 1u : 2u;
+                    uint16_t crc_start = width == 1u ? 88u : 80u;
+                    int case_passed;
+
+                    memset(&kat_schema_storage, 0,
+                           sizeof(kat_schema_storage));
+                    build_kat_fixture(kat_image, KAT_CAN_ID, algorithm,
+                                      width, order, crc_start,
+                                      data_id_count,
+                                      data_id_count == 0u ? 0u :
+                                          UINT16_C(0x1234));
+                    case_passed =
+                        sc_schema_open(kat_schema, kat_image,
+                                       sizeof(kat_image)) == SC_OK;
+                    memset(pool, 0, sizeof(pool));
+                    set_kat_frame(&frame, KAT_CAN_ID, SC_FRAME_FD, 12u,
+                                  algorithm, width, order, crc_start,
+                                  data_id_count, UINT16_C(0x1234), 0x31u);
+                    case_passed = case_passed &&
+                        sc_decode_state(kat_schema, NULL, &frame, pool, 1u) ==
+                            SC_OK;
+                    passed = passed && case_passed;
+                }
+            }
+        }
+    }
+    report("CRC profile matrix covers algorithms endian and data ID", passed);
+
     memset(&kat_schema_storage, 0, sizeof(kat_schema_storage));
-    build_kat_fixture(kat_image, 1u, 1u, 72u, 0u, 0u);
+    build_kat_fixture(kat_image, KAT_CAN_ID, 1u, 1u, 0u, 504u, 0u, 0u);
     passed = sc_schema_open(kat_schema, kat_image, sizeof(kat_image)) == SC_OK;
     memset(pool, 0, sizeof(pool));
-    memset(&frame, 0, sizeof(frame));
-    frame.id = UINT32_C(0x100);
-    frame.flags = SC_FRAME_FD;
-    frame.len = 12u;
-    memcpy(frame.data, check_text, sizeof(check_text));
-    frame.data[9] = UINT8_C(0x4B);
-    passed = passed && sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK;
-    report("runtime J1850 KAT excludes CRC field", passed);
+    set_kat_frame(&frame, KAT_CAN_ID, SC_FRAME_FD, 64u, 1u, 1u, 0u,
+                  504u, 0u, 0u, 0x40u);
+    passed = passed &&
+             sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK &&
+             pool[0].raw == UINT64_C(0x40);
+    memcpy(pool_before, pool, sizeof(pool));
+    frame.data[0] ^= 1u;
+    passed = passed &&
+             sc_decode_state(kat_schema, NULL, &frame, pool, 1u) ==
+                 SC_ERR_FRAME_CRC &&
+             memcmp(pool_before, pool, sizeof(pool)) == 0;
+    report("CAN-FD RX validates a protected 64-byte payload atomically",
+           passed);
 
-    build_kat_fixture(kat_image, 2u, 2u, 72u, 0u, 0u);
+    memset(&kat_schema_storage, 0, sizeof(kat_schema_storage));
+    build_kat_fixture(kat_image, UINT32_C(0x80000000) | EXTENDED_CAN_ID,
+                      2u, 2u, 1u, 80u, 2u, UINT16_C(0xBEEF));
     passed = sc_schema_open(kat_schema, kat_image, sizeof(kat_image)) == SC_OK;
     memset(pool, 0, sizeof(pool));
-    memset(&frame, 0, sizeof(frame));
-    frame.id = UINT32_C(0x100);
+    set_kat_frame(&frame, EXTENDED_CAN_ID,
+                  (uint8_t)(SC_FRAME_EXTENDED | SC_FRAME_FD), 12u,
+                  2u, 2u, 1u, 80u, 2u, UINT16_C(0xBEEF), 0x51u);
+    passed = passed &&
+             sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK &&
+             pool[0].raw == UINT64_C(0x51);
+    memcpy(pool_before, pool, sizeof(pool));
     frame.flags = SC_FRAME_FD;
-    frame.len = 12u;
-    memcpy(frame.data, check_text, sizeof(check_text));
-    frame.data[9] = UINT8_C(0xB1);
-    frame.data[10] = UINT8_C(0x29);
-    passed = passed && sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK;
-    report("runtime CCITT-FALSE KAT uses little-endian field", passed);
+    passed = passed &&
+             sc_decode_state(kat_schema, NULL, &frame, pool, 1u) ==
+                 SC_OK_NO_MATCH &&
+             memcmp(pool_before, pool, sizeof(pool)) == 0;
+    report("29-bit extended CAN-FD RX matches only the normalized key",
+           passed);
 
-    build_kat_fixture(kat_image, 1u, 1u, 24u, 2u, UINT16_C(0x1234));
+    memset(&kat_schema_storage, 0, sizeof(kat_schema_storage));
+    build_kat_fixture(kat_image, KAT_CAN_ID, 1u, 1u, 0u, 24u, 0u, 0u);
     passed = sc_schema_open(kat_schema, kat_image, sizeof(kat_image)) == SC_OK;
     memset(pool, 0, sizeof(pool));
-    memset(&frame, 0, sizeof(frame));
-    frame.id = UINT32_C(0x100);
-    frame.len = 4u;
-    frame.data[0] = 0x01u;
-    frame.data[1] = 0x02u;
-    frame.data[2] = 0x03u;
-    frame.data[3] = 0x3Bu;
-    passed = passed && sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK;
-    report("runtime prepends big-endian data ID", passed);
+    set_kat_frame(&frame, KAT_CAN_ID, 0u, 4u, 1u, 1u, 0u, 24u, 0u, 0u,
+                  0x61u);
+    passed = passed &&
+             sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK &&
+             pool[0].raw == UINT64_C(0x61);
+    set_kat_frame(&frame, KAT_CAN_ID, SC_FRAME_FD, 12u, 1u, 1u, 0u,
+                  24u, 0u, 0u, 0x72u);
+    passed = passed &&
+             sc_decode_state(kat_schema, NULL, &frame, pool, 1u) == SC_OK &&
+             pool[0].raw == UINT64_C(0x72);
+    report("one schema decodes a mixed classic and CAN-FD RX sequence",
+           passed);
+
+    passed = 1;
+    {
+        uint8_t order;
+        for (order = 0u; order <= 1u; ++order) {
+            uint16_t width;
+            for (width = 1u; width <= 32u; ++width) {
+                uint32_t maximum = width == 32u ? UINT32_MAX :
+                                   (UINT32_C(1) << width) - 1u;
+                int case_passed;
+
+                memset(&kat_schema_storage, 0,
+                       sizeof(kat_schema_storage));
+                build_counter_fixture(counter_image, COUNTER_CAN_ID,
+                                      width, order);
+                case_passed =
+                    sc_schema_open(kat_schema, counter_image,
+                                   sizeof(counter_image)) == SC_OK;
+                state_bytes = sc_schema_required_state_bytes(kat_schema);
+                memset(&state_storage, 0, sizeof(state_storage));
+                case_passed = case_passed && state_bytes > 0u &&
+                    state_bytes <= sizeof(state_storage.bytes) &&
+                    sc_runtime_state_init(kat_schema, state, state_bytes) ==
+                        SC_OK;
+                memset(pool, 0, sizeof(pool));
+                set_counter_frame(&frame, COUNTER_CAN_ID, 0u, width, order,
+                                  maximum, 0x81u);
+                case_passed = case_passed &&
+                    sc_decode_state(kat_schema, state, &frame, pool, 1u) ==
+                        SC_OK &&
+                    pool[0].raw == UINT64_C(0x81);
+                memcpy(pool_before, pool, sizeof(pool));
+                memcpy(state_before, state, state_bytes);
+                set_counter_frame(&frame, COUNTER_CAN_ID, 0u, width, order,
+                                  maximum, 0x82u);
+                case_passed = case_passed &&
+                    sc_decode_state(kat_schema, state, &frame, pool, 1u) ==
+                        SC_ERR_COUNTER &&
+                    memcmp(pool_before, pool, sizeof(pool)) == 0 &&
+                    memcmp(state_before, state, state_bytes) == 0;
+                set_counter_frame(&frame, COUNTER_CAN_ID, 0u, width, order,
+                                  0u, 0x83u);
+                case_passed = case_passed &&
+                    sc_decode_state(kat_schema, state, &frame, pool, 1u) ==
+                        SC_OK &&
+                    pool[0].raw == UINT64_C(0x83);
+                passed = passed && case_passed;
+            }
+        }
+    }
+    report("RX counter matrix covers widths 1-32 both endian and wrap",
+           passed);
 
     build_combined_fixture(image);
     memset(&schema_storage, 0, sizeof(schema_storage));
