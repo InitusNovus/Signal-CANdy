@@ -10,7 +10,9 @@ typedef enum {
     SC_TEST_TRUNCATED,
     SC_TEST_BAD_RANGE,
     SC_TEST_INVALID_UTF8,
-    SC_TEST_UNSUPPORTED_FEATURE
+    SC_TEST_UNSUPPORTED_FEATURE,
+    SC_TEST_PROTECTION_CRC_RANGE,
+    SC_TEST_COUNTER_RANGE
 } sc_test_malformed_kind_t;
 
 typedef struct {
@@ -26,7 +28,10 @@ static const sc_test_malformed_representative_t
         {"malformed-table-range", SC_TEST_BAD_RANGE, SC_ERR_BOUNDS},
         {"malformed-invalid-utf8", SC_TEST_INVALID_UTF8, SC_ERR_TABLE},
         {"malformed-unsupported-feature", SC_TEST_UNSUPPORTED_FEATURE,
-         SC_ERR_FEATURE}
+         SC_ERR_FEATURE},
+        {"malformed-protection-crc-range", SC_TEST_PROTECTION_CRC_RANGE,
+         SC_ERR_TABLE},
+        {"malformed-counter-range", SC_TEST_COUNTER_RANGE, SC_ERR_TABLE}
     };
 
 #define SC_TEST_MALFORMED_REPRESENTATIVE_COUNT \
@@ -116,6 +121,39 @@ static int sc_test_make_malformed_representative(
         output[11] |= UINT8_C(0x80);
         sc_test_fix_crc(output, valid_size);
         return 1;
+    case SC_TEST_PROTECTION_CRC_RANGE: {
+        uint32_t extension_offset = sc_test_read_u32(output + 24u);
+        uint32_t protection_offset = extension_offset +
+            sc_test_read_u32(output + extension_offset + 28u);
+        uint8_t *plan = output + protection_offset + 48u;
+        if ((plan[0] & 1u) == 0u || plan[2] == 0u || plan[2] > 2u ||
+            (uint32_t)sc_test_read_u16(plan + 4u) +
+                    (uint32_t)plan[2] * 8u >
+                512u) {
+            return 0;
+        }
+        plan[4] = (uint8_t)0xF8u;
+        plan[5] = (uint8_t)0xFFu;
+        sc_test_fix_crc(output, valid_size);
+        return 1;
+    }
+    case SC_TEST_COUNTER_RANGE: {
+        uint32_t extension_offset = sc_test_read_u32(output + 24u);
+        uint32_t protection_offset = extension_offset +
+            sc_test_read_u32(output + extension_offset + 28u);
+        uint32_t counter_offset = protection_offset +
+            sc_test_read_u32(output + protection_offset + 20u);
+        uint16_t length = sc_test_read_u16(output + counter_offset + 2u);
+        if (length == 0u || length > 32u ||
+            (uint32_t)sc_test_read_u16(output + counter_offset) + length >
+                512u) {
+            return 0;
+        }
+        output[counter_offset] = (uint8_t)0xF8u;
+        output[counter_offset + 1u] = (uint8_t)0xFFu;
+        sc_test_fix_crc(output, valid_size);
+        return 1;
+    }
     default:
         return 0;
     }
