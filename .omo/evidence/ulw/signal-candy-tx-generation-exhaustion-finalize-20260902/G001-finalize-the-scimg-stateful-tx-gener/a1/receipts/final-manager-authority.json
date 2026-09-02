@@ -1,0 +1,23 @@
+{
+  "ObservedAtUtc": "2026-09-02T01:26:36.2792819Z",
+  "Target": "set:cc1a-0025-bootloader-010",
+  "State": "InUse",
+  "Claim": {
+    "closeKind": null,
+    "closeReason": null,
+    "closedAt": null,
+    "closedBy": null,
+    "id": "cd519cfa-20a5-4570-a0cb-c9a56304018b",
+    "owner": "agent:signal-candy-runtime",
+    "purpose": "Signal-CANdy P0 P1 and GAS integration HIL; retain until explicit release",
+    "reviewAfter": "2026-09-08T05:48:47.3686916+00:00",
+    "startedAt": "2026-09-01T05:48:47.368934+00:00",
+    "target": "set:cc1a-0025-bootloader-010"
+  },
+  "RequiredEndpoint": {
+    "Dut": "TT_CC1A26_0025",
+    "TtHost": "127.0.0.1:9802",
+    "UartIap": "COM22",
+    "Can": "NI CAN3"
+  }
+}

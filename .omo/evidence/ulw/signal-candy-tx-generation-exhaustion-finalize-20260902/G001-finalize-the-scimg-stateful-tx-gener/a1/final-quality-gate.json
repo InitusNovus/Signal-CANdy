@@ -1,0 +1,131 @@
+{
+  "codeReview": {
+    "by": "lazycodex-code-reviewer",
+    "recommendation": "APPROVE",
+    "codeQualityStatus": "CLEAR",
+    "reportPath": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/final-code-review.md",
+    "evidence": "Frozen-diff review passed: uint32 fail-closed exhaustion with BUSY precedence, epoch-scoped reset contract requiring token-copy revocation, byte-identical cross-repo runtime, no uint64/allocation/static-state additions.",
+    "blockers": []
+  },
+  "manualQa": {
+    "by": "lazycodex-qa-executor",
+    "status": "passed",
+    "evidence": "CLI gates and receipt-bound hardware acceptance passed at the frozen tree: protection 21/21, TX 15/15, contract 4/4, expectation-only listing, managed 449 pass, Fantomas, hardening 10,000, and a provenance-complete session flashing BIN f2893951 (69,496 bytes) to COM22 followed by 50 receipt-bound PASS lines and terminal ALL PASS.",
+    "surfaceEvidence": [
+      {
+        "id": "surface-protection",
+        "criterionRef": "C001",
+        "surface": "cli",
+        "invocation": "bash runtime/c99/tests/run_protection_tests.sh",
+        "verdict": "passed",
+        "artifactRefs": ["c001"]
+      },
+      {
+        "id": "surface-contract",
+        "criterionRef": "C002",
+        "surface": "cli",
+        "invocation": "host/test_p0_p1_limit_contract.py",
+        "verdict": "passed",
+        "artifactRefs": ["c002"]
+      },
+      {
+        "id": "surface-authoritative-hil",
+        "criterionRef": "C003",
+        "surface": "cli",
+        "invocation": "TT_Host flash COM22 then python host/sc_validate_p0_p1_gas.py --interface CAN3",
+        "verdict": "passed",
+        "artifactRefs": ["session"]
+      }
+    ],
+    "adversarialCases": [
+      {
+        "id": "adv-wrap-reuse",
+        "criterionRef": "C001",
+        "scenario": "restore old generation wrap-to-1 logic",
+        "expectedBehavior": "protection suite fails",
+        "verdict": "passed",
+        "artifactRefs": ["c001"]
+      },
+      {
+        "id": "adv-busy-precedence",
+        "criterionRef": "C001",
+        "scenario": "check SC_ERR_LIMIT before pending SC_ERR_BUSY",
+        "expectedBehavior": "protection suite fails",
+        "verdict": "passed",
+        "artifactRefs": ["c001"]
+      },
+      {
+        "id": "adv-latch-persistence",
+        "criterionRef": "C002",
+        "scenario": "repeated probes and heartbeat after UINT32_MAX exhaustion",
+        "expectedBehavior": "SC_ERR_LIMIT with maintenance bit, attempt count frozen, latch survives heartbeat",
+        "verdict": "passed",
+        "artifactRefs": ["session"]
+      }
+    ],
+    "artifactRefs": [
+      {
+        "id": "c001",
+        "kind": "log",
+        "description": "C001 runtime exhaustion evidence",
+        "path": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C001-runtime-exhaustion.txt"
+      },
+      {
+        "id": "c002",
+        "kind": "log",
+        "description": "C002 canonical integration evidence",
+        "path": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C002-canonical-integration.txt"
+      },
+      {
+        "id": "session",
+        "kind": "cli-transcript",
+        "description": "Authoritative provenance-complete flash and CAN3 session",
+        "path": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/receipts/final-authoritative-session.txt"
+      },
+      {
+        "id": "qa-matrix",
+        "kind": "log",
+        "description": "Manual QA matrix",
+        "path": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/final-qa-matrix.md"
+      }
+    ]
+  },
+  "gateReview": {
+    "by": "lazycodex-gate-reviewer",
+    "recommendation": "APPROVE",
+    "reportPath": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/final-gate-review.md",
+    "evidence": "All three lanes CLEAR at SHA 07d8883cb164b715d88d1d38464e64020dfdd437; goal criteria artifacts non-empty; exact-head CI 33578699745 success; claim retained; no forbidden operations.",
+    "blockers": []
+  },
+  "iteration": {
+    "fullRerun": true,
+    "status": "passed",
+    "rerunCommands": [
+      "dotnet build --configuration Release --nologo",
+      "dotnet test --configuration Release --no-build -v minimal --nologo",
+      "fantomas --check src/ tests/",
+      "bash runtime/c99/tests/run_protection_tests.sh",
+      "bash runtime/c99/tests/run_activation_tests.sh",
+      "bash runtime/c99/tests/run_activation_tests_sanitized.sh",
+      "bash runtime/c99/tests/run_tx_tests.sh",
+      "pwsh -NoProfile -File scripts/hardening.ps1 -Mode Ci",
+      "python host/sc_validate_p0_p1_gas.py --interface CAN3"
+    ],
+    "evidence": "Full gate rerun at the frozen tree passed, including the provenance-complete hardware session."
+  },
+  "criteriaCoverage": {
+    "totalCriteria": 3,
+    "passCount": 3,
+    "originalIntent": "Close the uint32 TX generation ABA residual with a 32-bit-friendly fail-closed policy and prove it through the canonical MCU integration.",
+    "desiredOutcome": "Runtime never reuses a generation within an epoch, fails closed with SC_ERR_LIMIT, application latches maintenance without blind retry or automatic reset, and the whole chain is committed, pushed, CI-green, and hardware-proven.",
+    "userOutcomeReview": "User-directed uint32 ABI preservation honored; HIL-first verification honored including a dedicated on-wire UINT32_MAX exhaustion scenario; single CC1A claim retained.",
+    "adversarialClassesCovered": [
+      "stale-token reuse across epochs",
+      "busy-versus-limit precedence",
+      "ordinary-error non-latching",
+      "repeated-probe suppression",
+      "latch persistence across heartbeat",
+      "reset recovery"
+    ]
+  }
+}

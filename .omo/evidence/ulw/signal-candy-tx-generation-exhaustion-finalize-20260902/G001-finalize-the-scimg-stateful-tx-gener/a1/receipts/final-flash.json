@@ -1,0 +1,11 @@
+{
+  "OperationId": "2c4df51599944a66be973a097c8757e7",
+  "ClientCorrelationId": "2c4df51599944a66be973a097c8757e7",
+  "Kind": { "Case": "FirmwareUpdate" },
+  "State": { "Case": "Succeeded" },
+  "ErrorKind": { "Case": "NoError" },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:18:18.7953109+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:18:18.7953109+00:00",
+  "PayloadSummary": "firmware update completed"
+}

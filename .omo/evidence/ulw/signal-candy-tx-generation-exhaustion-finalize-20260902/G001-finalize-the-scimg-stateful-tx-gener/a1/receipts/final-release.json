@@ -1,0 +1,11 @@
+{
+  "OperationId": "7c6a2bb368e146d1b132ee85cc08095a",
+  "ClientCorrelationId": "7c6a2bb368e146d1b132ee85cc08095a",
+  "Kind": { "Case": "BootloaderRelease" },
+  "State": { "Case": "Succeeded" },
+  "ErrorKind": { "Case": "NoError" },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:18:26.7383322+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:18:26.7383322+00:00",
+  "PayloadSummary": null
+}

@@ -1,0 +1,12 @@
+{
+  "ObservedAfterDisconnectUtc": "2026-09-02T01:26:36.2792819Z",
+  "NiXnetSessions": "closed by runner context managers",
+  "TtHostDisconnectOperationId": "c2ba0d6326334142bd6be7fe3c19e969",
+  "TtHostDisconnectState": "Succeeded",
+  "TtHostDaemon": "stopped",
+  "FirmwareBuildDirectory": "removed by make clean",
+  "HostPycache": "removed",
+  "RelatedLiveProcessScan": "PASS",
+  "StLinkSwdOperation": "not used",
+  "ClaimRetained": "cd519cfa-20a5-4570-a0cb-c9a56304018b"
+}

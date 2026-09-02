@@ -1,0 +1,61 @@
+C001 SCIMG TX generation exhaustion evidence
+
+Frozen commit:
+- HEAD 7861508b6778703f0c3a4a6e954cb5b80f8b2e1f
+- tree aead1eac031348416792bb5b62a62f409c3bb010
+- atomic commit: fix(runtime): fail closed on TX generation exhaustion
+
+Failing-first proof:
+- Added scenario: TX generation exhaustion fails closed until runtime reset.
+- Restored pre-fix wrap behavior returned generation 1 after UINT32_MAX.
+- Exact RED output captured before production fix:
+  FAIL: TX generation exhaustion fails closed until runtime reset
+  FAILED (1 of 21 tests)
+- Review mutation proof:
+  - restored old wrap logic fails the final protection suite;
+  - moving SC_ERR_LIMIT before pending SC_ERR_BUSY fails the terminal-pending case.
+
+Committed-tree CLI proof:
+- bash runtime/c99/tests/run_protection_tests.sh
+  PASS: TX terminal reservation is busy before mutation-free exhaustion
+  ALL PASS (21 tests)
+- bash runtime/c99/tests/run_tx_tests.sh
+  ALL PASS (15 tests)
+
+Boundary behavior observed:
+- UINT32_MAX is issued once as the final nonzero reservation generation.
+- While that reservation is pending and next_generation is zero, another
+  prepare returns SC_ERR_BUSY.
+- Busy leaves state, pool, frame, token, and scratch byte-unchanged.
+- After cancel, another prepare returns SC_ERR_LIMIT.
+- Limit leaves state, pool, frame, token, and scratch byte-unchanged.
+- sc_runtime_reset restores generation 1.
+- Header contract scopes generation uniqueness to one initialization epoch.
+- Reset requires exclusive quiescent access and destruction/revocation of
+  every token and token copy associated with the state.
+
+Target ABI proof:
+- arm-none-eabi-gcc Cortex-M/ILP32 compile assertions passed:
+  sc_tx_counter_state_t = 12 bytes
+  sc_tx_token_t = 20 bytes
+  sc_runtime_state_t counter offset = 8 bytes
+- No uint64 generation field was introduced.
+
+Allocation/resource proof:
+- deterministic hardening: PASS, 10,000 cases, six bases, one regression
+- ASan/UBSan reports: 0
+- heapUndefined: 0
+- mutableStatic: 0
+- public allocation-free runtime contract preserved
+
+Independent review:
+- Initial review found reset-epoch contract and busy-precedence coverage
+  blockers.
+- Both were remediated.
+- Original reviewer final verdict: PASS, no blocking findings.
+
+Cleanup:
+- ABI compiler temporary directory removed by the command.
+- Hardening temporary pack directory removed by the harness.
+- No server, daemon, CAN session, hardware process, or background QA resource
+  was created for C001.

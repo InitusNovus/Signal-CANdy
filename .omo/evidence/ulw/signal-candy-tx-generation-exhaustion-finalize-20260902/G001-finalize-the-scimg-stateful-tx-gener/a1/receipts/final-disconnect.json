@@ -1,0 +1,11 @@
+{
+  "OperationId": "c2ba0d6326334142bd6be7fe3c19e969",
+  "ClientCorrelationId": "c2ba0d6326334142bd6be7fe3c19e969",
+  "Kind": { "Case": "Disconnect" },
+  "State": { "Case": "Succeeded" },
+  "ErrorKind": { "Case": "NoError" },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:19:24.8439476+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:19:24.8439476+00:00",
+  "PayloadSummary": null
+}

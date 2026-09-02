@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "evidenceLayoutVersion": 2,
+  "createdAt": "2026-09-02T00:45:45.397Z",
+  "updatedAt": "2026-09-02T01:39:29.196Z",
+  "briefPath": ".omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/brief.md",
+  "goalsPath": ".omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/goals.json",
+  "ledgerPath": ".omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/ledger.jsonl",
+  "codexGoalMode": "aggregate",
+  "goals": [
+    {
+      "id": "G001-finalize-the-scimg-stateful-tx-gener",
+      "title": "Finalize the SCIMG stateful TX generation exhaustion policy end-to-en...",
+      "objective": "Finalize the SCIMG stateful TX generation exhaustion policy end-to-end. Outcome: Signal-CANdy keeps its 32-bit MCU ABI, never reuses a TX reservation generation, fails closed with SC_ERR_LIMIT after UINT32_MAX until safe state reset, and the canonical CC1A integration handles/documents that maintenance condition; all current verified edits and HIL evidence are atomically committed, Signal-CANdy dev is pushed, and exact-head CI is green. Deliverables: runtime/c99 source/header/test; application-level SC_ERR_LIMIT handling or explicit bounded integration contract in CC1A_SignalCANdy_RuntimeTest; pinned sync tooling and byte-identical firmware runtime; immutable Reports and ULW evidence; atomic commits in both repositories. Success: native RED-to-GREEN exhaustion scenario proves no mutation and reset recovery; installed Fantomas, managed/native/sanitizer/hardening gates pass; deterministic G474 firmware is TT_Host-only flashed and NI CAN3 HIL prints 35 PASS plus ALL PASS with cleanup receipts; exact pushed Signal-CANdy head passes CI and final independent code/QA/gate review. Constraints: preserve uint32 public ABI and 32-bit MCU performance; no uint64 generation; allocation-free bounded C99; preserve SCIMG v1 and AOT behavior; ST-Link/SWD forbidden; exact claimed CC1A-Test-1/COM22/NI CAN3/TT_Host 9802 only; retain the single CC1A claim; do not modify GAS_BSP or GAS_SDP private source; sibling has no remote so commit only. assumed: exhaustion is a maintenance/reset condition rather than automatic runtime reset — reset requires a quiescent application boundary and is reversible. WHEN TO STOP: stop right away when every criterion is receipt-backed on frozen committed trees, both repositories are clean except unrelated pre-existing files, Signal-CANdy origin/dev exact-head CI is green, final quality gate approves, and the aggregate checkpoint is complete.",
+      "status": "complete",
+      "successCriteria": [
+        {
+          "id": "C001",
+          "scenario": "CLI/data boundary proof: run bash runtime/c99/tests/run_protection_tests.sh on the committed frozen tree after preserving the failing-first transcript from Reports/20260902-0908_SCIMG_TX_Generation_소진정책.md. PASS only when the UINT32_MAX reservation succeeds once, the next prepare returns SC_ERR_LIMIT with state/pool/frame/token byte-unchanged, sc_runtime_reset restores generation 1, all 21 named cases and terminal ALL PASS print, public struct sizes remain unchanged, and allocation audit reports no heap/static mutable additions.",
+          "userModel": "happy",
+          "expectedEvidence": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C001-runtime-exhaustion.txt",
+          "essential": true,
+          "capturedEvidence": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C001-runtime-exhaustion.txt @tree:aead1eac031348416792bb5b62a62f409c3bb010 | cleanup: ABI temp removed; hardening temp removed; no live QA processes",
+          "status": "pass",
+          "capturedAt": "2026-09-02T00:58:11.458Z",
+          "notes": "RED old-wrap 1/21 fail; committed GREEN protection 21/21 and TX 15/15; ILP32 ABI unchanged; hardening 10000 PASS; independent reviewer PASS"
+        },
+        {
+          "id": "C002",
+          "scenario": "Canonical integration proof: in CC1A_SignalCANdy_RuntimeTest, pin sync_signal_candy.py to the committed Signal-CANdy HEAD/tree, keep firmware/external/signal_candy byte-identical, and make App_SignalCandyRuntime.c or its explicit integration contract classify SC_ERR_LIMIT as maintenance-required without automatic reset or blind retry. PASS only when the exact policy is exercised by a deterministic host/unit or firmware diagnostic scenario, normal SC_OK/SC_ERR_BUSY behavior remains distinct, GAS_BSP/GAS_SDP diffs are empty, and the sibling work unit is atomically committed.",
+          "userModel": "edge",
+          "expectedEvidence": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C002-canonical-integration.txt",
+          "essential": true,
+          "capturedEvidence": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C002-canonical-integration.txt @tree:17207a96f7796ba417559c5d6fc53a8f86939925 | cleanup: NI closed; disconnect f0185d02 succeeded; daemon stopped; build and pycache cleaned; process scan PASS",
+          "status": "pass",
+          "capturedAt": "2026-09-02T01:14:28.212Z",
+          "notes": "RED 3 contract failures; GREEN 4 tests; canonical runtime byte-identical to core 7861508/aead1eac; real CAN3 policy receipts PASS; sibling b423160/17207a96 committed clean"
+        },
+        {
+          "id": "C003",
+          "scenario": "Frozen-tree release/HIL proof: run full build/test/Fantomas/native normal+sanitized/hardening gates; deterministically build the canonical G474 combined firmware twice; under active claim cd519cfa flash the exact BIN through TT_Host COM22 only, cold reset, and run host/sc_validate_p0_p1_gas.py on NI CAN3. PASS only with raw connect/flash/release/reset/disconnect receipts, exactly 50 receipt-bound PASS lines plus terminal ALL PASS (the original 35-line regression plus 15 BUSY/ordinary-error/UINT32_MAX/latch receipts), process/build cleanup receipts, retained single claim, atomic core and sibling commits, Signal-CANdy origin/dev at the exact committed head, exact-head GitHub CI success, and independent code/QA/gate reviewers approving the frozen SHA.",
+          "userModel": "regression",
+          "expectedEvidence": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C003-release-hil.txt",
+          "essential": false,
+          "capturedEvidence": ".omo/evidence/ulw/signal-candy-tx-generation-exhaustion-finalize-20260902/G001-finalize-the-scimg-stateful-tx-gener/a1/C003-release-hil.txt @tree:9201457f0d2c3fe11304a8fdc5c50ea89bbd4c73 | cleanup: provenance-session cleanup PASS; NI closed; daemon stopped; build/pycache removed; process scan empty; claim cd519cfa retained",
+          "status": "pass",
+          "capturedAt": "2026-09-02T01:38:40.123Z",
+          "notes": "Full gates green at frozen tree; deterministic BIN f2893951 69496B; authoritative session binds single flash 21d44c65 to exact BIN then 50 PASS + ALL PASS exit 0; origin/dev 07d8883; CI 33578699745 success; code/QA/gate reviews APPROVE"
+        }
+      ],
+      "attempt": 1,
+      "createdAt": "2026-09-02T00:45:45.397Z",
+      "updatedAt": "2026-09-02T01:39:29.196Z",
+      "startedAt": "2026-09-02T00:46:58.652Z",
+      "completedAt": "2026-09-02T01:39:29.196Z",
+      "evidence": "C001/C002/C003 pass at frozen trees; core 7861508/aead1eac, sibling b423160/17207a96, docs head 07d8883 pushed with CI 33578699745 success; authoritative provenance session flashes BIN f2893951 (single op 21d44c65, COM22) then 50 PASS + ALL PASS exit 0; quality gate APPROVE across code/QA/gate lanes with ledger stamps"
+    }
+  ],
+  "codexObjective": "Complete the durable ulw-loop plan in .omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/ledger.jsonl as the audit trail.",
+  "aggregateCompletion": {
+    "status": "complete",
+    "completedAt": "2026-09-02T01:39:29.196Z",
+    "evidence": "C001/C002/C003 pass at frozen trees; core 7861508/aead1eac, sibling b423160/17207a96, docs head 07d8883 pushed with CI 33578699745 success; authoritative provenance session flashes BIN f2893951 (single op 21d44c65, COM22) then 50 PASS + ALL PASS exit 0; quality gate APPROVE across code/QA/gate lanes with ledger stamps",
+    "codexGoal": {
+      "goal": {
+        "threadId": "01a040f8-ff54-73dc-8f3f-018bfd62cf26",
+        "objective": "Complete the durable ulw-loop plan in .omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/goals.json, including later accepted/appended stories, under the original brief constraints; use .omo/ulw-loop/signal-candy-tx-generation-exhaustion-finalize-20260902/ledger.jsonl as the audit trail.",
+        "status": "complete",
+        "tokensUsed": 1181608,
+        "timeUsedSeconds": 3198,
+        "createdAt": 1788309954,
+        "updatedAt": 1788313153
+      }
+    }
+  }
+}

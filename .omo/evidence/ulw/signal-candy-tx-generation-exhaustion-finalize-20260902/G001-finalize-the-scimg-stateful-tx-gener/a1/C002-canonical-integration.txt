@@ -1,0 +1,83 @@
+C002 canonical SC_ERR_LIMIT integration evidence
+
+Frozen identities:
+- Signal-CANdy implementation HEAD
+  7861508b6778703f0c3a4a6e954cb5b80f8b2e1f
+- Signal-CANdy implementation tree
+  aead1eac031348416792bb5b62a62f409c3bb010
+- CC1A_SignalCANdy_RuntimeTest HEAD
+  b423160e34cc9f406838aca523b26e4929172e0e
+- CC1A_SignalCANdy_RuntimeTest tree
+  17207a96f7796ba417559c5d6fc53a8f86939925
+
+Failing-first contract:
+- Before application integration the focused test reported FAILED (failures=3).
+- Missing boundaries included:
+  App_SignalCandyRuntime_encodePrepare
+  APP_SC_TX_CONTRACT_PROTOCOL_VERSION
+  expectation-only list enforcement
+
+Committed integration:
+- One guarded sc_encode_prepare boundary classifies:
+  - SC_OK: normal reservation
+  - SC_ERR_BUSY: transient, non-latching, distinct counter
+  - SC_ERR_LIMIT: latch maintenanceRequired
+  - other errors: ordinary failure, non-latching, distinct counter
+- While maintenanceRequired is latched, application calls return before
+  invoking the runtime prepare path; blind retries are suppressed.
+- No automatic reset exists.
+- Recovery contract requires an external exclusive/quiescent reset after every
+  TX token and token copy associated with the state has been revoked.
+- Protocol v2 is P0/P1 HIL-only. Protocol v1 remains unchanged.
+- List mode prints EXPECT lines only and claims no PASS.
+
+Hardware-free verification:
+- host/test_p0_p1_limit_contract.py: 4 tests, OK
+- Python py_compile: PASS
+- canonical combined firmware build: PASS
+- runtime header/source byte-identical to Signal-CANdy 7861508/aead1eac
+- sync tool pinned to that exact HEAD/tree
+- sync rerun: all generated fixture artifacts UNCHANGED
+- GAS_BSP/GAS_SDP tracked diff: empty
+- git diff --check: PASS
+
+First real NI CAN3 diagnostic execution:
+- Deterministic firmware BIN:
+  f2893951aa3247ace7888102a5de2834f1b19278e30cea5b0b53f8380ee466c5
+  69,496 bytes
+- Connect 600c9cb5db024698ac64eec10b81535e: Succeeded/NoError
+- FirmwareUpdate 47dd4a37ad4f401ea7329e2cf814ba20: Succeeded/NoError
+- BootloaderRelease d4cc5e04aa56402eab6bb15bc01969cf:
+  Succeeded/NoError
+- Reset 7a31bbeb59704516a34cefa08ffcc2a3: Succeeded/NoError
+- Disconnect f0185d02b9ec468ead1e77e5efb0ed30: Succeeded/NoError
+
+Receipt-bound policy lines:
+- PASS: normal reservation before busy probe
+- PASS: prepare busy remains transient
+- PASS: cancel transient busy reservation
+- PASS: SC_ERR_BUSY remains transient and does not latch maintenance
+- PASS: arm terminal uint32 generation
+- PASS: ordinary prepare failure remains non-latching
+- PASS: ordinary SC_ERR_POOL remains distinct and does not latch maintenance
+- PASS: schedule terminal tracked reservation
+- PASS: UINT32_MAX terminal reservation on wire
+- PASS: one on-wire UINT32_MAX terminal reservation exhausts generation
+- PASS: exhaustion latches maintenance
+- PASS: latched probe is blocked before runtime prepare
+- PASS: SC_ERR_LIMIT latches maintenance and repeated probes do not call prepare
+- PASS: maintenance latch survives heartbeat
+- PASS: maintenance latch survives heartbeat activity without automatic reset
+
+Run result:
+- Exactly 50 receipt-bound PASS lines across the extended suite.
+- Terminal ALL PASS.
+
+Cleanup:
+- NI sessions closed by runner.
+- TT_Host disconnect succeeded.
+- TT_Host daemon stopped.
+- firmware build directory cleaned.
+- host __pycache__ removed.
+- related process scan: PASS.
+- retained claim cd519cfa remains active; it was not released or altered.

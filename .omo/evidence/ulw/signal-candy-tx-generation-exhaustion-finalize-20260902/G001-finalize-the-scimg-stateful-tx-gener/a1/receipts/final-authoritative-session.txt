@@ -1,0 +1,167 @@
+=== AUTHORITATIVE FINAL HARDWARE SESSION (provenance-complete) ===
+SESSION_START_UTC=2026-09-02T01:31:06Z
+
+=== PRE-FLASH FIRMWARE IDENTITY ===
+BIN_PATH=C:/Users/initusnovus/Desktop/Workspace/CC1A_SignalCANdy_RuntimeTest/firmware/build/sc_runtime_test.bin
+f2893951aa3247ace7888102a5de2834f1b19278e30cea5b0b53f8380ee466c5 *C:/Users/initusnovus/Desktop/Workspace/CC1A_SignalCANdy_RuntimeTest/firmware/build/sc_runtime_test.bin
+BIN_BYTES=69496
+APP_ORIGIN=0x08008000 (firmware/STM32G474CBTX_FLASH.ld FLASH ORIGIN; VTOR offset 0x8000)
+39:_estack = ORIGIN(RAM) + LENGTH(RAM); /* end of "RAM" Ram type memory */
+49:  RAM            (xrw)  : ORIGIN = 0x20000000,   LENGTH = 128K
+50:  FLASH          (rx)   : ORIGIN = 0x08008000,   LENGTH = 92K
+
+=== TT_HOST CONNECT (exact invocation) ===
+$ dotnet run --project C:/Users/initusnovus/Desktop/Workspace/TT_Host/src/TT_Host.Cli/TT_Host.Cli.fsproj -c Release --no-build -- --ipc-port 9802 connect --port COM22 --json
+{
+  "OperationId": "d3b2244f720448b8ba534c5fe7c00100",
+  "ClientCorrelationId": "d3b2244f720448b8ba534c5fe7c00100",
+  "Kind": {
+    "Case": "Connect"
+  },
+  "State": {
+    "Case": "Succeeded"
+  },
+  "ErrorKind": {
+    "Case": "NoError"
+  },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:31:07.8669344+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:31:07.8669344+00:00",
+  "PayloadSummary": null
+}
+
+=== TT_HOST FIRMWARE UPDATE (exact invocation; the single flash of this session) ===
+$ dotnet run --project C:/Users/initusnovus/Desktop/Workspace/TT_Host/src/TT_Host.Cli/TT_Host.Cli.fsproj -c Release --no-build -- --ipc-port 9802 firmware update --port COM22 --file C:/Users/initusnovus/Desktop/Workspace/CC1A_SignalCANdy_RuntimeTest/firmware/build/sc_runtime_test.bin --json
+{
+  "OperationId": "21d44c65f1c34dd9a90669d0c8419f7f",
+  "ClientCorrelationId": "21d44c65f1c34dd9a90669d0c8419f7f",
+  "Kind": {
+    "Case": "FirmwareUpdate"
+  },
+  "State": {
+    "Case": "Succeeded"
+  },
+  "ErrorKind": {
+    "Case": "NoError"
+  },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:31:22.4074643+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:31:22.4074643+00:00",
+  "PayloadSummary": "firmware update completed"
+}
+
+=== TT_HOST BOOTLOADER RELEASE ===
+$ dotnet run --project C:/Users/initusnovus/Desktop/Workspace/TT_Host/src/TT_Host.Cli/TT_Host.Cli.fsproj -c Release --no-build -- --ipc-port 9802 bootloader release --json
+{
+  "OperationId": "e69e8e0a360347ef8796571a5683abcb",
+  "ClientCorrelationId": "e69e8e0a360347ef8796571a5683abcb",
+  "Kind": {
+    "Case": "BootloaderRelease"
+  },
+  "State": {
+    "Case": "Succeeded"
+  },
+  "ErrorKind": {
+    "Case": "NoError"
+  },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:31:23.1387781+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:31:23.1387781+00:00",
+  "PayloadSummary": null
+}
+
+=== TT_HOST COLD RESET ===
+$ dotnet run --project C:/Users/initusnovus/Desktop/Workspace/TT_Host/src/TT_Host.Cli/TT_Host.Cli.fsproj -c Release --no-build -- --ipc-port 9802 reset --json
+{
+  "OperationId": "ae3545a411be407cbd0220da5f6d18e2",
+  "ClientCorrelationId": "ae3545a411be407cbd0220da5f6d18e2",
+  "Kind": {
+    "Case": "Reset"
+  },
+  "State": {
+    "Case": "Succeeded"
+  },
+  "ErrorKind": {
+    "Case": "NoError"
+  },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:31:26.2282227+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:31:26.2282227+00:00",
+  "PayloadSummary": null
+}
+
+=== NI CAN3 ACCEPTANCE RUN (same session, immediately after reset) ===
+$ python host/sc_validate_p0_p1_gas.py --interface CAN3
+PASS: heartbeat
+PASS: reserve TX0 01 06 00 00 01 00 01 00
+PASS: cancel TX0 transmitted=0 01 07 00 00 01 00 01 00
+PASS: tracked GAS enqueue 01 05 00 00 01 00 01 00
+PASS: counter repeats after transmitted=0 00 34 12 A5 00 00 00 A5
+PASS: TX reservation transmitted=0 repeats counter then actual GAS enqueue success advances counter
+PASS: normalized classic RX 01 00 00 00 78 56 03 01
+PASS: normalized classic RX
+PASS: 64-byte FD normalized before atomic counter rejection 01 00 01 01 78 56 03 01
+PASS: FD normalization snapshot 01 04 00 00 01 00 01 00
+PASS: 64-byte FD rejected atomically 01 01 03 00 78 56 00 00
+PASS: normalized 64-byte FD RX
+PASS: extended unmatched traffic snapshot 01 04 00 00 01 00 01 00
+PASS: unmatched extended frame leaves state unchanged 01 01 03 00 78 56 00 00
+PASS: mixed classic/FD
+PASS: bad CRC atomic rejection 01 01 01 02 78 56 03 01
+PASS: bad counter atomic rejection 01 01 02 03 78 56 03 01
+PASS: protection recovery 01 01 02 04 79 56 07 01
+PASS: representative protection accept plus bad CRC/counter atomic rejection
+PASS: prepare B 01 01 02 00 01 02 01 00
+PASS: pending stateful TX 01 06 00 00 01 02 01 00
+PASS: commit busy preserves A 01 03 00 F1 01 02 01 00
+PASS: cancel pending TX 01 07 00 00 01 02 01 00
+PASS: commit B 01 03 00 00 02 00 02 00
+PASS: pending stateful TX reservation makes activation commit return SC_ERR_BUSY with old schema/generation/pool unchanged, then cancel/commit succeeds
+PASS: old schema drained 01 04 00 00 02 00 02 00
+PASS: old schema leaves B unchanged 01 02 00 00 79 56 00 00
+PASS: old-schema captured frame is rejected/drained after commit
+PASS: malformed candidate 01 01 03 F8 02 00 02 00
+PASS: one malformed candidate reject with state unchanged
+PASS: valid B RX recovery with cumulative adapter diagnostics 02 01 02 05 68 24 03 01
+PASS: valid B TX recovery 01 05 00 00 02 00 02 00
+PASS: B TX recovery 09 34 12 A5 00 00 00 2A
+PASS: subsequent valid RX/TX recovery
+PASS: normal reservation before busy probe 01 06 00 00 02 00 02 00
+PASS: prepare busy remains transient 01 06 00 F1 02 00 02 00
+PASS: cancel transient busy reservation 01 07 00 00 02 00 02 00
+PASS: SC_ERR_BUSY remains transient and does not latch maintenance
+PASS: arm terminal uint32 generation 02 08 00 00 FF FF FF FF
+PASS: ordinary prepare failure remains non-latching 02 0A F6 00 01 00 00 00
+PASS: ordinary SC_ERR_POOL remains distinct and does not latch maintenance
+PASS: schedule terminal tracked reservation 01 05 00 00 02 00 02 00
+PASS: UINT32_MAX terminal reservation on wire 0A 34 12 A5 00 00 00 CD
+PASS: one on-wire UINT32_MAX terminal reservation exhausts generation
+PASS: exhaustion latches maintenance 02 09 F7 01 03 00 00 00
+PASS: latched probe is blocked before runtime prepare 02 09 F7 01 03 00 00 00
+PASS: SC_ERR_LIMIT latches maintenance and repeated probes do not call prepare
+PASS: heartbeat uptime advance
+PASS: maintenance latch survives heartbeat 02 09 F7 01 03 00 00 00
+PASS: maintenance latch survives heartbeat activity without automatic reset
+ALL PASS
+RUNNER_EXIT=0
+
+=== TT_HOST DISCONNECT ===
+$ dotnet run --project C:/Users/initusnovus/Desktop/Workspace/TT_Host/src/TT_Host.Cli/TT_Host.Cli.fsproj -c Release --no-build -- --ipc-port 9802 disconnect --json
+{
+  "OperationId": "65cbb9b6e5a44c8aabc020bfe065a18a",
+  "ClientCorrelationId": "65cbb9b6e5a44c8aabc020bfe065a18a",
+  "Kind": {
+    "Case": "Disconnect"
+  },
+  "State": {
+    "Case": "Succeeded"
+  },
+  "ErrorKind": {
+    "Case": "NoError"
+  },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:31:38.2346476+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:31:38.2346476+00:00",
+  "PayloadSummary": null
+}
+SESSION_END_UTC=2026-09-02T01:31:38Z

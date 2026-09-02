@@ -1,0 +1,11 @@
+{
+  "OperationId": "dbabcc1df59a42adbfd9eec26b2de138",
+  "ClientCorrelationId": "dbabcc1df59a42adbfd9eec26b2de138",
+  "Kind": { "Case": "Connect" },
+  "State": { "Case": "Succeeded" },
+  "ErrorKind": { "Case": "NoError" },
+  "Error": null,
+  "StartedAtUtc": "2026-09-02T01:17:56.8370477+00:00",
+  "UpdatedAtUtc": "2026-09-02T01:17:56.8370477+00:00",
+  "PayloadSummary": null
+}

@@ -1,0 +1,85 @@
+C003 frozen-tree release and HIL evidence
+
+Frozen identities:
+- Signal-CANdy origin/dev HEAD 07d8883cb164b715d88d1d38464e64020dfdd437
+- Signal-CANdy tree 9201457f0d2c3fe11304a8fdc5c50ea89bbd4c73
+- implementation commit 7861508b6778703f0c3a4a6e954cb5b80f8b2e1f
+- implementation tree aead1eac031348416792bb5b62a62f409c3bb010
+- CC1A_SignalCANdy_RuntimeTest HEAD b423160e34cc9f406838aca523b26e4929172e0e
+- CC1A_SignalCANdy_RuntimeTest tree 17207a96f7796ba417559c5d6fc53a8f86939925
+
+Full release gates at the frozen implementation:
+- build: 0 warnings, 0 errors
+- .NET tests: Core 405 pass / 2 platform skips, Hardening 17 pass, Generator 27 pass
+- Fantomas: pass
+- native quality 22/22
+- native protection 21/21
+- native activation 57/57 normal
+- native activation 57/57 ASan/UBSan
+- native TX 15/15
+- malformed representatives 7/7 normal and 7/7 sanitized
+- hardening 10,000 cases pass (sanitizer reports 0, heapUndefined 0, mutableStatic 0)
+- git diff --check: pass
+- Cortex-M4 ILP32 ABI probe: counter state 12 bytes, TX token 20 bytes,
+  runtime-state counter offset 8 bytes
+
+Deterministic canonical G474 firmware (SIGNAL_CANDY_P0_P1_GAS_HIL=1):
+- BIN SHA-256 f2893951aa3247ace7888102a5de2834f1b19278e30cea5b0b53f8380ee466c5
+- BIN size 69,496 bytes
+- ELF SHA-256 9ceb8010631c638f64d88cd04cdc2acdd79b9215e0f1cadd1d6b959aa58e269e
+- repeated clean rebuilds reproduce the identical BIN hash
+- linker FLASH ORIGIN 0x08008000 (VTOR offset 0x8000)
+
+Hardware authority:
+- claim cd519cfa-20a5-4570-a0cb-c9a56304018b
+- owner agent:signal-candy-runtime on set:cc1a-0025-bootloader-010, InUse
+- exact endpoints: TT_CC1A26_0025, TT_Host 127.0.0.1:9802, COM22, NI CAN3
+- ST-Link/SWD not used at any point
+
+Authoritative provenance-complete TT_Host session
+(receipts/final-authoritative-session.txt, one continuous transcript):
+- pre-flash identity: BIN path, sha256 f2893951..., 69,496 bytes, origin
+- Connect d3b2244f720448b8ba534c5fe7c00100 Succeeded/NoError 01:31:07Z
+- FirmwareUpdate 21d44c65f1c34dd9a90669d0c8419f7f Succeeded/NoError 01:31:22Z
+  (the single flash, exact invocation with --port COM22 --file <BIN path>)
+- BootloaderRelease e69e8e0a360347ef8796571a5683abcb Succeeded/NoError
+- Reset ae3545a411be407cbd0220da5f6d18e2 Succeeded/NoError
+- Disconnect 65cbb9b6e5a44c8aabc020bfe065a18a Succeeded/NoError 01:31:38Z
+
+NI CAN3 acceptance in the same session:
+- command: python host/sc_validate_p0_p1_gas.py --interface CAN3
+- exactly 50 receipt-bound PASS lines
+- terminal ALL PASS, RUNNER_EXIT=0
+- zero FAIL/WARNING lines
+- includes: transient SC_ERR_BUSY non-latching, ordinary SC_ERR_POOL
+  non-latching, on-wire UINT32_MAX terminal reservation, SC_ERR_LIMIT
+  maintenance latch, repeated-probe suppression (attempt count frozen at 3),
+  and latch persistence across heartbeat uptime advance
+
+Earlier same-tree session (superseded provenance, identical behavior):
+- connect 600c9cb5 / flash 47dd4a37 / release d4cc5e04 / reset 7a31bbeb /
+  disconnect f0185d02, then connect dbabcc1d / flash 2c4df515 /
+  release 7c6a2bb3 / reset 09d076d2 / disconnect c2ba0d63; both runs printed
+  the same 50 PASS + ALL PASS
+
+Delivery state:
+- atomic core commit 7861508 (fix(runtime): fail closed on TX generation
+  exhaustion)
+- atomic sibling commit b423160 (fix(hil): latch TX generation exhaustion
+  maintenance)
+- docs commit 07d8883 pushed to origin/dev (30e7de0..07d8883)
+- exact-head GitHub CI run 33578699745 conclusion success at 07d8883
+- both repositories clean except unrelated pre-existing untracked files
+
+Final independent reviews at the frozen SHA:
+- code/safety lane: PASS, no blockers (a1/final-code-review.md)
+- hands-on QA + hardware lane: PASS, no residual hardware blocker
+  (a1/final-qa-matrix.md, authoritative session artifact sha256
+  097b0f6caa9e4b271446a5e990ee28df019642ac0e4fecf14cb39480400a612a)
+
+Cleanup receipts:
+- PROVENANCE SESSION CLEANUP PASS: firmware build cleaned, pycache removed,
+  TT_Host daemon stopped, related process scan empty
+- NI-XNET sessions closed by runner context managers
+- no ST-Link/SWD operation
+- claim cd519cfa retained active (single claim; no release operation)
