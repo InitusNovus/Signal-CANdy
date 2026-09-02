@@ -731,6 +731,66 @@ int main(void)
     report("TX transmitted commit advances counter and CRC", passed);
 
     sc_runtime_reset(schema, state, state_bytes, pool, COMBINED_POOL_COUNT);
+    pool[1].raw = UINT64_C(0x1234);
+    pool[1].flags = SC_SLOT_VALID;
+    pool[2].raw = UINT64_C(0xA5);
+    pool[2].flags = SC_SLOT_VALID;
+    state->counters[0].next_generation = UINT32_MAX;
+    memset(&token, 0, sizeof(token));
+    passed = sc_encode_prepare(schema, state, LOGICAL_PROTECTED, pool,
+                               COMBINED_POOL_COUNT, &tx_frame, scratch,
+                               sizeof(scratch), &token) == SC_OK &&
+             token.generation == UINT32_MAX &&
+             state->counters[0].pending_generation == UINT32_MAX &&
+             state->counters[0].next_generation == 0u;
+    memset(&tx_frame, 0xA5, sizeof(tx_frame));
+    memcpy(state_before, state, state_bytes);
+    memcpy(pool_before, pool, sizeof(pool));
+    {
+        sc_frame_t frame_before = tx_frame;
+        sc_tx_token_t token_before = token;
+        uint8_t scratch_before[sizeof(scratch)];
+
+        memcpy(scratch_before, scratch, sizeof(scratch));
+        passed = passed &&
+                 sc_encode_prepare(schema, state, LOGICAL_PROTECTED, pool,
+                                   COMBINED_POOL_COUNT, &tx_frame, scratch,
+                                   sizeof(scratch), &token) == SC_ERR_BUSY &&
+                 memcmp(state_before, state, state_bytes) == 0 &&
+                 memcmp(pool_before, pool, sizeof(pool)) == 0 &&
+                 memcmp(&frame_before, &tx_frame, sizeof(frame_before)) == 0 &&
+                 memcmp(&token_before, &token, sizeof(token_before)) == 0 &&
+                 memcmp(scratch_before, scratch, sizeof(scratch)) == 0;
+    }
+    passed = passed && sc_encode_commit(&token, 0) == SC_OK;
+    memset(&tx_frame, 0xA5, sizeof(tx_frame));
+    memset(&token, 0x5A, sizeof(token));
+    memcpy(state_before, state, state_bytes);
+    memcpy(pool_before, pool, sizeof(pool));
+    {
+        sc_frame_t frame_before = tx_frame;
+        sc_tx_token_t token_before = token;
+        uint8_t scratch_before[sizeof(scratch)];
+
+        memcpy(scratch_before, scratch, sizeof(scratch));
+        passed = passed &&
+                 sc_encode_prepare(schema, state, LOGICAL_PROTECTED, pool,
+                                   COMBINED_POOL_COUNT, &tx_frame, scratch,
+                                   sizeof(scratch), &token) == SC_ERR_LIMIT &&
+                 memcmp(state_before, state, state_bytes) == 0 &&
+                 memcmp(pool_before, pool, sizeof(pool)) == 0 &&
+                 memcmp(&frame_before, &tx_frame, sizeof(frame_before)) == 0 &&
+                 memcmp(&token_before, &token, sizeof(token_before)) == 0 &&
+                 memcmp(scratch_before, scratch, sizeof(scratch)) == 0;
+    }
+    passed = passed &&
+             sc_runtime_reset(schema, state, state_bytes, pool,
+                              COMBINED_POOL_COUNT) == SC_OK &&
+             state->counters[0].next_generation == 1u;
+    report("TX terminal reservation is busy before mutation-free exhaustion",
+           passed);
+
+    sc_runtime_reset(schema, state, state_bytes, pool, COMBINED_POOL_COUNT);
     set_rx_frame(&frame, 0u, UINT16_C(0x5678), 0xBCu);
     frame.data[6] = UINT8_C(0x87);
     frame.data[7] = UINT8_C(0xC8);

@@ -1970,6 +1970,9 @@ sc_status_t sc_encode_prepare(const sc_schema_t *schema,
         if (state->counters[counter_index].pending_generation != 0u) {
             return SC_ERR_BUSY;
         }
+        if (state->counters[counter_index].next_generation == 0u) {
+            return SC_ERR_LIMIT;
+        }
         counter = schema->image + schema->tx_offset +
             schema->tx_counter_offset + (size_t)counter_index * 24u;
         counter_value = state->counters[counter_index].current;
@@ -2046,14 +2049,8 @@ sc_status_t sc_encode_prepare(const sc_schema_t *schema,
         sc_tx_counter_state_t *counter_state =
             &state->counters[counter_index];
         generation = counter_state->next_generation;
-        if (generation == 0u) {
-            generation = 1u;
-        }
         counter_state->pending_generation = generation;
         counter_state->next_generation = generation + 1u;
-        if (counter_state->next_generation == 0u) {
-            counter_state->next_generation = 1u;
-        }
     }
 
     *frame = prepared;

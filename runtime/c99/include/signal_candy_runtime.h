@@ -79,7 +79,14 @@ typedef struct {
 /** Validated, immutable runtime-image view. Its representation is private. */
 typedef struct sc_schema sc_schema_t;
 
-/** Persistent state for one stateful TX counter. */
+/**
+ * Persistent state for one stateful TX counter.
+ *
+ * Reservation generations are unique only within one state-initialization
+ * epoch and use the nonzero uint32_t range. Zero in next_generation is the
+ * exhausted sentinel. This fail-closed policy prevents stale-token ABA within
+ * that epoch without widening the MCU ABI.
+ */
 typedef struct {
     uint32_t current;
     uint32_t pending_generation;
@@ -229,10 +236,27 @@ sc_status_t sc_expire(const sc_schema_t *schema,
                       sc_runtime_state_t *state, uint32_t now_ms,
                       sc_slot_t *pool, size_t pool_count);
 
+/**
+ * Reset runtime state and begin a new state-initialization epoch.
+ *
+ * This reuses reservation generation 1; generation identities are not unique
+ * across resets. The caller must provide exclusive, quiescent access and must
+ * destroy or revoke every token and token copy associated with this state
+ * before calling sc_runtime_reset.
+ */
 sc_status_t sc_runtime_reset(const sc_schema_t *schema,
                              sc_runtime_state_t *state, size_t state_size,
                              sc_slot_t *pool, size_t pool_count);
 
+/**
+ * Prepare one TX reservation.
+ *
+ * A stateful counter permits UINT32_MAX reservation generations within one
+ * state-initialization epoch. The terminal reservation leaves next_generation
+ * at zero while it is pending, so another prepare returns SC_ERR_BUSY. After
+ * it is committed or canceled, later prepares return SC_ERR_LIMIT without
+ * mutation until a quiescent reset (or replacement state initialization).
+ */
 sc_status_t sc_encode_prepare(const sc_schema_t *schema,
                               sc_runtime_state_t *state,
                               uint32_t logical_message_id,
